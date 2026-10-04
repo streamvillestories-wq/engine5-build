@@ -407,7 +407,7 @@ void E5Enemy::update_remote(float dt) {
 
 godot::Node3D* E5Enemy::nearest_player() const {
     godot::Node3D* nearest = nullptr;
-    double nearest_distance = 0.0;
+    float nearest_distance = 0.0F;
     const godot::Vector3 here = get_global_position();
     for (const char* const group : {E5PlayerController::group_name, E5PlayerController::remote_group_name}) {
         const godot::TypedArray<godot::Node> heroes = get_tree()->get_nodes_in_group(group);
@@ -416,7 +416,7 @@ godot::Node3D* E5Enemy::nearest_player() const {
             if (hero == nullptr) {
                 continue;
             }
-            const double distance = here.distance_squared_to(hero->get_global_position());
+            const auto distance = static_cast<float>(here.distance_squared_to(hero->get_global_position()));
             if (nearest == nullptr || distance < nearest_distance) {
                 nearest = hero;
                 nearest_distance = distance;
