@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <numbers>
 #include <string>
 
 namespace e5::bridge {
@@ -121,6 +122,12 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("take_damage", "amount", "position"), &E5Enemy::take_damage);
     ClassDB::bind_method(D_METHOD("get_health"), &E5Enemy::get_health);
     ClassDB::bind_method(D_METHOD("is_alive"), &E5Enemy::is_alive);
+    ClassDB::bind_method(D_METHOD("set_remote", "remote"), &E5Enemy::set_remote);
+    ClassDB::bind_method(D_METHOD("is_remote"), &E5Enemy::is_remote);
+    ClassDB::bind_method(D_METHOD("get_net_state"), &E5Enemy::get_net_state);
+    ClassDB::bind_method(D_METHOD("apply_net_state", "state"), &E5Enemy::apply_net_state);
+    ClassDB::bind_method(D_METHOD("take_outgoing_damage"), &E5Enemy::take_outgoing_damage);
+    ClassDB::bind_method(D_METHOD("take_damage_from_peer", "amount"), &E5Enemy::take_damage_from_peer);
 
     ADD_PROPERTY(PropertyInfo(godot::Variant::OBJECT, "animation_library", godot::PROPERTY_HINT_RESOURCE_TYPE,
                               "AnimationLibrary"),
@@ -279,6 +286,13 @@ void E5Enemy::take_damage(float amount, const godot::Vector3& position) {
     if (!is_alive() || amount <= 0.0F) {
         return;
     }
+    if (remote_) {
+        // Seen here at once; counted where the enemy is decided.
+        outgoing_damage_ += amount;
+        show_damage_number(amount, position);
+        E5Effect::spawn(hit_effect_, get_parent(), position);
+        return;
+    }
     // Collected here and applied in the next physics step, so the order of
     // hits within one step cannot change the outcome.
     pending_damage_ += amount;
@@ -286,6 +300,141 @@ void E5Enemy::take_damage(float amount, const godot::Vector3& position) {
     damage_taken_ += amount;
     show_damage_number(amount, position);
     E5Effect::spawn(hit_effect_, get_parent(), position);
+}
+
+void E5Enemy::take_damage_from_peer(float amount) {
+    if (!is_alive() || amount <= 0.0F || remote_) {
+        return;
+    }
+    pending_damage_ += amount;
+    heaviest_pending_blow_ = std::max(heaviest_pending_blow_, amount);
+    damage_taken_ += amount;
+    show_damage_number(amount, get_aim_point());
+}
+
+float E5Enemy::take_outgoing_damage() {
+    const float damage = outgoing_damage_;
+    outgoing_damage_ = 0.0F;
+    return damage;
+}
+
+void E5Enemy::set_remote(bool remote) {
+    if (remote == remote_) {
+        return;
+    }
+    remote_ = remote;
+    has_net_state_ = false;
+    outgoing_damage_ = 0.0F;
+    set_velocity(godot::Vector3());
+}
+
+godot::PackedFloat32Array E5Enemy::get_net_state() const {
+    const godot::Vector3 position = get_global_position();
+    godot::PackedFloat32Array state;
+    for (const double value : {static_cast<double>(position.x), static_cast<double>(position.y),
+                               static_cast<double>(position.z), static_cast<double>(model_yaw_),
+                               static_cast<double>(static_cast<int>(state_.phase)), static_cast<double>(state_.health),
+                               static_cast<double>(target_position_.x), static_cast<double>(target_position_.y),
+                               static_cast<double>(target_position_.z), static_cast<double>(bolts_thrown_)}) {
+        state.push_back(value);
+    }
+    return state;
+}
+
+void E5Enemy::apply_net_state(const godot::PackedFloat32Array& state) {
+    if (!remote_ || state.size() < 10) {
+        return;
+    }
+    net_position_ = godot::Vector3(state[0], state[1], state[2]);
+    net_facing_ = state[3];
+    target_position_ = godot::Vector3(state[6], state[7], state[8]);
+    const auto phase = static_cast<gameplay::EnemyPhase>(std::clamp(static_cast<int>(state[4]), 0, 5));
+    const int thrown = static_cast<int>(state[9]);
+    if (!has_net_state_) {
+        // The first word of it: there at once, and no bolts for casts that happened before.
+        set_global_position(net_position_);
+        model_yaw_ = net_facing_;
+        bolts_shown_ = thrown;
+        has_net_state_ = true;
+    }
+    bolts_thrown_ = thrown;
+    state_.health = state[5];
+    if (phase != state_.phase) {
+        const gameplay::EnemyPhase before = state_.phase;
+        state_.phase = phase;
+        state_.phase_seconds = 0.0F;
+        if (phase == gameplay::EnemyPhase::Dead) {
+            die();
+        } else if (before == gameplay::EnemyPhase::Dead) {
+            // Back among the living: as respawn() does it, without deciding anything.
+            set_shrink(1.0F);
+            set_collision_layer(collision_layer_);
+            E5Effect::set_active(trail_, true);
+            set_global_position(net_position_);
+        }
+        if (phase == gameplay::EnemyPhase::Attack) {
+            // The blow of this attack lands here too, on the hero played on this machine.
+            blow_in_seconds_ = params_.attack_seconds * blow_at_share;
+        }
+    }
+}
+
+// A remote enemy follows what arrived last, and does to the hero played here what the
+// deciding machine cannot know: whether the blow or the bolt found her.
+void E5Enemy::update_remote(float dt) {
+    if (has_net_state_) {
+        const float share = 1.0F - std::exp(-12.0F * dt);
+        const godot::Vector3 before = get_global_position();
+        set_global_position(before.lerp(net_position_, share));
+        const float turn = std::remainder(net_facing_ - model_yaw_, 2.0F * std::numbers::pi_v<float>);
+        model_yaw_ += turn * share;
+        if (model_ != nullptr) {
+            model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+        }
+        update_health_bar();
+        if (is_alive()) {
+            update_blow(false, dt, distance_to_local_player());
+            if (bolts_thrown_ != bolts_shown_) {
+                bolts_shown_ = bolts_thrown_;
+                throw_bolt(target_position_);
+            }
+            const bool moving = (net_position_ - before).length() > 0.02F;
+            play_phase_animation(moving);
+        }
+    }
+    animator_.update(dt);
+}
+
+godot::Node3D* E5Enemy::nearest_player() const {
+    godot::Node3D* nearest = nullptr;
+    double nearest_distance = 0.0;
+    const godot::Vector3 here = get_global_position();
+    for (const char* const group : {E5PlayerController::group_name, E5PlayerController::remote_group_name}) {
+        const godot::TypedArray<godot::Node> heroes = get_tree()->get_nodes_in_group(group);
+        for (const godot::Variant& node : heroes) {
+            auto* const hero = godot::Object::cast_to<godot::Node3D>(node);
+            if (hero == nullptr) {
+                continue;
+            }
+            const double distance = here.distance_squared_to(hero->get_global_position());
+            if (nearest == nullptr || distance < nearest_distance) {
+                nearest = hero;
+                nearest_distance = distance;
+            }
+        }
+    }
+    return nearest;
+}
+
+float E5Enemy::distance_to_local_player() const {
+    const auto* const local =
+        godot::Object::cast_to<godot::Node3D>(get_tree()->get_first_node_in_group(E5PlayerController::group_name));
+    if (local == nullptr) {
+        return 1.0e6F;
+    }
+    godot::Vector3 away = local->get_global_position() - get_global_position();
+    away.y = 0.0F;
+    return static_cast<float>(away.length());
 }
 
 void E5Enemy::set_held(bool held) {
@@ -420,6 +569,10 @@ void E5Enemy::_physics_process(double delta) {
     E5_PROFILE_SCOPE("E5Enemy::_physics_process");
     const auto dt = static_cast<float>(delta);
 
+    if (remote_) {
+        update_remote(dt);
+        return;
+    }
     if (held_) {
         animator_.update(dt);
         return; // the holder moves it
@@ -442,10 +595,11 @@ void E5Enemy::_physics_process(double delta) {
         return;
     }
 
-    const auto* const player =
-        godot::Object::cast_to<godot::Node3D>(get_tree()->get_first_node_in_group(E5PlayerController::group_name));
+    // It goes for the nearest hero, whoever plays her.
+    const godot::Node3D* const player = nearest_player();
     godot::Vector3 to_player;
     if (player != nullptr) {
+        target_position_ = player->get_global_position();
         to_player = player->get_global_position() - get_global_position();
         to_player.y = 0.0F;
     }
@@ -465,12 +619,15 @@ void E5Enemy::_physics_process(double delta) {
         die();
         return;
     }
-    update_blow(step.attack_started, dt, static_cast<float>(to_player.length()));
+    // Whether the blow lands is asked of the hero played here only (see set_remote).
+    update_blow(step.attack_started, dt, distance_to_local_player());
     if (step.cast_started) {
         // The glow gathering in front of it is the warning: time to step aside, or to strike first.
         E5Effect::spawn(cast_effect_, this, cast_origin());
     }
     if (step.cast_released && player != nullptr) {
+        ++bolts_thrown_;
+        bolts_shown_ = bolts_thrown_;
         throw_bolt(player->get_global_position());
     }
 

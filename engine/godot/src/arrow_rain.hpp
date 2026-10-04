@@ -25,11 +25,14 @@ public:
 
     void set_radius(float radius) { radius_ = radius; }
     [[nodiscard]] float get_radius() const { return radius_; }
+    // Harmless: for show, the copy of another player's rain.
+    void set_harmless(bool harmless) { harmless_ = harmless; }
 
 protected:
     static void _bind_methods() {}
 
 private:
+    bool harmless_ = false;
     void drop_arrow(int index);
 
     godot::RID shooter_;

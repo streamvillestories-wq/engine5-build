@@ -42,6 +42,10 @@ struct RuntimeConfig {
     // Initial camera orbit angle in degrees (0 = behind the character,
     // 180 = facing it). Lets unattended captures look at the character's front.
     std::optional<float> camera_yaw_degrees;
+    // Where the player starts instead of where the scene puts her (metres, x and z); for
+    // tests that need a certain place. Both or neither.
+    std::optional<float> start_x;
+    std::optional<float> start_z;
     // Initial camera tilt in degrees, positive up (unattended checks of aiming high or at the ground).
     std::optional<float> camera_pitch_degrees;
     // Hour of the day (0..24) to start at, in scenes with a day and night cycle;

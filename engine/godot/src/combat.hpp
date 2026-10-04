@@ -8,6 +8,10 @@
 // all go through here, so everything that can be hit reacts to every skill.
 namespace e5::bridge::combat {
 
+// In a shared game a hit can also land on another player's hero (a remote
+// E5PlayerController): she does not lose health here, the damage is collected for her own
+// machine, which decides (E5PlayerController::take_outgoing_damage).
+
 // A direct hit on `struck` (the collider an arrow ran into, the thing a bird
 // pecked). Enemies take `damage`; practice targets score by ring, times
 // `score_multiplier`. Returns false if `struck` is neither.

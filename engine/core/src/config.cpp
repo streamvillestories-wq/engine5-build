@@ -138,6 +138,12 @@ Result<void> apply_option(RuntimeConfig& config, std::string_view key, OptionVal
     if (key == "--time-of-day") {
         return hour_option(key, value).transform([&config](float hour) { config.time_of_day = hour; });
     }
+    if (key == "--start-x") {
+        return number_option(key, value).transform([&config](float metres) { config.start_x = metres; });
+    }
+    if (key == "--start-z") {
+        return number_option(key, value).transform([&config](float metres) { config.start_z = metres; });
+    }
     if (key == "--camera-yaw") {
         return number_option(key, value).transform([&config](float degrees) { config.camera_yaw_degrees = degrees; });
     }
@@ -159,6 +165,11 @@ Result<void> apply_option(RuntimeConfig& config, std::string_view key, OptionVal
     }
     if (key.starts_with("--menu")) {
         // For the character select screen, which reads them itself (game/ui/character_select.gd).
+        return {};
+    }
+    if (key == "--server" || key.starts_with("--net-")) {
+        // For playing together (game/net/net.gd). The launcher passes --server to every start:
+        // a game that did not know it stopped at once.
         return {};
     }
     return fail(ErrorCode::InvalidArgument, std::format("unknown option '{}'", key));

@@ -64,6 +64,9 @@ class E5PlayerController : public godot::CharacterBody3D {
 
 public:
     static constexpr const char* group_name = "e5_player";
+    // The heroes of the other players in a shared game are in this group instead: they are
+    // shown and animated here, but played on another machine. See set_remote.
+    static constexpr const char* remote_group_name = "e5_remote_player";
 
     void _ready() override;
     void _physics_process(double delta) override;
@@ -175,6 +178,27 @@ public:
     // Health. Damage is collected and applied in the next physics step. At zero she dies, lies
     // for a few seconds, and comes back where she started.
     void take_damage(float amount);
+
+    // A remote hero is another player's, shown here: it takes no input, has no camera and no
+    // interface, collides with nothing, and does what `apply_net_state` tells it. To be set
+    // before the node enters the tree.
+    void set_remote(bool remote) { remote_ = remote; }
+    [[nodiscard]] bool is_remote() const { return remote_; }
+    // What the other machines need to show this hero:
+    // [position, facing, clip, clip speed, look yaw, look pitch, share of health left].
+    [[nodiscard]] godot::Array get_net_state() const;
+    void apply_net_state(const godot::Vector3& position, float facing, const godot::String& clip, float speed,
+                         float look_yaw, float look_pitch);
+    // The skills used since the last call, for the other machines to replay, each as
+    // [kind (0 = a skill with its own animation starts, 1 = the bow is loosed), slot, power,
+    //  combo step, look yaw, look pitch].
+    godot::Array take_net_events();
+    // A remote hero replays one: the same effects and missiles, which hurt nobody. What the
+    // real ones hit is decided on the machine that plays her.
+    void apply_net_event(int kind, int slot, float power, int combo_step, float look_yaw, float look_pitch);
+    // Damage a hit on this remote hero would do, collected for her own machine.
+    void take_remote_damage(float amount, const godot::Vector3& position);
+    float take_outgoing_damage();
     [[nodiscard]] float get_health() const { return vitals_.health; }
     [[nodiscard]] bool is_dead() const { return vitals_.dead; }
     [[nodiscard]] int get_death_count() const { return death_count_; }
@@ -301,6 +325,22 @@ private:
     float turn_speed_ = 12.0F; // rad/s: a half turn in about a quarter second
     float mouse_sensitivity_ = 0.0022F;
     bool capture_mouse_on_ready_ = true;
+    bool remote_ = false;
+    bool has_net_state_ = false;
+    godot::Vector3 net_position_;
+    float net_facing_ = 0.0F;
+    godot::StringName net_clip_;
+    float net_speed_ = 1.0F;
+    godot::Array net_events_;
+    bool pending_start_ = false;
+    int pending_combo_step_ = -1;
+    float outgoing_damage_ = 0.0F;
+    // What a skill of this hero does: nothing if she is remote (see apply_net_event).
+    [[nodiscard]] float dealt(gameplay::SkillId skill, float power = 0.0F) const {
+        return remote_ ? 0.0F : gameplay::skill_damage(skill, power);
+    }
+    void note_net_event(int kind, float power);
+    void update_remote(float delta);
     godot::Ref<godot::AnimationLibrary> animation_library_;
     godot::Ref<godot::PackedScene> charge_effect_;
     godot::Ref<godot::PackedScene> charge_full_effect_;

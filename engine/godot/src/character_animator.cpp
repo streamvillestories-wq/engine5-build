@@ -142,7 +142,8 @@ void CharacterAnimator::set_base(const godot::StringName& clip, float playback_s
         tree_->set("parameters/base/transition_request", godot::String(clip));
         base_clip_ = clip;
     }
-    tree_->set("parameters/base_speed/scale", std::clamp(playback_scale, min_playback_scale, max_playback_scale));
+    base_scale_ = std::clamp(playback_scale, min_playback_scale, max_playback_scale);
+    tree_->set("parameters/base_speed/scale", base_scale_);
 }
 
 void CharacterAnimator::set_upper(const godot::StringName& clip) {

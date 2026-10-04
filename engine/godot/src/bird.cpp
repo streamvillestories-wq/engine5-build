@@ -245,7 +245,7 @@ void E5Bird::_physics_process(double delta) {
     if (step.hit) {
         E5Effect::spawn(hit_effect_, get_parent(), target_position);
         combat::hit(godot::ObjectDB::get_instance(target_id_), target_position,
-                    gameplay::skill_damage(gameplay::SkillId::Kingfishers));
+                    harmless_ ? 0.0F : gameplay::skill_damage(gameplay::SkillId::Kingfishers));
     }
     if (step.finished) {
         E5Effect::spawn(vanish_effect_, get_parent(), position);

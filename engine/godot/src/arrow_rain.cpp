@@ -57,7 +57,7 @@ void E5ArrowRain::drop_arrow(int index) {
     arrow->set_global_transform(
         godot::Transform3D(godot::Basis::looking_at(down, godot::Vector3(1.0F, 0.0F, 0.0F)), start));
     arrow->set_impact_effect(impact_effect_);
-    arrow->set_damage(gameplay::skill_damage(gameplay::SkillId::ArrowRain));
+    arrow->set_damage(harmless_ ? 0.0F : gameplay::skill_damage(gameplay::SkillId::ArrowRain));
     // A rain is an area attack: each arrow also hurts what stands close to where it lands,
     // otherwise an enemy between two arrows of the pattern would walk through untouched.
     arrow->set_blast_radius(splash_radius);

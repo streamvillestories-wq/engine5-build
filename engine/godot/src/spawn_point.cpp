@@ -121,6 +121,8 @@ void E5SpawnPoint::spawn() {
         }
         // Where it stands and which way it looks are set before it is ready: its home is
         // where it finds itself then, and it puts itself on the ground.
+        // The same name on every machine: by it a shared game tells which enemy is meant.
+        enemy->set_name(godot::String(get_name()) + godot::String("_") + godot::String::num_int64(index));
         enemy->set_position(spot - centre);
         enemy->set_rotation(godot::Vector3(
             0.0F, chance(place_seed, static_cast<std::uint32_t>(index) * 3U + 2U) * 2.0F * std::numbers::pi_v<float>,

@@ -177,6 +177,15 @@ void E5Diagnostics::_process(double /*delta*/) {
                     day->set_running(false);
                 }
             }
+            if (config_.start_x && config_.start_z) {
+                // Onto the ground there, if there is ground; otherwise she falls onto whatever is.
+                godot::Vector3 start(*config_.start_x, static_cast<float>(player->get_global_position().y), *config_.start_z);
+                if (const auto* const terrain = godot::Object::cast_to<E5Terrain>(
+                        get_tree()->get_first_node_in_group(E5Terrain::group_name))) {
+                    start.y = terrain->height_at(*config_.start_x, *config_.start_z) + 0.5F;
+                }
+                player->set_global_position(start);
+            }
             if (config_.camera_yaw_degrees) {
                 player->set_camera_yaw(*config_.camera_yaw_degrees * radians_per_degree);
             }

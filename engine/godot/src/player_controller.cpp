@@ -46,6 +46,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -391,6 +392,15 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_max_health"), &E5PlayerController::get_max_health);
     ClassDB::bind_method(D_METHOD("select_skill", "slot"), &E5PlayerController::select_skill);
     ClassDB::bind_method(D_METHOD("get_selected_skill"), &E5PlayerController::get_selected_skill);
+    ClassDB::bind_method(D_METHOD("set_remote", "remote"), &E5PlayerController::set_remote);
+    ClassDB::bind_method(D_METHOD("is_remote"), &E5PlayerController::is_remote);
+    ClassDB::bind_method(D_METHOD("get_net_state"), &E5PlayerController::get_net_state);
+    ClassDB::bind_method(D_METHOD("apply_net_state", "position", "facing", "clip", "speed", "look_yaw", "look_pitch"),
+                         &E5PlayerController::apply_net_state);
+    ClassDB::bind_method(D_METHOD("take_net_events"), &E5PlayerController::take_net_events);
+    ClassDB::bind_method(D_METHOD("apply_net_event", "kind", "slot", "power", "combo_step", "look_yaw", "look_pitch"),
+                         &E5PlayerController::apply_net_event);
+    ClassDB::bind_method(D_METHOD("take_outgoing_damage"), &E5PlayerController::take_outgoing_damage);
     ClassDB::bind_method(D_METHOD("get_skill_name", "slot"), &E5PlayerController::get_skill_name);
     ClassDB::bind_method(D_METHOD("get_last_skill"), &E5PlayerController::get_last_skill);
     ClassDB::bind_method(D_METHOD("get_skills_used"), &E5PlayerController::get_skills_used);
@@ -495,7 +505,12 @@ void E5PlayerController::_ready() {
     // The first slot is on the left mouse button anyway: the right one starts on the second.
     skills_.select(1);
 
-    add_to_group(group_name);
+    add_to_group(remote_ ? remote_group_name : group_name);
+    if (remote_) {
+        // Placed by what arrives over the network: she is pushed by nothing. She keeps her
+        // body, so that blows and missiles find her.
+        set_collision_mask(0);
+    }
     clip_death_ = godot::StringName("death");
     spawn_transform_ = get_global_transform();
     vitals_ = gameplay::full_vitals(vitals_params_);
@@ -507,7 +522,9 @@ void E5PlayerController::_ready() {
 
     const std::string name = godot::String(get_name()).utf8().get_data();
     camera_pivot_ = get_node<godot::Node3D>(godot::NodePath("CameraPivot"));
-    if (camera_pivot_ == nullptr) {
+    if (camera_pivot_ == nullptr && remote_) {
+        // A remote hero has no camera of its own.
+    } else if (camera_pivot_ == nullptr) {
         logger().error("E5PlayerController '{}' needs a Node3D child named 'CameraPivot'; camera control is disabled",
                        name);
     } else {
@@ -539,7 +556,7 @@ void E5PlayerController::_ready() {
 
     setup_animation();
 
-    if (capture_mouse_on_ready_) {
+    if (capture_mouse_on_ready_ && !remote_) {
         godot::Input::get_singleton()->set_mouse_mode(godot::Input::MOUSE_MODE_CAPTURED);
     }
 }
@@ -559,7 +576,6 @@ void E5PlayerController::setup_animation() {
         return;
     }
     animator_.set_base(clip_idle_, 1.0F);
-
     // Prefer a held full-draw pose over the pack's aim clip: that clip keeps pulling for a
     // few seconds and then loops, which snaps the bow back to a half draw.
     if (animator_.has_clip("bow_hold")) {
@@ -651,7 +667,9 @@ void E5PlayerController::setup_spells() {
     }
     setup_skill_ui();
     // He has no aiming stance: the crosshair is always there to cast at.
-    crosshair_->set_visible(true);
+    if (crosshair_ != nullptr) {
+        crosshair_->set_visible(true);
+    }
     // Deferred: the parent is still building its children while this node becomes ready.
     call_deferred("prewarm_effects");
 }
@@ -675,6 +693,10 @@ void E5PlayerController::finish_prewarm(float delta) {
 
 void E5PlayerController::_physics_process(double delta) {
     E5_PROFILE_SCOPE("E5PlayerController::_physics_process");
+    if (remote_) {
+        update_remote(static_cast<float>(delta));
+        return;
+    }
 
     const godot::Input* const input = godot::Input::get_singleton();
 
@@ -788,7 +810,134 @@ void E5PlayerController::_physics_process(double delta) {
     update_animation(actual, static_cast<float>(delta));
 }
 
+godot::Array E5PlayerController::get_net_state() const {
+    godot::Array state;
+    state.push_back(get_global_position());
+    state.push_back(model_yaw_);
+    state.push_back(godot::String(animator_.base_clip()));
+    state.push_back(animator_.base_scale());
+    state.push_back(look_.yaw);
+    state.push_back(look_.pitch);
+    state.push_back(vitals_.dead ? 0.0F : vitals_.health / std::max(get_effective_max_health(), 1.0F));
+    return state;
+}
+
+void E5PlayerController::apply_net_state(const godot::Vector3& position, float facing, const godot::String& clip,
+                                         float speed, float look_yaw, float look_pitch) {
+    if (!has_net_state_) {
+        // The first word of where she is: there at once, not gliding in from somewhere.
+        set_global_position(position);
+        model_yaw_ = facing;
+        has_net_state_ = true;
+    }
+    net_position_ = position;
+    net_facing_ = facing;
+    net_clip_ = godot::StringName(clip);
+    net_speed_ = speed;
+    look_.yaw = look_yaw;
+    look_.pitch = look_pitch;
+    apply_look_to_nodes();
+}
+
+void E5PlayerController::note_net_event(int kind, float power) {
+    if (remote_) {
+        return;
+    }
+    godot::Array event;
+    event.push_back(kind);
+    event.push_back(static_cast<int>(skills_.selected_index()));
+    event.push_back(power);
+    event.push_back(combo_step_);
+    event.push_back(look_.yaw);
+    event.push_back(look_.pitch);
+    net_events_.push_back(event);
+}
+
+godot::Array E5PlayerController::take_net_events() {
+    const godot::Array events = net_events_;
+    net_events_ = godot::Array();
+    return events;
+}
+
+void E5PlayerController::apply_net_event(int kind, int slot, float power, int combo_step, float look_yaw,
+                                         float look_pitch) {
+    if (!remote_ || slot < 0) {
+        return;
+    }
+    look_.yaw = look_yaw;
+    look_.pitch = look_pitch;
+    apply_look_to_nodes();
+    skills_.select(static_cast<std::size_t>(slot));
+    if (kind == 0) {
+        // Started in the next frame of hers, as on the machine that plays her.
+        pending_start_ = true;
+        pending_combo_step_ = combo_step;
+    } else if (archery_enabled_) {
+        use_skill(power);
+    }
+}
+
+void E5PlayerController::take_remote_damage(float amount, const godot::Vector3& /*position*/) {
+    if (remote_ && amount > 0.0F) {
+        outgoing_damage_ += amount;
+    }
+}
+
+float E5PlayerController::take_outgoing_damage() {
+    const float damage = outgoing_damage_;
+    outgoing_damage_ = 0.0F;
+    return damage;
+}
+
+// A remote hero follows what arrived last: she closes most of the distance within a tenth of
+// a second, so she moves smoothly between messages that come fifteen times a second. Skills
+// she was told of run as they do for the hero played here, only for show.
+void E5PlayerController::update_remote(float delta) {
+    if (has_net_state_) {
+        const float share = 1.0F - std::exp(-14.0F * delta);
+        set_global_position(get_global_position().lerp(net_position_, share));
+        const float turn = std::remainder(net_facing_ - model_yaw_, 2.0F * std::numbers::pi_v<float>);
+        model_yaw_ += turn * share;
+        if (model_ != nullptr) {
+            model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+        }
+    }
+    if ((archery_enabled_ || spells_enabled_) && animator_.is_ready()) {
+        const bool start = pending_start_ && instant_clip(skills_.selected()) != nullptr;
+        pending_start_ = false;
+        if (start) {
+            // Whatever she was doing is over: the next one has begun where she is played.
+            action_ = gameplay::ActionState{};
+        }
+        const gameplay::ActionStep action = gameplay::step_action(action_, start, action_timings_, delta);
+        action_ = action.state;
+        if (action.started) {
+            // The blow of the combo she is at, not the one this copy would count to.
+            combo_step_ = pending_combo_step_ - 1;
+            combo_idle_seconds_ = 0.0F;
+            start_instant_skill(skills_.selected());
+        }
+        update_summon(delta);
+        if (action.strike && action_skill_ == gameplay::SkillId::ThunderKick) {
+            strike_kick();
+        } else if (action.strike && action_skill_ == gameplay::SkillId::Kingfishers) {
+            release_birds();
+        } else if (action.strike) {
+            cast_spell(action_skill_);
+        }
+        tick_combo(delta);
+    }
+    if (has_net_state_ && animator_.is_ready() && !net_clip_.is_empty() && animator_.has_clip(net_clip_)) {
+        animator_.set_upper(godot::StringName());
+        animator_.set_base(net_clip_, net_speed_);
+    }
+    animator_.update(delta);
+}
+
 void E5PlayerController::take_damage(float amount) {
+    if (remote_) {
+        return; // decided on its own machine
+    }
     if (amount > 0.0F && !vitals_.dead) {
         pending_damage_ += amount;
     }
@@ -1085,6 +1234,12 @@ void E5PlayerController::setup_skill_ui() {
         }
     }
 
+    if (remote_) {
+        // Her camera says where she aims; nobody looks through it (whoever makes a remote hero
+        // switches it off before she enters the tree: see game/net/net.gd). No bars, no crosshair.
+        return;
+    }
+
     // A small dot in the middle of the screen: where skills go.
     crosshair_ = memnew(godot::CanvasLayer);
     add_child(crosshair_);
@@ -1252,6 +1407,9 @@ void E5PlayerController::setup_charge_effect() {
     update_charge_effect(0.0F, 0.0F);
 }
 void E5PlayerController::prewarm_effects() {
+    if (remote_) {
+        return; // the hero played here has warmed them already
+    }
     // The first time an effect is drawn the graphics driver compiles its
     // pipelines, which froze the game for about 350 ms on the first power shot.
     // Showing each effect once at start, out of sight, moves that cost into loading.
@@ -1344,6 +1502,7 @@ E5PlayerController::AimPoint E5PlayerController::find_aim_point(const godot::Vec
 void E5PlayerController::use_skill(float power) {
     last_skill_ = skills_.selected();
     ++skills_used_;
+    note_net_event(1, power);
     switch (skills_.selected()) {
     case gameplay::SkillId::ArrowRain:
         fire_rain();
@@ -1390,7 +1549,7 @@ void E5PlayerController::fire_fan() {
         const godot::Vector3 direction = centre.rotated(godot::Vector3(0.0F, 1.0F, 0.0F),
                                                         gameplay::fan_yaw_offset(index, fan_arrow_count, fan_spread));
         E5Arrow* const arrow = spawn_arrow(spawn, direction);
-        arrow->set_damage(gameplay::skill_damage(gameplay::SkillId::FrostFan));
+        arrow->set_damage(dealt(gameplay::SkillId::FrostFan));
         arrow->set_trail_effect(frost_trail_effect_);
         arrow->set_impact_effect(frost_impact_effect_);
         arrow->launch(direction * arrow_speed_, get_rid());
@@ -1401,7 +1560,7 @@ void E5PlayerController::fire_blast_arrow() {
     const godot::Vector3 spawn = bow_string_->to_global(bow_string_->get_nock_position());
     const godot::Vector3 direction = (find_aim_point(spawn).position - spawn).normalized();
     E5Arrow* const arrow = spawn_arrow(spawn, direction);
-    arrow->set_damage(gameplay::skill_damage(gameplay::SkillId::FireArrow));
+    arrow->set_damage(dealt(gameplay::SkillId::FireArrow));
     arrow->set_trail_effect(fire_trail_effect_);
     arrow->set_impact_effect(fire_impact_effect_);
     arrow->set_blast_radius(fire_blast_radius);
@@ -1539,6 +1698,7 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
         // The first kingfisher appears on her hand and opens its wings there.
         if (bird_scene_.is_valid()) {
             if (auto* const bird = godot::Object::cast_to<E5Bird>(bird_scene_->instantiate())) {
+                bird->set_harmless(remote_);
                 bird->perch();
                 get_parent()->add_child(bird);
                 bird->set_scale(godot::Vector3(0.001F, 0.001F, 0.001F));
@@ -1546,6 +1706,7 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
             }
         }
     }
+    note_net_event(0, 0.0F);
 }
 
 godot::Vector3 E5PlayerController::casting_point(bool both_hands) const {
@@ -1567,7 +1728,7 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
         const godot::Vector3 centre = get_global_position();
         E5Effect::spawn(nova_effect_, get_parent(), centre + godot::Vector3(0.0F, 0.08F, 0.0F));
         combat::blast(this, centre + godot::Vector3(0.0F, nova_height, 0.0F), nova_radius,
-                      gameplay::skill_damage(spell));
+                      dealt(spell));
         return;
     }
     if (spell == gameplay::SkillId::ChainLightning) {
@@ -1598,7 +1759,7 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
     auto* const bolt = memnew(E5SpellBolt);
     get_parent()->add_child(bolt);
     bolt->set_global_position(origin);
-    bolt->set_damage(gameplay::skill_damage(spell));
+    bolt->set_damage(dealt(spell));
     if (fireball) {
         bolt->set_trail_effect(fire_trail_effect_, fireball_trail_scale);
         bolt->set_impact_effect(fire_impact_effect_);
@@ -1612,7 +1773,7 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
 
 void E5PlayerController::cast_lightning() {
     const godot::Color colour(0.5F, 0.9F, 3.0F);
-    const float damage = gameplay::skill_damage(gameplay::SkillId::ChainLightning);
+    const float damage = dealt(gameplay::SkillId::ChainLightning);
     const godot::Vector3 origin = casting_point(false);
     godot::Vector3 current = find_aim_point(origin).position;
     E5LightningArc::spawn(get_parent(), origin, current, colour);
@@ -1661,7 +1822,7 @@ void E5PlayerController::cast_meteor() {
     auto* const meteor = memnew(E5SpellBolt);
     get_parent()->add_child(meteor);
     meteor->set_global_position(start);
-    meteor->set_damage(gameplay::skill_damage(gameplay::SkillId::Meteor));
+    meteor->set_damage(dealt(gameplay::SkillId::Meteor));
     meteor->set_trail_effect(fire_trail_effect_, meteor_trail_scale);
     meteor->set_impact_effect(meteor_impact_effect_);
     meteor->set_blast_radius(meteor_blast_radius);
@@ -1720,7 +1881,7 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
     const godot::Vector3 forward(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw));
     const godot::Vector3 centre =
         get_global_position() + forward * blow.reach + godot::Vector3(0.0F, melee_height, 0.0F);
-    float damage = gameplay::skill_damage(skill);
+    float damage = dealt(skill);
     if (is_combo(skill)) {
         damage *= gameplay::combo_damage_factor(combo_step_);
     }
@@ -1770,8 +1931,8 @@ void E5PlayerController::cast_black_hole() {
         place = feet + (place - feet).normalized() * black_hole_range;
     }
     auto* const hole = memnew(E5BlackHole);
-    hole->configure(black_hole_effect_, black_hole_burst_effect_, black_hole_tick,
-                    gameplay::skill_damage(gameplay::SkillId::BlackHole));
+    hole->configure(black_hole_effect_, black_hole_burst_effect_, remote_ ? 0.0F : black_hole_tick,
+                    dealt(gameplay::SkillId::BlackHole));
     get_parent()->add_child(hole);
     hole->set_global_position(place + godot::Vector3(0.0F, black_hole_height, 0.0F));
 }
@@ -1788,7 +1949,7 @@ void E5PlayerController::cast_star_barrage() {
         get_parent()->add_child(star);
         star->set_global_position(above + right * (side * 0.9F) +
                                   godot::Vector3(0.0F, 0.3F * (1.0F - std::abs(side)), 0.0F));
-        star->set_damage(gameplay::skill_damage(gameplay::SkillId::StarBarrage));
+        star->set_damage(dealt(gameplay::SkillId::StarBarrage));
         star->set_trail_effect(star_trail_effect_);
         star->set_impact_effect(star_impact_effect_);
         star->set_homing(target, star_speed, star_turn);
@@ -1832,6 +1993,7 @@ void E5PlayerController::update_summon(float delta) {
             const int index = summoned_bird_count - birds_to_release_;
             --birds_to_release_;
             if (auto* const bird = godot::Object::cast_to<E5Bird>(bird_scene_->instantiate())) {
+                bird->set_harmless(remote_);
                 get_parent()->add_child(bird);
                 launch_bird(bird, index);
                 E5Effect::spawn(summon_burst_effect_, get_parent(), raised_hand_position());
@@ -1874,7 +2036,7 @@ void E5PlayerController::strike_kick() {
         effect->set_rotation(godot::Vector3(0.0F, gameplay::facing_yaw(forward.x, forward.z), 0.0F));
     }
     combat::blast(this, ground + godot::Vector3(0.0F, kick_height, 0.0F), kick_radius,
-                  gameplay::skill_damage(gameplay::SkillId::ThunderKick));
+                  dealt(gameplay::SkillId::ThunderKick));
     // Lightning leaps from her foot across the ground in a fan.
     const godot::Vector3 foot = get_global_position() + forward * 0.5F + godot::Vector3(0.0F, kick_height, 0.0F);
     for (int index = 0; index < kick_bolt_count; ++index) {
@@ -1890,7 +2052,7 @@ void E5PlayerController::fire_arrow(float power) {
     const godot::Vector3 spawn = bow_string_->to_global(bow_string_->get_nock_position());
     const godot::Vector3 direction = (find_aim_point(spawn).position - spawn).normalized();
     E5Arrow* const arrow = spawn_arrow(spawn, direction);
-    arrow->set_damage(gameplay::skill_damage(skills_.selected(), power));
+    arrow->set_damage(dealt(skills_.selected(), power));
     if (power > 0.0F) {
         arrow->set_power(power, trail_effect_, impact_effect_);
     }
@@ -1937,6 +2099,7 @@ void E5PlayerController::fire_rain() {
 
     auto* const rain = memnew(E5ArrowRain);
     rain->configure(get_rid(), rain_marker_effect_, rain_impact_effect_);
+    rain->set_harmless(remote_);
     get_parent()->add_child(rain);
     rain->set_global_position(rain_target_);
 }
@@ -1967,6 +2130,9 @@ godot::String E5PlayerController::get_current_animation() const {
 }
 
 void E5PlayerController::_unhandled_input(const godot::Ref<godot::InputEvent>& event) {
+    if (remote_) {
+        return;
+    }
     godot::Input* const input = godot::Input::get_singleton();
     const bool captured = input->get_mouse_mode() == godot::Input::MOUSE_MODE_CAPTURED;
 

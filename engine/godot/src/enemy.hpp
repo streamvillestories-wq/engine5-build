@@ -7,6 +7,7 @@
 #include <godot_cpp/classes/character_body3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/shader.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector3.hpp>
@@ -63,6 +64,21 @@ public:
 
     // Makes something that stuck in the body (an arrow) move and turn with it.
     void attach(godot::Node3D* stuck);
+
+    // In a shared game one machine decides what the enemies do; on the others they are remote:
+    // they do not think or move by themselves but follow `apply_net_state`, and the damage they
+    // take there is collected for that one machine (`take_outgoing_damage`) instead of applied.
+    // What an enemy does to a player is always decided on that player's own machine: a blow
+    // or a bolt hurts only the hero who is played there.
+    void set_remote(bool remote);
+    [[nodiscard]] bool is_remote() const { return remote_; }
+    // [x, y, z, facing, phase, health, target x, y, z, bolts thrown so far]
+    [[nodiscard]] godot::PackedFloat32Array get_net_state() const;
+    void apply_net_state(const godot::PackedFloat32Array& state);
+    // The damage dealt to it here since the last call, to be sent to the machine that decides.
+    float take_outgoing_damage();
+    // Damage another player dealt on their machine, arriving at the one that decides.
+    void take_damage_from_peer(float amount);
 
     [[nodiscard]] bool is_alive() const { return state_.phase != gameplay::EnemyPhase::Dead; }
     [[nodiscard]] float get_health() const { return state_.health; }
@@ -162,6 +178,11 @@ private:
     [[nodiscard]] godot::Vector3 cast_origin() const;
     void throw_bolt(const godot::Vector3& player_position);
     void update_blow(bool attack_started, float dt, float distance_to_player);
+    void update_remote(float dt);
+    // The hero nearest to it, of all players: the one it goes for. Null if there is none.
+    [[nodiscard]] godot::Node3D* nearest_player() const;
+    // Metres to the hero played on this machine; very far if there is none.
+    [[nodiscard]] float distance_to_local_player() const;
     void respawn();
     void play_phase_animation(bool moving);
 
@@ -194,6 +215,14 @@ private:
     float blow_in_seconds_ = -1.0F;
     bool held_ = false;
     bool flung_ = false;
+    bool remote_ = false;
+    bool has_net_state_ = false;
+    godot::Vector3 net_position_;
+    float net_facing_ = 0.0F;
+    float outgoing_damage_ = 0.0F;
+    godot::Vector3 target_position_; // where the hero it goes for stands
+    int bolts_thrown_ = 0;
+    int bolts_shown_ = 0;
 
     // Damage that arrived since the last physics step.
     float pending_damage_ = 0.0F;

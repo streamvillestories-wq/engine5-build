@@ -108,6 +108,12 @@ TEST_CASE("the time of day is an hour", "[config]") {
     CHECK_FALSE(e5::parse_runtime_args(bad).has_value());
 }
 
+TEST_CASE("options for playing together are left to the game's network script", "[config]") {
+    const std::array args{"--server=play.example.org:7777"sv, "--net-join=play.example.org:7777"sv, "--net-name=Ada"sv};
+    const auto config = e5::parse_runtime_args(args);
+    REQUIRE(config.has_value());
+}
+
 TEST_CASE("options for the menu are left to the menu", "[config]") {
     const std::array args{"--menu"sv, "--menu-select=3"sv, "--menu-play"sv};
     const auto config = e5::parse_runtime_args(args);

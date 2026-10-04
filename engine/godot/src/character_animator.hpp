@@ -44,6 +44,7 @@ public:
     void update(float delta_seconds);
 
     [[nodiscard]] const godot::StringName& base_clip() const { return base_clip_; }
+    [[nodiscard]] float base_scale() const { return base_scale_; }
     [[nodiscard]] godot::Skeleton3D* skeleton() const { return skeleton_; }
 
 private:
@@ -52,6 +53,7 @@ private:
     godot::AnimationTree* tree_ = nullptr;
     godot::Skeleton3D* skeleton_ = nullptr;
     godot::StringName base_clip_;
+    float base_scale_ = 1.0F;
     godot::StringName upper_clip_;
     float upper_blend_ = 0.0F;
 };

@@ -41,6 +41,9 @@ public:
     // Sits still (on a hand, a branch) with folded wings until launched. Whoever
     // perches the bird places it; `set_wing_spread` opens the wings (0 folded, 1 spread).
     void perch();
+    // A harmless bird flies and pecks for show: the copy of another player's, whose machine
+    // decides what the real one does.
+    void set_harmless(bool harmless) { harmless_ = harmless; }
     void set_wing_spread(float spread) { wing_spread_ = spread; }
 
     // Starts the flight. `side` is +1 or -1 (which way it peels off), `index`
@@ -98,6 +101,7 @@ private:
     gameplay::BirdParams params_;
     bool launched_ = false;
     bool perched_ = false;
+    bool harmless_ = false;
     float wing_spread_ = 1.0F;
     int index_ = 0;
     // Ids, not pointers: the summoner and the targets may be removed while the bird lives.
