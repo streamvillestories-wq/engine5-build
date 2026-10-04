@@ -103,7 +103,8 @@ godot::ColorRect* make_rect(godot::Node* parent, const godot::Color& colour) {
 
 // What holds the frame rate where it is. A guess from the measured times, and named as one:
 // time spent waiting for the graphics card to present a frame is in none of the counters.
-std::string limit_guess(double frame_ms, double cpu_ms, double gpu_ms, bool vsync, double refresh_hz, int max_fps) {
+std::string limit_guess(double frame_ms, double cpu_ms, double gpu_ms, double draw_ms, bool vsync, double refresh_hz,
+                        int max_fps) {
     // Busy for most of the frame: that part cannot go faster, so it sets the pace.
     constexpr double most = 0.8;
     if (gpu_ms >= most * frame_ms && gpu_ms >= cpu_ms) {
@@ -117,6 +118,11 @@ std::string limit_guess(double frame_ms, double cpu_ms, double gpu_ms, bool vsyn
     }
     if (vsync && refresh_hz > 1.0 && frame_ms <= 1.08 * 1000.0 / refresh_hz) {
         return std::format("the display: V-Sync at {:.0f} Hz (the machine could do more)", refresh_hz);
+    }
+    // Without V-Sync nothing in the draw part waits for the display: what is left is work on
+    // the picture and waiting for the graphics card to take it.
+    if (!vsync && draw_ms >= 0.6 * frame_ms) {
+        return "drawing: the main thread prepares the picture or waits for the graphics card most of the frame";
     }
     return "nothing that stands out: neither processor nor graphics card is busy for most of the frame";
 }
@@ -366,6 +372,13 @@ std::string E5PerfOverlay::detailed_text() {
     const double cpu_ms = split_.physics_ms + split_.logic_ms + metrics.cpu_render_ms;
     const double rest_ms = std::max(frame.average_ms - split_.physics_ms - split_.logic_ms - split_.draw_ms, 0.0);
     const godot::Vector2i window = display->window_get_size();
+    // The engine counts its own heap only in debug builds; a build for players reports 0.
+    const std::string heap =
+        metrics.static_memory_mb > 0.0
+            ? std::format("heap {:.0f} MB (peak {:.0f})", metrics.static_memory_mb, detail.static_memory_peak_mb)
+            : std::string("heap not counted in this build");
+    const godot::Dictionary memory = os->get_memory_info();
+    const double memory_free_gb = static_cast<double>(memory.get("free", 0)) / bytes_per_gb;
     const double scale = static_cast<double>(viewport->get_scaling_3d_scale());
 
     // The world: only what is in the tree, so the numbers are right in any scene.
@@ -416,7 +429,7 @@ std::string E5PerfOverlay::detailed_text() {
         "         objects {} (scene {}, shadows {})   triangles {} (scene {}, shadows {})\n"
         "         window {}x{}   3D at {:.0f}x{:.0f} (scale {:.2f})   MSAA {}   V-Sync {}   {:.0f} Hz   cap {}\n"
         "         shader pipelines compiled {} (a hitch each time this grows)\n"
-        "MEMORY   graphics {:.0f} MB (textures {:.0f}, buffers {:.0f})   heap {:.0f} MB (peak {:.0f})\n"
+        "MEMORY   graphics {:.0f} MB (textures {:.0f}, buffers {:.0f})   {}   system memory free {:.1f} GB\n"
         "SCENE    nodes {} (outside the tree {})   objects {}   resources {}\n"
         "         physics: moving bodies {}   pairs {}   islands {}\n"
         "WORLD    {}   enemies alive {} of {} (mirrored {})   other heroes {}\n"
@@ -430,17 +443,17 @@ std::string E5PerfOverlay::detailed_text() {
         frame.one_percent_low_fps, over_30, hitches, history_.size(), window_ms / 1000.0, split_.logic_ms,
         split_.physics_ms, split_.draw_ms, rest_ms, metrics.cpu_render_ms, metrics.gpu_render_ms, detail.navigation_ms,
         metrics.process_ms, metrics.physics_ms,
-        limit_guess(frame.average_ms, cpu_ms, metrics.gpu_render_ms, vsync != godot::DisplayServer::VSYNC_DISABLED,
-                    refresh_hz, max_fps),
+        limit_guess(frame.average_ms, cpu_ms, metrics.gpu_render_ms, split_.draw_ms,
+                    vsync != godot::DisplayServer::VSYNC_DISABLED, refresh_hz, max_fps),
         metrics.draw_calls, detail.scene.draw_calls, detail.shadows.draw_calls, detail.interface.draw_calls,
         metrics.visible_objects, detail.scene.objects, detail.shadows.objects, metrics.primitives,
         detail.scene.primitives, detail.shadows.primitives, window.x, window.y, static_cast<double>(window.x) * scale,
         static_cast<double>(window.y) * scale, scale, msaa_name(viewport->get_msaa_3d()), vsync_name(vsync), refresh_hz,
         max_fps > 0 ? std::format("{} FPS", max_fps) : std::string("none"), detail.pipelines_compiled,
-        metrics.video_memory_mb, metrics.texture_memory_mb, metrics.buffer_memory_mb, metrics.static_memory_mb,
-        detail.static_memory_peak_mb, metrics.node_count, detail.orphan_node_count, detail.object_count,
-        detail.resource_count, detail.physics_active_bodies, detail.physics_collision_pairs, detail.physics_islands,
-        place, enemies_alive, enemies, enemies_mirrored, remote_heroes, network);
+        metrics.video_memory_mb, metrics.texture_memory_mb, metrics.buffer_memory_mb, heap, memory_free_gb,
+        metrics.node_count, detail.orphan_node_count, detail.object_count, detail.resource_count,
+        detail.physics_active_bodies, detail.physics_collision_pairs, detail.physics_islands, place, enemies_alive,
+        enemies, enemies_mirrored, remote_heroes, network);
 }
 
 void E5PerfOverlay::save_report() {
