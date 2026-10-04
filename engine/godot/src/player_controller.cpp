@@ -22,7 +22,6 @@
 #include <godot_cpp/classes/bone_attachment3d.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/canvas_layer.hpp>
-#include <godot_cpp/classes/color_rect.hpp>
 #include <godot_cpp/classes/gpu_particles3d.hpp>
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
@@ -35,6 +34,7 @@
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/skeleton3d.hpp>
 #include <godot_cpp/classes/spring_arm3d.hpp>
+#include <godot_cpp/classes/texture_rect.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
@@ -84,6 +84,10 @@ constexpr float arrow_appears_at_draw = 0.35F;
 constexpr float hand_takes_string_at = 0.55F;
 // Distance from the wrist bone to where the fingers hold the string.
 constexpr float fingers_from_wrist = 0.07F;
+constexpr const char* crosshair_texture_path = "res://ui/icons/crosshair.svg";
+// Half the crosshair's width on a 1600 x 900 screen (the interface is scaled from that).
+constexpr float crosshair_half_size = 18.0F;
+
 // The spine only bends so far; beyond this the arrow still follows the crosshair.
 constexpr float max_body_pitch = 0.8F; // radians, about 46 degrees
 constexpr float power_shot_speed_bonus = 0.7F;
@@ -1241,18 +1245,21 @@ void E5PlayerController::setup_skill_ui() {
         return;
     }
 
-    // A small dot in the middle of the screen: where skills go.
+    // In the middle of the screen: where skills go. Four arrowheads around a dot.
     crosshair_ = memnew(godot::CanvasLayer);
     add_child(crosshair_);
-    auto* const dot = memnew(godot::ColorRect);
-    dot->set_color(godot::Color(1.0F, 1.0F, 1.0F, 0.85F));
-    // The dot sits exactly where the captured mouse is. Left at the default it
-    // swallows mouse events, and the camera stops turning whenever it is shown.
+    auto* const dot = memnew(godot::TextureRect);
+    dot->set_texture(godot::ResourceLoader::get_singleton()->load(crosshair_texture_path));
+    // The picture is drawn larger than it is shown, so it stays sharp when the interface is
+    // scaled up for a large screen.
+    dot->set_expand_mode(godot::TextureRect::EXPAND_IGNORE_SIZE);
+    // It sits exactly where the captured mouse is. Left at the default it swallows mouse
+    // events, and the camera stops turning whenever it is shown.
     dot->set_mouse_filter(godot::Control::MOUSE_FILTER_IGNORE);
-    constexpr float half_size = 3.0F;
     for (const godot::Side side : {godot::SIDE_LEFT, godot::SIDE_TOP, godot::SIDE_RIGHT, godot::SIDE_BOTTOM}) {
         dot->set_anchor(side, 0.5F);
-        dot->set_offset(side, side == godot::SIDE_LEFT || side == godot::SIDE_TOP ? -half_size : half_size);
+        dot->set_offset(side, side == godot::SIDE_LEFT || side == godot::SIDE_TOP ? -crosshair_half_size
+                                                                                  : crosshair_half_size);
     }
     crosshair_->add_child(dot);
     crosshair_->set_visible(false);
