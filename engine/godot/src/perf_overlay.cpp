@@ -465,6 +465,13 @@ void E5PerfOverlay::save_report() {
         godot::DisplayServer::get_singleton()->clipboard_set(report);
         note_ = "saved (and copied, paste it into a message): " +
                 text_of(godot::ProjectSettings::get_singleton()->globalize_path(report_path));
+        // And to the developer, where the player has not turned reports off. The report
+        // script knows how; this class must not know the script.
+        if (godot::Node* const reports = get_tree()->get_root()->get_node_or_null("Reports");
+            reports != nullptr && reports->has_method("is_on") && static_cast<bool>(reports->call("is_on"))) {
+            reports->call("send", "performance", report, "");
+            note_ += "\nsent to the developer";
+        }
     } else {
         note_ = "the report could not be written";
     }
