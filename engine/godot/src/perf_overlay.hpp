@@ -38,8 +38,11 @@ public:
     void set_detailed(bool detailed);
     [[nodiscard]] bool is_detailed() const { return detailed_; }
 
+    // The detailed statistics as text, for a script that sends them (game/net/reports.gd).
+    [[nodiscard]] godot::String get_report();
+
 protected:
-    static void _bind_methods() {}
+    static void _bind_methods();
 
 private:
     // Where one frame's time on the main thread goes, in milliseconds.

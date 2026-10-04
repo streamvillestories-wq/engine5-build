@@ -23,6 +23,7 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/classes/window.hpp>
+#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/callable_method_pointer.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -454,6 +455,14 @@ std::string E5PerfOverlay::detailed_text() {
         metrics.node_count, detail.orphan_node_count, detail.object_count, detail.resource_count,
         detail.physics_active_bodies, detail.physics_collision_pairs, detail.physics_islands, place, enemies_alive,
         enemies, enemies_mirrored, remote_heroes, network);
+}
+
+void E5PerfOverlay::_bind_methods() {
+    godot::ClassDB::bind_method(godot::D_METHOD("get_report"), &E5PerfOverlay::get_report);
+}
+
+godot::String E5PerfOverlay::get_report() {
+    return godot::String::utf8(detailed_text().c_str());
 }
 
 void E5PerfOverlay::save_report() {
