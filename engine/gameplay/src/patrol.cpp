@@ -7,7 +7,6 @@
 namespace e5::gameplay {
 namespace {
 
-constexpr float pi = std::numbers::pi_v<float>;
 // The next spot lies this far round the ring from where it stands, either way: far enough
 // to be a walk, near enough that the straight way there does not cut deep through the middle.
 constexpr float least_turn = 0.5F; // radians

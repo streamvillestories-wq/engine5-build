@@ -33,7 +33,7 @@ jobs:
       - name: Build universal extension
         run: |
           cmake --preset macos-release
-          cmake --build --preset macos-release
+          cmake --build --preset macos-release -- -k 0
           lipo -info game/bin/*.dylib
 
       - uses: actions/upload-artifact@v4
