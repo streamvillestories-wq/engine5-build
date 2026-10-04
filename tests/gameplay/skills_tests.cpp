@@ -263,3 +263,55 @@ TEST_CASE("the sword combo carries her forward by each blow's distance", "[skill
     // The finisher is a leap: it goes furthest.
     CHECK(combo_advance_distance(2) > combo_advance_distance(0));
 }
+
+TEST_CASE("the shield is raised while held, comes down after its time and then cools down", "[skills]") {
+    using e5::gameplay::BlockParams;
+    using e5::gameplay::BlockState;
+    using e5::gameplay::step_block;
+    const BlockParams params{.max_hold_seconds = 2.0F, .cooldown_seconds = 5.0F};
+
+    auto step = step_block(BlockState{}, true, true, true, params, 0.1F);
+    CHECK(step.raised_now);
+    CHECK(step.state.raised);
+
+    // Held: it stays up, until its time is over.
+    step = step_block(step.state, false, true, true, params, 1.0F);
+    CHECK(step.state.raised);
+    step = step_block(step.state, false, true, true, params, 1.1F);
+    CHECK(step.lowered_now);
+    CHECK_FALSE(step.state.raised);
+    CHECK(step.state.cooldown_left == Catch::Approx(5.0F));
+
+    // Still held, and pressed again too early: nothing.
+    step = step_block(step.state, true, true, true, params, 2.0F);
+    CHECK_FALSE(step.state.raised);
+    CHECK(step.state.cooldown_left == Catch::Approx(3.0F));
+    // Holding the key through the cooldown does not raise it: it takes a new press.
+    step = step_block(step.state, false, true, true, params, 3.5F);
+    CHECK_FALSE(step.state.raised);
+    step = step_block(step.state, true, true, true, params, 0.1F);
+    CHECK(step.raised_now);
+
+    // Let go early: down at once, and the cooldown starts.
+    step = step_block(step.state, false, false, true, params, 0.1F);
+    CHECK(step.lowered_now);
+    CHECK(step.state.cooldown_left == Catch::Approx(5.0F));
+
+    // She cannot block in the middle of a blow.
+    step = step_block(BlockState{}, true, true, false, params, 0.1F);
+    CHECK_FALSE(step.state.raised);
+}
+
+TEST_CASE("a raised shield covers the front and the sides, not the back", "[skills]") {
+    using e5::gameplay::shield_covers;
+    const float forward = 0.0F;                       // looking along +z
+    CHECK(shield_covers(forward, 0.0F, 2.0F));        // straight ahead
+    CHECK(shield_covers(forward, 2.0F, 0.5F));        // ahead and to one side
+    CHECK(shield_covers(forward, -2.0F, 0.5F));       // and to the other
+    CHECK_FALSE(shield_covers(forward, 0.0F, -2.0F)); // behind
+    CHECK_FALSE(shield_covers(forward, 1.0F, -1.0F));
+    // Turned a quarter: what was beside her is ahead now.
+    const float quarter = 1.5707963F; // looking along +x
+    CHECK(shield_covers(quarter, 2.0F, 0.0F));
+    CHECK_FALSE(shield_covers(quarter, -2.0F, 0.0F));
+}

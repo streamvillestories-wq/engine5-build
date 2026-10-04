@@ -116,7 +116,8 @@ void E5SpellBolt::burst(const godot::Vector3& position, godot::Object* collider)
     E5Effect::spawn(impact_effect_, get_parent(), position);
     if (hostile_) {
         if (auto* const player = godot::Object::cast_to<E5PlayerController>(collider)) {
-            player->take_damage(damage_);
+            // From where it came: back along its flight.
+            player->take_damage_from(damage_, position - velocity_.normalized() * 2.0F);
         }
         return;
     }

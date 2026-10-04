@@ -56,6 +56,8 @@ constexpr const char* imported_asset_group = "e5_asset";
 constexpr double auto_shot_hold_ms = 2000.0;
 constexpr double auto_charge_hold_ms = 3200.0;
 constexpr double auto_shoot_pause_ms = 400.0;
+constexpr double auto_block_cycle_ms = 3000.0;
+constexpr double auto_block_pause_ms = 500.0; // let go for this long at the start of each cycle
 constexpr int power_shot_slot = 1;
 // Per second, not per frame: the turn must not depend on the frame rate.
 constexpr float auto_turn_pixels_per_second = 500.0F;
@@ -124,6 +126,9 @@ void E5Diagnostics::_ready() {
         godot::Input::get_singleton()->action_press(actions::aim);
     }
     if (config_.auto_attack) {
+        ensure_default_input_actions();
+    }
+    if (config_.auto_block) {
         ensure_default_input_actions();
     }
     if (!config_.auto_move.empty()) {
@@ -223,6 +228,20 @@ void E5Diagnostics::drive_automated_input(double frame_ms) {
     // Shooting means holding aim until the bow is drawn (and charged, for the
     // power shot) and then letting go; repeat.
     // --auto-attack does the same with the left button: the standard attack.
+    if (config_.auto_block) {
+        // Pressed again and again, as a player would: a key that is simply down from the
+        // first frame is never a new press, and the shield takes a new press.
+        auto_block_elapsed_ms_ += frame_ms;
+        if (auto_block_elapsed_ms_ >= auto_block_cycle_ms) {
+            auto_block_elapsed_ms_ = 0.0;
+        }
+        godot::Input* const input = godot::Input::get_singleton();
+        if (auto_block_elapsed_ms_ >= auto_block_pause_ms) {
+            input->action_press(actions::block);
+        } else {
+            input->action_release(actions::block);
+        }
+    }
     if (config_.auto_fire || config_.auto_charge || config_.auto_attack) {
         const char* const button = config_.auto_attack ? actions::attack : actions::aim;
         const double hold_ms = config_.auto_charge ? auto_charge_hold_ms : auto_shot_hold_ms;
@@ -435,6 +454,8 @@ bool E5Diagnostics::write_report() {
         player_info["skill_set"] = player->get_skill_set();
         player_info["last_skill"] = player->get_last_skill();
         player_info["skills_used"] = player->get_skills_used();
+        player_info["hits_blocked"] = player->get_hits_blocked();
+        player_info["blocking"] = player->is_blocking();
         if (const E5Inventory* const inventory = player->get_inventory()) {
             player_info["gold"] = inventory->get_gold();
             player_info["items_picked"] = inventory->get_items_picked();

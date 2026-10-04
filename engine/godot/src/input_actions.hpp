@@ -16,6 +16,8 @@ inline constexpr const char* attack = "e5_attack";
 // Right mouse: the skill selected on the bar.
 inline constexpr const char* aim = "e5_aim";
 inline constexpr const char* use_potion = "e5_use_potion";
+// Held: the warrior raises her shield.
+inline constexpr const char* block = "e5_block";
 // Opens and closes the bag; the interface script listens for it.
 inline constexpr const char* inventory = "e5_inventory";
 // Skill slots are e5_skill_1 .. e5_skill_10 (keys 1..9 and 0).

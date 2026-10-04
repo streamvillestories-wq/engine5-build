@@ -558,7 +558,7 @@ void E5Enemy::update_blow(bool attack_started, float dt, float distance_to_playe
         auto* const target = godot::Object::cast_to<E5PlayerController>(
             get_tree()->get_first_node_in_group(E5PlayerController::group_name));
         if (target != nullptr) {
-            target->take_damage(attack_damage_);
+            target->take_damage_from(attack_damage_, get_global_position());
         }
     }
 }

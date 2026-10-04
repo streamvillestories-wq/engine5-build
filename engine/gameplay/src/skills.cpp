@@ -155,6 +155,33 @@ float combo_advance_speed(int step, float seconds) noexcept {
     return advance.distance * 6.0F * u * (1.0F - u) / (advance.to - advance.from);
 }
 
+BlockStep step_block(const BlockState& state, bool pressed, bool held, bool able, const BlockParams& params,
+                     float dt) noexcept {
+    BlockStep step{.state = state};
+    if (step.state.raised) {
+        step.state.held_seconds += dt;
+        if (!held || !able || step.state.held_seconds >= params.max_hold_seconds) {
+            step.state.raised = false;
+            step.state.held_seconds = 0.0F;
+            step.state.cooldown_left = params.cooldown_seconds;
+            step.lowered_now = true;
+        }
+        return step;
+    }
+    step.state.cooldown_left = std::max(step.state.cooldown_left - dt, 0.0F);
+    if (pressed && able && step.state.cooldown_left <= 0.0F) {
+        step.state.raised = true;
+        step.state.held_seconds = 0.0F;
+        step.raised_now = true;
+    }
+    return step;
+}
+
+bool shield_covers(float facing_yaw, float dx, float dz) noexcept {
+    // In front or beside, not behind. Something exactly where she stands has no side: covered.
+    return std::sin(facing_yaw) * dx + std::cos(facing_yaw) * dz >= 0.0F;
+}
+
 int next_combo_step(int last_step, float seconds_since_last, float window_seconds) noexcept {
     if (last_step < 0 || last_step >= combo_length - 1 || seconds_since_last > window_seconds) {
         return 0;

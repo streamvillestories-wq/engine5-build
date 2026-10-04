@@ -157,6 +157,11 @@ constexpr MeleeBlow plain_blow{.reach = 1.3F, .radius = 1.7F};
 // The sword combo: the arc each blow leaves in the air, and how hard it jolts the camera.
 constexpr const char* slash_arc_path = "res://effects/slash_arc.tscn";
 constexpr const char* landing_dust_path = "res://effects/axe_wind_impact.tscn";
+// The shield block: the clip that makes a hero able to block, the sparks of a stopped hit,
+// and the jolt it gives the camera.
+constexpr const char* block_clip = "shield_block";
+constexpr const char* block_spark_path = "res://effects/shield_block.tscn";
+constexpr float block_shake = 0.03F;
 struct ComboLook {
     // The plane the arc is drawn in, as two directions in her own terms (right, up, forward):
     // the arc runs from a little behind `y` round through `x` and on. None of the planes is
@@ -420,6 +425,13 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_input_blocked", "blocked"), &E5PlayerController::set_input_blocked);
     ClassDB::bind_method(D_METHOD("is_input_blocked"), &E5PlayerController::is_input_blocked);
     ClassDB::bind_method(D_METHOD("take_damage", "amount"), &E5PlayerController::take_damage);
+    ClassDB::bind_method(D_METHOD("take_damage_from", "amount", "from"), &E5PlayerController::take_damage_from);
+    ClassDB::bind_method(D_METHOD("can_block"), &E5PlayerController::can_block);
+    ClassDB::bind_method(D_METHOD("is_blocking"), &E5PlayerController::is_blocking);
+    ClassDB::bind_method(D_METHOD("get_block_cooldown"), &E5PlayerController::get_block_cooldown);
+    ClassDB::bind_method(D_METHOD("get_block_cooldown_seconds"), &E5PlayerController::get_block_cooldown_seconds);
+    ClassDB::bind_method(D_METHOD("get_block_time_left"), &E5PlayerController::get_block_time_left);
+    ClassDB::bind_method(D_METHOD("get_hits_blocked"), &E5PlayerController::get_hits_blocked);
     ClassDB::bind_method(D_METHOD("get_health"), &E5PlayerController::get_health);
     ClassDB::bind_method(D_METHOD("is_dead"), &E5PlayerController::is_dead);
     ClassDB::bind_method(D_METHOD("set_max_health", "health"), &E5PlayerController::set_max_health);
@@ -546,6 +558,7 @@ void E5PlayerController::_ready() {
         set_collision_mask(0);
     }
     clip_death_ = godot::StringName("death");
+    clip_block_ = godot::StringName(block_clip);
     spawn_transform_ = get_global_transform();
     vitals_ = gameplay::full_vitals(vitals_params_);
     inventory_ = memnew(E5Inventory);
@@ -688,8 +701,11 @@ void E5PlayerController::setup_spells() {
         }
     }
     weapon_holder_ = godot::Object::cast_to<godot::Node3D>(find_child("WeaponHolder", true, false));
+    // Whoever has the clip has a shield to raise.
+    block_enabled_ = animator_.is_ready() && animator_.has_clip(clip_block_);
     for (const auto& [path, scene] :
-         {std::pair{slash_arc_path, &slash_arc_}, std::pair{landing_dust_path, &landing_dust_}}) {
+         {std::pair{slash_arc_path, &slash_arc_}, std::pair{landing_dust_path, &landing_dust_},
+          std::pair{block_spark_path, &block_spark_}}) {
         if (godot::ResourceLoader::get_singleton()->exists(path)) {
             *scene = godot::ResourceLoader::get_singleton()->load(path);
         }
@@ -766,10 +782,27 @@ void E5PlayerController::_physics_process(double delta) {
     other_button_was_pressed_ = other_pressed;
     const bool aim_just_pressed = aim_pressed && !aim_was_pressed_;
     aim_was_pressed_ = aim_pressed;
+    // The shield: up while the key is held, as long as it lasts.
+    if (block_enabled_) {
+        const bool block_key = !input_blocked_ && input->is_action_pressed(actions::block);
+        const bool able = !action_.active && !is_aiming() && is_on_floor() && !vitals_.dead;
+        const gameplay::BlockStep block = gameplay::step_block(block_, block_key && !block_key_was_down_, block_key,
+                                                               able, block_params_, static_cast<float>(delta));
+        block_key_was_down_ = block_key;
+        block_ = block.state;
+        if (block.raised_now) {
+            // Towards where the player looks: that is where the danger is.
+            model_yaw_ = gameplay::facing_yaw(-std::sin(look_.yaw), -std::cos(look_.yaw));
+            if (model_ != nullptr) {
+                model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+            }
+        }
+    }
+
     // Instant skills start on the press and play through; the bow stays down meanwhile.
     const bool instant = gameplay::skill_info(skills_.selected()).kind == gameplay::SkillKind::Instant;
     if (archery_enabled_ || spells_enabled_) {
-        const bool start = instant && aim_just_pressed && can_start_instant_skill(skills_.selected());
+        const bool start = instant && aim_just_pressed && !block_.raised && can_start_instant_skill(skills_.selected());
         // A combo is one movement, not three clicks timed to the frame: a press during a blow
         // counts for the next one, and so does a button that is still held when the blow ends.
         const bool combo = instant && is_combo(skills_.selected());
@@ -840,7 +873,7 @@ void E5PlayerController::_physics_process(double delta) {
 
     const gameplay::MotorParams params = motor_params();
     // She stands still for the length of a kick.
-    const bool rooted = action_.active || input_blocked_;
+    const bool rooted = action_.active || input_blocked_ || block_.raised;
     const gameplay::MotorInput motor_input{
         .move_right = rooted ? 0.0F : input->get_axis(action_left_, action_right_),
         .move_forward = rooted ? 0.0F : input->get_axis(action_back_, action_forward_),
@@ -1008,6 +1041,23 @@ void E5PlayerController::update_remote(float delta) {
         animator_.set_base(net_clip_, net_speed_);
     }
     animator_.update(delta);
+}
+
+void E5PlayerController::take_damage_from(float amount, const godot::Vector3& from) {
+    if (remote_ || amount <= 0.0F || vitals_.dead) {
+        return;
+    }
+    const godot::Vector3 away = from - get_global_position();
+    if (block_.raised && gameplay::shield_covers(model_yaw_, static_cast<float>(away.x), static_cast<float>(away.z))) {
+        // On the shield: nothing gets through. Sparks where it struck, and she feels it.
+        ++hits_blocked_;
+        shake_ = std::max(shake_, block_shake);
+        const godot::Vector3 forward(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+        E5Effect::spawn(block_spark_, get_parent(),
+                        get_global_position() + forward * 0.5F + godot::Vector3(0.0F, 1.1F, 0.0F));
+        return;
+    }
+    take_damage(amount);
 }
 
 void E5PlayerController::take_damage(float amount) {
@@ -1190,6 +1240,13 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
     }
     const float speed = std::hypot(velocity.x, velocity.z);
 
+    if (block_.raised) {
+        // The clip brings the shield up and then holds it there.
+        animator_.set_upper(godot::StringName());
+        animator_.set_base(clip_block_, 1.0F);
+        animator_.update(delta);
+        return;
+    }
     if (action_.active) {
         animator_.set_upper(godot::StringName());
         if (const godot::StringName* const clip = instant_clip(action_skill_)) {

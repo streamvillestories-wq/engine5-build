@@ -76,6 +76,32 @@ inline constexpr int combo_length = 3;
 // How far blow `step` carries her in all.
 [[nodiscard]] float combo_advance_distance(int step) noexcept;
 
+// The warrior's shield. While a key is held she raises it, for a limited time; then, or when
+// the key is let go, it comes down and cannot be raised again until it has cooled down. A
+// raised shield stops everything that comes from the half-circle in front of her.
+struct BlockParams {
+    float max_hold_seconds = 2.0F;
+    float cooldown_seconds = 5.0F;
+};
+struct BlockState {
+    bool raised = false;
+    float held_seconds = 0.0F;  // how long it has been up; meaningful while raised
+    float cooldown_left = 0.0F; // seconds until it can be raised again
+};
+struct BlockStep {
+    BlockState state;
+    bool raised_now = false;
+    bool lowered_now = false;
+};
+// `pressed`: the key went down in this step (holding it through the cooldown does not raise
+// the shield again). `held`: it is down. `able`: she can block at all right now (on her feet,
+// not in the middle of a blow, alive).
+[[nodiscard]] BlockStep step_block(const BlockState& state, bool pressed, bool held, bool able,
+                                   const BlockParams& params, float dt) noexcept;
+// Whether a raised shield is between her and something at (dx, dz) from her, she looking
+// along `facing_yaw` (as facing_yaw() gives it): anything not behind her.
+[[nodiscard]] bool shield_covers(float facing_yaw, float dx, float dz) noexcept;
+
 // The ten quick slots (keys 1..9 and 0). Selecting an empty slot is ignored,
 // so the selection always names a usable skill.
 class SkillBar {

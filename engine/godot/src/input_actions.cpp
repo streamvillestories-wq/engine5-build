@@ -26,6 +26,7 @@ void ensure_default_input_actions() {
         Binding{.action = actions::jump, .key = godot::KEY_SPACE},
         Binding{.action = actions::sprint, .key = godot::KEY_SHIFT},
         Binding{.action = actions::use_potion, .key = godot::KEY_Q},
+        Binding{.action = actions::block, .key = godot::KEY_R},
         Binding{.action = actions::inventory, .key = godot::KEY_TAB},
         Binding{.action = actions::inventory, .key = godot::KEY_I},
     };

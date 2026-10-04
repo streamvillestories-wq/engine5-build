@@ -60,6 +60,7 @@ private:
     bool finished_ = false;
     bool camera_yaw_applied_ = false;
     double auto_shoot_elapsed_ms_ = 0.0;
+    double auto_block_elapsed_ms_ = 0.0;
 };
 
 } // namespace e5::bridge

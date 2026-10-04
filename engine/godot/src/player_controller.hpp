@@ -178,6 +178,18 @@ public:
     // Health. Damage is collected and applied in the next physics step. At zero she dies, lies
     // for a few seconds, and comes back where she started.
     void take_damage(float amount);
+    // Damage that comes from somewhere: a raised shield stops it if it is not behind her.
+    void take_damage_from(float amount, const godot::Vector3& from);
+    // The shield (the warrior's): whether it is up, how long until it can be raised again,
+    // and how many hits it has stopped (for tests).
+    [[nodiscard]] bool can_block() const { return block_enabled_; }
+    [[nodiscard]] bool is_blocking() const { return block_.raised; }
+    [[nodiscard]] float get_block_cooldown() const { return block_.cooldown_left; }
+    [[nodiscard]] float get_block_cooldown_seconds() const { return block_params_.cooldown_seconds; }
+    [[nodiscard]] float get_block_time_left() const {
+        return block_.raised ? block_params_.max_hold_seconds - block_.held_seconds : 0.0F;
+    }
+    [[nodiscard]] int get_hits_blocked() const { return hits_blocked_; }
 
     // A remote hero is another player's, shown here: it takes no input, has no camera and no
     // interface, collides with nothing, and does what `apply_net_state` tells it. To be set
@@ -319,7 +331,7 @@ private:
     void setup_charge_effect();
     [[nodiscard]] bool is_aiming() const { return bow_.phase != gameplay::BowPhase::Lowered; }
     // In the middle of using a skill: the selection must not change now.
-    [[nodiscard]] bool is_busy() const { return is_aiming() || action_.active; }
+    [[nodiscard]] bool is_busy() const { return is_aiming() || action_.active || block_.raised; }
 
     gameplay::MotorParams params_;
     gameplay::LookAngles look_;
@@ -377,6 +389,14 @@ private:
     int combo_step_ = -1;
     float combo_idle_seconds_ = 0.0F;
     godot::Vector3 combo_push_; // the velocity the combo's step added in the last frame
+    // The shield block: only a hero whose library has the block clip can.
+    bool block_enabled_ = false;
+    bool block_key_was_down_ = false;
+    gameplay::BlockParams block_params_;
+    gameplay::BlockState block_;
+    int hits_blocked_ = 0;
+    godot::StringName clip_block_;
+    godot::Ref<godot::PackedScene> block_spark_;
     bool combo_queued_ = false;
     bool combo_arc_shown_ = false; // this blow's arc is in the air already
     godot::Ref<godot::PackedScene> slash_arc_;
