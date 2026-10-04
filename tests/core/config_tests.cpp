@@ -121,3 +121,11 @@ TEST_CASE("options for the menu are left to the menu", "[config]") {
     const auto config = e5::parse_runtime_args(args);
     REQUIRE(config.has_value());
 }
+
+TEST_CASE("a start position may lie west or north of the middle", "[config]") {
+    const std::array args{"--start-x=-24"sv, "--start-z=-3.5"sv};
+    const auto config = e5::parse_runtime_args(args);
+    REQUIRE(config.has_value());
+    CHECK(config->start_x == Catch::Approx(-24.0F));
+    CHECK(config->start_z == Catch::Approx(-3.5F));
+}

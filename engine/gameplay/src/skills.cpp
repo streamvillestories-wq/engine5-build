@@ -126,6 +126,35 @@ float combo_damage_factor(int step) noexcept {
     return factors.at(static_cast<std::size_t>(std::clamp(step, 0, combo_length - 1)));
 }
 
+namespace {
+
+struct ComboAdvance {
+    float distance; // metres
+    float from;     // seconds into the blow
+    float to;
+};
+// As "step" in tools/godot/warrior_combo.gd: change both together.
+constexpr std::array<ComboAdvance, combo_length> combo_advances{
+    ComboAdvance{.distance = 0.6F, .from = 0.16F, .to = 0.36F},
+    ComboAdvance{.distance = 0.6F, .from = 0.1F, .to = 0.46F},
+    ComboAdvance{.distance = 1.4F, .from = 0.22F, .to = 0.5F}};
+
+} // namespace
+
+float combo_advance_distance(int step) noexcept {
+    return combo_advances.at(static_cast<std::size_t>(std::clamp(step, 0, combo_length - 1))).distance;
+}
+
+float combo_advance_speed(int step, float seconds) noexcept {
+    const ComboAdvance& advance = combo_advances.at(static_cast<std::size_t>(std::clamp(step, 0, combo_length - 1)));
+    const float u = (seconds - advance.from) / (advance.to - advance.from);
+    if (u <= 0.0F || u >= 1.0F) {
+        return 0.0F;
+    }
+    // The way goes as a smooth step (3u^2 - 2u^3); this is how fast that is.
+    return advance.distance * 6.0F * u * (1.0F - u) / (advance.to - advance.from);
+}
+
 int next_combo_step(int last_step, float seconds_since_last, float window_seconds) noexcept {
     if (last_step < 0 || last_step >= combo_length - 1 || seconds_since_last > window_seconds) {
         return 0;

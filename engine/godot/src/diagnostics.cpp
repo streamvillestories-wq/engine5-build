@@ -371,15 +371,27 @@ bool E5Diagnostics::write_report() {
     double enemy_damage = 0.0;
     std::int64_t enemy_deaths = 0;
     std::int64_t enemy_casts = 0;
+    // Of the living enemies that have noticed the hero: how many, and how many of them do not
+    // look at her (none should: one that comes at her backwards is a bug).
+    std::int64_t enemies_aggro = 0;
+    std::int64_t enemies_facing_away = 0;
+    const auto* const hero =
+        godot::Object::cast_to<godot::Node3D>(tree->get_first_node_in_group(E5PlayerController::group_name));
     const godot::TypedArray<godot::Node> enemies = tree->get_nodes_in_group(E5Enemy::group_name);
     for (const godot::Variant& node : enemies) {
         if (const auto* const enemy = godot::Object::cast_to<E5Enemy>(node)) {
             enemy_damage += static_cast<double>(enemy->get_damage_taken());
             enemy_deaths += enemy->get_death_count();
             enemy_casts += enemy->get_cast_count();
+            if (hero != nullptr && enemy->is_alive() && enemy->is_aggro()) {
+                ++enemies_aggro;
+                enemies_facing_away += enemy->looks_towards(hero->get_global_position()) ? 0 : 1;
+            }
         }
     }
     scene["enemies"] = enemies.size();
+    scene["enemies_aggro"] = enemies_aggro;
+    scene["enemies_facing_away"] = enemies_facing_away;
     scene["enemy_damage"] = enemy_damage;
     if (const auto* const wanderer =
             godot::Object::cast_to<E5Wanderer>(get_tree()->get_first_node_in_group(E5Wanderer::group_name))) {

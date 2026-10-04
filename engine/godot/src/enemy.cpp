@@ -220,13 +220,22 @@ void E5Enemy::_ready() {
             trail_->set_position(godot::Vector3(0.0F, body_height_ * 0.5F, 0.0F));
         }
     }
+    // Which way it looks is the model's turn alone, measured in the world. A turned body
+    // (spawn points turn each enemy a random way) would add its own turn to every facing the
+    // model is given: an enemy turned half round came at the player backwards. So the body's
+    // turn is handed to the model here, and the body itself stays unturned.
+    spawn_yaw_ = static_cast<float>(get_rotation().y);
+    set_rotation(godot::Vector3());
     spawn_transform_ = get_global_transform();
     collision_layer_ = get_collision_layer();
-    model_yaw_ = static_cast<float>(get_rotation().y);
+    model_yaw_ = spawn_yaw_;
     state_ = gameplay::spawn_enemy(params_);
 
     const std::string name = godot::String(get_name()).utf8().get_data();
     model_ = get_node<godot::Node3D>(godot::NodePath("Model"));
+    if (model_ != nullptr) {
+        model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+    }
     if (model_ == nullptr) {
         logger().warn("E5Enemy '{}' has no Node3D child named 'Model'; nothing will be shown", name);
     } else if (animation_library_.is_valid()) {
@@ -450,6 +459,22 @@ void E5Enemy::set_shrink(float scale) {
     if (model_ != nullptr) {
         model_->set_scale(godot::Vector3(scale, scale, scale));
     }
+}
+
+bool E5Enemy::looks_towards(const godot::Vector3& place) const {
+    if (model_ == nullptr) {
+        return true;
+    }
+    // From the model's own transform in the world, not from the number the code keeps:
+    // the two disagreed when the body was turned as well.
+    godot::Vector3 forward = model_->get_global_transform().basis.get_column(2);
+    godot::Vector3 towards = place - get_global_position();
+    forward.y = 0.0F;
+    towards.y = 0.0F;
+    if (forward.length() < 0.001F || towards.length() < 0.001F) {
+        return true;
+    }
+    return forward.normalized().dot(towards.normalized()) > 0.7F;
 }
 
 void E5Enemy::spin(float radians) {
@@ -794,9 +819,9 @@ void E5Enemy::respawn() {
     set_collision_layer(collision_layer_);
     E5Effect::set_active(trail_, true);
     set_velocity(godot::Vector3());
-    model_yaw_ = 0.0F;
+    model_yaw_ = spawn_yaw_;
     if (model_ != nullptr) {
-        model_->set_rotation(godot::Vector3());
+        model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
     }
     update_health_bar();
     play_phase_animation(false);

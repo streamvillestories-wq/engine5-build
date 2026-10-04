@@ -43,6 +43,8 @@ void E5SpawnPoint::_bind_methods() {
 
     ClassDB::bind_method(D_METHOD("set_enemy_scene", "scene"), &E5SpawnPoint::set_enemy_scene);
     ClassDB::bind_method(D_METHOD("get_enemy_scene"), &E5SpawnPoint::get_enemy_scene);
+    ClassDB::bind_method(D_METHOD("set_more_scenes", "scenes"), &E5SpawnPoint::set_more_scenes);
+    ClassDB::bind_method(D_METHOD("get_more_scenes"), &E5SpawnPoint::get_more_scenes);
     ClassDB::bind_method(D_METHOD("set_count", "count"), &E5SpawnPoint::set_count);
     ClassDB::bind_method(D_METHOD("get_count"), &E5SpawnPoint::get_count);
     ClassDB::bind_method(D_METHOD("set_radius", "metres"), &E5SpawnPoint::set_radius);
@@ -60,6 +62,10 @@ void E5SpawnPoint::_bind_methods() {
 
     ADD_PROPERTY(PropertyInfo(godot::Variant::OBJECT, "enemy_scene", godot::PROPERTY_HINT_RESOURCE_TYPE, "PackedScene"),
                  "set_enemy_scene", "get_enemy_scene");
+    // "24/17:PackedScene": an array of objects (24) that are resources (17) of that type.
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::ARRAY, "more_scenes", godot::PROPERTY_HINT_ARRAY_TYPE, "24/17:PackedScene"),
+        "set_more_scenes", "get_more_scenes");
     ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "count", godot::PROPERTY_HINT_RANGE, "1,40,1"), "set_count",
                  "get_count");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "radius", godot::PROPERTY_HINT_RANGE, "0,60,0.5,suffix:m"),
@@ -112,7 +118,16 @@ void E5SpawnPoint::spawn() {
         if (!found) {
             continue;
         }
-        auto* const enemy = godot::Object::cast_to<godot::Node3D>(enemy_scene_->instantiate());
+        // By its number, not by chance: the same enemy has the same name on every machine.
+        godot::Ref<godot::PackedScene> scene = enemy_scene_;
+        const auto kinds = static_cast<int>(more_scenes_.size()) + 1;
+        if (const int turn = index % kinds; turn > 0) {
+            const godot::Ref<godot::PackedScene> other = more_scenes_[turn - 1];
+            if (other.is_valid()) {
+                scene = other;
+            }
+        }
+        auto* const enemy = godot::Object::cast_to<godot::Node3D>(scene->instantiate());
         if (enemy == nullptr) {
             continue;
         }

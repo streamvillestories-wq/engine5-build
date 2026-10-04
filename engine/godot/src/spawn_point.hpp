@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 
 namespace e5::bridge {
 
@@ -30,6 +31,10 @@ public:
 
     void set_enemy_scene(const godot::Ref<godot::PackedScene>& scene) { enemy_scene_ = scene; }
     [[nodiscard]] godot::Ref<godot::PackedScene> get_enemy_scene() const { return enemy_scene_; }
+    // A mixed camp: further kinds of enemy. The camp's enemies take turns through
+    // enemy_scene and these, so a kind named twice comes twice as often.
+    void set_more_scenes(const godot::TypedArray<godot::PackedScene>& scenes) { more_scenes_ = scenes; }
+    [[nodiscard]] godot::TypedArray<godot::PackedScene> get_more_scenes() const { return more_scenes_; }
     void set_count(int count) { count_ = count; }
     [[nodiscard]] int get_count() const { return count_; }
     void set_radius(float metres) { radius_ = metres; }
@@ -55,6 +60,7 @@ private:
     void spawn();
 
     godot::Ref<godot::PackedScene> enemy_scene_;
+    godot::TypedArray<godot::PackedScene> more_scenes_;
     int count_ = 3;
     float radius_ = 6.0F;
     float respawn_seconds_ = 45.0F;

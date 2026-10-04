@@ -68,6 +68,13 @@ inline constexpr int combo_length = 3;
 // Which blow comes next: the following one if the last blow ended no longer than
 // `window_seconds` ago, the first one otherwise or after the finisher.
 [[nodiscard]] int next_combo_step(int last_step, float seconds_since_last, float window_seconds) noexcept;
+// The warrior steps forward with every blow of her combo, and leaps with the last. How fast
+// she moves forward (metres a second) `seconds` into blow `step`: nothing, then a smooth
+// push, then nothing. The clips are made for exactly these steps (tools/godot/warrior_combo.gd,
+// "step": the same distances and times), so that her feet do not slide.
+[[nodiscard]] float combo_advance_speed(int step, float seconds) noexcept;
+// How far blow `step` carries her in all.
+[[nodiscard]] float combo_advance_distance(int step) noexcept;
 
 // The ten quick slots (keys 1..9 and 0). Selecting an empty slot is ignored,
 // so the selection always names a usable skill.

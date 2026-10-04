@@ -118,10 +118,16 @@ constexpr SpellTiming meteor_timing{.playback_scale = 1.4F, .strike_at = 1.4F, .
 // The warrior's blows, timed like the spells: the blow lands when the sword arm (or the foot) is
 // furthest out, measured in the clips.
 // The combo's three blows, then the four special ones.
+// The clips are played a little slower than they were made: the testers liked the movements
+// and wanted them to take a little longer. The step forward slows with them.
+constexpr float combo_playback = 0.87F;
 constexpr std::array<SpellTiming, 3> combo_timings{
-    SpellTiming{.playback_scale = 1.45F, .strike_at = 0.6F, .end_at = 1.05F},  // slash_1
-    SpellTiming{.playback_scale = 1.45F, .strike_at = 0.6F, .end_at = 1.05F},  // slash_5
-    SpellTiming{.playback_scale = 1.35F, .strike_at = 0.8F, .end_at = 1.45F}}; // attack_3, the finisher
+    // Made by tools/godot/warrior_combo.gd, at the speed they are played: these are its
+    // "strike" and "end". Each blow ends in the pose the next one starts in.
+    SpellTiming{.playback_scale = combo_playback, .strike_at = 0.3F, .end_at = 0.56F}, // combo_1: down from the right
+    SpellTiming{.playback_scale = combo_playback, .strike_at = 0.34F, .end_at = 0.6F}, // combo_2: a turn in the air
+    SpellTiming{
+        .playback_scale = combo_playback, .strike_at = 0.52F, .end_at = 1.05F}}; // combo_3: the leap, the finisher
 // The dwarf's: the same three-blow combo with his axe, then his special blows.
 constexpr std::array<SpellTiming, 3> axe_combo_timings{
     SpellTiming{.playback_scale = 1.6F, .strike_at = 0.93F, .end_at = 1.45F},  // horizontal
@@ -148,6 +154,30 @@ constexpr float hurt_shake = 0.035F;     // metres: the camera's jolt when she i
 constexpr float fall_over_rate = 3.2F;   // rad/s
 constexpr float fall_over_angle = 1.45F; // rad: flat on her back
 constexpr MeleeBlow plain_blow{.reach = 1.3F, .radius = 1.7F};
+// The sword combo: the arc each blow leaves in the air, and how hard it jolts the camera.
+constexpr const char* slash_arc_path = "res://effects/slash_arc.tscn";
+constexpr const char* landing_dust_path = "res://effects/axe_wind_impact.tscn";
+struct ComboLook {
+    // The plane the arc is drawn in, as two directions in her own terms (right, up, forward):
+    // the arc runs from a little behind `y` round through `x` and on. None of the planes is
+    // the blade's true one: seen from the camera behind her that would be a line. Each is
+    // turned far enough towards the camera to be seen as an arc.
+    godot::Vector3 x;
+    godot::Vector3 y;
+    float before;      // seconds before the blow lands that the arc starts
+    float shake;       // metres
+    float arc_seconds; // how long the arc takes
+};
+const std::array<ComboLook, 3> combo_looks{
+    // From above her right shoulder, across the front, down to her left.
+    ComboLook{
+        .x = {-0.45F, -0.1F, 0.75F}, .y = {0.62F, 0.78F, 0.0F}, .before = 0.07F, .shake = 0.012F, .arc_seconds = 0.24F},
+    // Level, from her left round the front to her right; the far side dips towards the camera.
+    ComboLook{
+        .x = {0.0F, -0.34F, 0.94F}, .y = {-1.0F, 0.0F, 0.0F}, .before = 0.2F, .shake = 0.02F, .arc_seconds = 0.34F},
+    // Straight down in front of her, turned a little aside so that it is not seen edge on.
+    ComboLook{
+        .x = {0.5F, 0.0F, 0.85F}, .y = {0.0F, 1.0F, 0.0F}, .before = 0.08F, .shake = 0.085F, .arc_seconds = 0.26F}};
 constexpr MeleeBlow flame_blow{.reach = 1.4F, .radius = 1.9F};
 constexpr MeleeBlow frost_blow{.reach = 1.3F, .radius = 2.3F};
 constexpr MeleeBlow thunder_blow{.reach = 1.5F, .radius = 2.6F};
@@ -495,7 +525,7 @@ void E5PlayerController::_ready() {
     clip_meteor_ = godot::StringName("cast_2h");
     clip_barrage_ = godot::StringName("attack_2h_2");
     clip_black_hole_ = godot::StringName("area_2");
-    clip_combo_ = {godot::StringName("slash_1"), godot::StringName("slash_5"), godot::StringName("attack_3")};
+    clip_combo_ = {godot::StringName("combo_1"), godot::StringName("combo_2"), godot::StringName("combo_3")};
     clip_flame_ = godot::StringName("slash_3");
     clip_frost_ = godot::StringName("attack_2");
     clip_thunder_ = godot::StringName("attack_1");
@@ -658,6 +688,12 @@ void E5PlayerController::setup_spells() {
         }
     }
     weapon_holder_ = godot::Object::cast_to<godot::Node3D>(find_child("WeaponHolder", true, false));
+    for (const auto& [path, scene] :
+         {std::pair{slash_arc_path, &slash_arc_}, std::pair{landing_dust_path, &landing_dust_}}) {
+        if (godot::ResourceLoader::get_singleton()->exists(path)) {
+            *scene = godot::ResourceLoader::get_singleton()->load(path);
+        }
+    }
     if (cast_effect_.is_valid()) {
         // The variants lie beside the cast effect and are found by name.
         const godot::String base = cast_effect_->get_path().get_basename();
@@ -734,11 +770,29 @@ void E5PlayerController::_physics_process(double delta) {
     const bool instant = gameplay::skill_info(skills_.selected()).kind == gameplay::SkillKind::Instant;
     if (archery_enabled_ || spells_enabled_) {
         const bool start = instant && aim_just_pressed && can_start_instant_skill(skills_.selected());
-        const gameplay::ActionStep action =
-            gameplay::step_action(action_, start, action_timings_, static_cast<float>(delta));
+        // A combo is one movement, not three clicks timed to the frame: a press during a blow
+        // counts for the next one, and so does a button that is still held when the blow ends.
+        const bool combo = instant && is_combo(skills_.selected());
+        const bool was_active = action_.active;
+        if (combo && was_active && aim_just_pressed) {
+            combo_queued_ = true;
+        }
+        gameplay::ActionStep action = gameplay::step_action(action_, start, action_timings_, static_cast<float>(delta));
         action_ = action.state;
+        const bool blow_over = was_active && !action_.active;
+        if (combo && blow_over && (combo_queued_ || aim_pressed) && combo_step_ >= 0 &&
+            combo_step_ < gameplay::combo_length - 1 && can_start_instant_skill(skills_.selected())) {
+            // In the same frame, so that the next blow takes over from this one's last pose
+            // and not from a first step back towards standing.
+            action = gameplay::step_action(action_, true, action_timings_, 0.0F);
+            action_ = action.state;
+        }
         if (action.started) {
+            combo_arc_shown_ = false;
+            combo_queued_ = false;
             start_instant_skill(skills_.selected());
+        } else if (!action_.active) {
+            combo_queued_ = false;
         }
         update_summon(static_cast<float>(delta));
         if (action.strike && action_skill_ == gameplay::SkillId::ThunderKick) {
@@ -749,6 +803,12 @@ void E5PlayerController::_physics_process(double delta) {
             cast_spell(action_skill_);
         }
         tick_combo(static_cast<float>(delta));
+        if (action_.active && action_skill_ == gameplay::SkillId::Slash && combo_step_ >= 0 && !combo_arc_shown_ &&
+            action_.elapsed >=
+                action_timings_.strike_at_seconds - combo_looks.at(static_cast<std::size_t>(combo_step_)).before) {
+            combo_arc_shown_ = true;
+            show_slash_arc();
+        }
     }
 
     if (archery_enabled_) {
@@ -788,7 +848,10 @@ void E5PlayerController::_physics_process(double delta) {
         .jump = !input_blocked_ && input->is_action_pressed(action_jump_) && !is_busy(),
     };
 
-    const godot::Vector3 current = get_velocity();
+    // Without the combo's push of the last frame: that is added on top of what the motor
+    // decides, and must not be fed back into it (it would pile up into a slide).
+    const godot::Vector3 current = get_velocity() - combo_push_;
+    combo_push_ = godot::Vector3();
     const gameplay::MotorState state{
         .velocity = {.x = static_cast<float>(current.x),
                      .y = static_cast<float>(current.y),
@@ -797,8 +860,17 @@ void E5PlayerController::_physics_process(double delta) {
     };
 
     // Input is interpreted relative to the camera: "forward" is where it looks.
-    const gameplay::Vec3 next =
-        gameplay::step_velocity(state, motor_input, look_.yaw, params, static_cast<float>(delta));
+    gameplay::Vec3 next = gameplay::step_velocity(state, motor_input, look_.yaw, params, static_cast<float>(delta));
+    // The sword combo is not fought on the spot: every blow carries her a step towards
+    // where she faces (the clips are made for exactly these steps).
+    if (action_.active && action_skill_ == gameplay::SkillId::Slash && combo_step_ >= 0 && is_on_floor()) {
+        // In the clip's time: it may be played slower or faster than it was made.
+        const float forward = gameplay::combo_advance_speed(combo_step_, action_.elapsed * action_playback_scale_) *
+                              action_playback_scale_;
+        combo_push_ = godot::Vector3(std::sin(model_yaw_) * forward, 0.0F, std::cos(model_yaw_) * forward);
+        next.x += static_cast<float>(combo_push_.x);
+        next.z += static_cast<float>(combo_push_.z);
+    }
 
     set_velocity(godot::Vector3(next.x, next.y, next.z));
     {
@@ -1882,6 +1954,30 @@ void E5PlayerController::update_shake(float delta) {
     camera_->set_v_offset(std::sin(shake_time_ * 127.0F + 1.3F) * shake_);
 }
 
+void E5PlayerController::show_slash_arc() {
+    if (slash_arc_.is_null() || model_ == nullptr) {
+        return;
+    }
+    const ComboLook& look = combo_looks.at(static_cast<std::size_t>(std::clamp(combo_step_, 0, 2)));
+    // Hung on her, so that it goes along with her step.
+    godot::Node3D* const arc =
+        E5Effect::spawn(slash_arc_, this, get_global_position() + godot::Vector3(0.0F, 1.2F, 0.0F));
+    if (arc == nullptr) {
+        return;
+    }
+    const godot::Vector3 forward(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    const godot::Vector3 right(-forward.z, 0.0F, forward.x);
+    const godot::Vector3 up(0.0F, 1.0F, 0.0F);
+    const auto in_world = [&](const godot::Vector3& own) { return right * own.x + up * own.y + forward * own.z; };
+    const godot::Vector3 x = in_world(look.x).normalized();
+    godot::Vector3 y = in_world(look.y);
+    y = (y - x * y.dot(x)).normalized();
+    arc->set_global_basis(godot::Basis(x, y, x.cross(y)));
+    if (auto* const particles = godot::Object::cast_to<godot::GPUParticles3D>(arc->find_child("Arc", true, false))) {
+        particles->set_lifetime(static_cast<double>(look.arc_seconds));
+    }
+}
+
 void E5PlayerController::strike_melee(gameplay::SkillId skill) {
     const MeleeBlow& blow = blow_of(skill);
     // Where the player looks, like every other skill.
@@ -1894,6 +1990,14 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
     }
     combat::blast(this, centre, blow.radius, damage);
     shake_ = std::max(shake_, blow.shake);
+    if (skill == gameplay::SkillId::Slash && combo_step_ >= 0) {
+        shake_ = std::max(shake_, combo_looks.at(static_cast<std::size_t>(combo_step_)).shake);
+        // The finisher comes down out of the air: the ground answers.
+        if (combo_step_ == gameplay::combo_length - 1 && landing_dust_.is_valid()) {
+            E5Effect::spawn(landing_dust_, get_parent(),
+                            get_global_position() + forward * 0.9F + godot::Vector3(0.0F, 0.06F, 0.0F));
+        }
+    }
     // On the ground where the blow lands, turned the way she strikes.
     if (godot::Node3D* const impact =
             E5Effect::spawn(impact_effect(skill), get_parent(),

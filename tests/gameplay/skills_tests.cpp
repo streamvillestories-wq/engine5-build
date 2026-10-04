@@ -244,3 +244,22 @@ TEST_CASE("the dwarf has his own skills on the bar", "[skills]") {
     CHECK(e5::gameplay::skill_damage(SkillId::AxeCombo) > e5::gameplay::skill_damage(SkillId::Slash));
     CHECK(e5::gameplay::skill_damage(SkillId::Battlecry) < e5::gameplay::skill_damage(SkillId::AxeCombo));
 }
+
+TEST_CASE("the sword combo carries her forward by each blow's distance", "[skills]") {
+    using e5::gameplay::combo_advance_distance;
+    using e5::gameplay::combo_advance_speed;
+    for (int step = 0; step < e5::gameplay::combo_length; ++step) {
+        // Standing at the start and at the end of a blow.
+        CHECK(combo_advance_speed(step, 0.0F) == 0.0F);
+        CHECK(combo_advance_speed(step, 1.4F) == 0.0F);
+        // The speed, summed over the blow in small steps, is the distance.
+        float travelled = 0.0F;
+        constexpr float dt = 0.001F;
+        for (float seconds = 0.0F; seconds < 1.5F; seconds += dt) {
+            travelled += combo_advance_speed(step, seconds) * dt;
+        }
+        CHECK(travelled == Catch::Approx(combo_advance_distance(step)).margin(0.005));
+    }
+    // The finisher is a leap: it goes furthest.
+    CHECK(combo_advance_distance(2) > combo_advance_distance(0));
+}

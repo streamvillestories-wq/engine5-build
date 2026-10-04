@@ -143,10 +143,10 @@ Result<void> apply_option(RuntimeConfig& config, std::string_view key, OptionVal
         return hour_option(key, value).transform([&config](float hour) { config.time_of_day = hour; });
     }
     if (key == "--start-x") {
-        return number_option(key, value).transform([&config](float metres) { config.start_x = metres; });
+        return signed_number_option(key, value).transform([&config](float metres) { config.start_x = metres; });
     }
     if (key == "--start-z") {
-        return number_option(key, value).transform([&config](float metres) { config.start_z = metres; });
+        return signed_number_option(key, value).transform([&config](float metres) { config.start_z = metres; });
     }
     if (key == "--camera-yaw") {
         return number_option(key, value).transform([&config](float degrees) { config.camera_yaw_degrees = degrees; });

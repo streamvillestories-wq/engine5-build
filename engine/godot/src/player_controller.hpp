@@ -243,6 +243,8 @@ private:
     void setup_animation();
     void apply_look_to_nodes();
     void update_facing(const gameplay::Vec3& velocity, float delta);
+    // The bright arc of the combo's blow that is being struck.
+    void show_slash_arc();
     void update_animation(const gameplay::Vec3& velocity, float delta);
     void update_bow_string(float string_draw);
     void setup_archery();
@@ -374,6 +376,11 @@ private:
     // The sword combo: the blow last struck (-1 = none) and the time since it ended.
     int combo_step_ = -1;
     float combo_idle_seconds_ = 0.0F;
+    godot::Vector3 combo_push_; // the velocity the combo's step added in the last frame
+    bool combo_queued_ = false;
+    bool combo_arc_shown_ = false; // this blow's arc is in the air already
+    godot::Ref<godot::PackedScene> slash_arc_;
+    godot::Ref<godot::PackedScene> landing_dust_; // the button was pressed during a blow: the next one follows it
     // The node the sword hangs in ("WeaponHolder"), if the character has one. Non-owning.
     godot::Node3D* weapon_holder_ = nullptr;
     // The weapon effects' impact variants, in the order of weapon_effect_1..4; unset where there is none.

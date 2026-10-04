@@ -81,6 +81,10 @@ public:
     void take_damage_from_peer(float amount);
 
     [[nodiscard]] bool is_alive() const { return state_.phase != gameplay::EnemyPhase::Dead; }
+    [[nodiscard]] bool is_aggro() const { return state_.aggro; }
+    // Whether the model, as it is drawn, looks towards that place (within a quarter turn).
+    // For tests: an enemy that has noticed the hero must face her.
+    [[nodiscard]] bool looks_towards(const godot::Vector3& place) const;
     [[nodiscard]] float get_health() const { return state_.health; }
     // The middle of the body in world space: what skills aim at.
     [[nodiscard]] godot::Vector3 get_aim_point() const;
@@ -229,7 +233,8 @@ private:
     float heaviest_pending_blow_ = 0.0F;
     float damage_taken_ = 0.0F;
     int death_count_ = 0;
-    float model_yaw_ = 0.0F;
+    float model_yaw_ = 0.0F; // which way the model looks, in the world
+    float spawn_yaw_ = 0.0F; // ... and which way it looked when it was placed
     godot::Transform3D spawn_transform_;
     std::uint32_t collision_layer_ = 1;
     std::vector<DamageNumber> damage_numbers_;
