@@ -413,7 +413,7 @@ void E5Terrain::build_collision(int cells_across) {
         for (int column = 0; column < samples; ++column) {
             heights.set(
                 static_cast<std::int64_t>(row) * samples + column,
-                ground(static_cast<float>(column) - half, static_cast<float>(row) - half));
+                static_cast<double>(ground(static_cast<float>(column) - half, static_cast<float>(row) - half)));
         }
     }
     heights_.assign(heights.ptr(), heights.ptr() + heights.size()); // kept for the map

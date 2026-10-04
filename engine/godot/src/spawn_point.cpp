@@ -87,8 +87,8 @@ void E5SpawnPoint::spawn() {
         godot::Object::cast_to<E5Terrain>(get_tree()->get_first_node_in_group(E5Terrain::group_name));
     const godot::Vector3 centre = get_global_position();
     const auto place_seed = static_cast<std::uint32_t>(seed_) * 7919U +
-                            static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(centre.x * 3.0))) * 31U +
-                            static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(centre.z * 3.0)));
+                            static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(static_cast<double>(centre.x) * 3.0))) * 31U +
+                            static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(static_cast<double>(centre.z) * 3.0)));
     int made = 0;
     for (int index = 0; index < count_; ++index) {
         // A spot within the radius, evenly over its area; another if this one will not do.

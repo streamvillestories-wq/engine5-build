@@ -137,8 +137,8 @@ void E5Pickup::build() {
         colours.push_back(godot::Color(colour.r, colour.g, colour.b, 0.0F));
         colours.push_back(godot::Color(colour.r, colour.g, colour.b, 0.55F));
         godot::PackedFloat32Array offsets;
-        offsets.push_back(0.0F);
-        offsets.push_back(1.0F);
+        offsets.push_back(0.0);
+        offsets.push_back(1.0);
         gradient->set_colors(colours);
         gradient->set_offsets(offsets);
         godot::Ref<godot::GradientTexture2D> texture;

@@ -1290,7 +1290,7 @@ void E5PlayerController::update_charge_effect(float charge, float delta) {
         // Never fewer than a sixth of the particles, so the start of a charge is visible.
         particles->set_amount_ratio(std::max(charge, 0.16F));
         // The energy rushes in faster as the charge builds.
-        particles->set_speed_scale(0.7F + 0.9F * charge);
+        particles->set_speed_scale(static_cast<double>(0.7F + 0.9F * charge));
     }
     for (godot::Node3D* const visual : charge_visuals_) {
         visual->set_visible(charging);
@@ -1366,6 +1366,7 @@ void E5PlayerController::use_skill(float power) {
     case gameplay::SkillId::PowerShot:
     case gameplay::SkillId::Shot:
     case gameplay::SkillId::None:
+    default: // the blows of the sword and the axe never come here either
         fire_arrow(power);
         break;
     }

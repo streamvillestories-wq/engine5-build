@@ -363,7 +363,7 @@ bool E5Diagnostics::write_report() {
     const godot::TypedArray<godot::Node> enemies = tree->get_nodes_in_group(E5Enemy::group_name);
     for (const godot::Variant& node : enemies) {
         if (const auto* const enemy = godot::Object::cast_to<E5Enemy>(node)) {
-            enemy_damage += enemy->get_damage_taken();
+            enemy_damage += static_cast<double>(enemy->get_damage_taken());
             enemy_deaths += enemy->get_death_count();
             enemy_casts += enemy->get_cast_count();
         }
