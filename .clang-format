@@ -1,0 +1,22 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: Latest
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+PointerAlignment: Left
+ReferenceAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+InsertBraces: true
+SpacesBeforeTrailingComments: 1
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+# GDCLASS(...) has no trailing semicolon; without this the next line is mis-indented.
+StatementMacros: [GDCLASS]
+...

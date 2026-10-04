@@ -1,0 +1,119 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        {
+            "name": "windows-base",
+            "hidden": true,
+            "inherits": "base",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+                "CMAKE_CXX_COMPILER": "cl"
+            }
+        },
+        {
+            "name": "macos-base",
+            "hidden": true,
+            "inherits": "base",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+            "cacheVariables": {
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "13.3"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug (editor/dev, full checks)",
+            "inherits": "windows-base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "GODOTCPP_TARGET": "template_debug", "E5_ENABLE_TRACY": "ON" }
+        },
+        {
+            "name": "relwithdebinfo",
+            "displayName": "RelWithDebInfo (daily development + profiling)",
+            "inherits": "windows-base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo", "GODOTCPP_TARGET": "template_debug", "E5_ENABLE_TRACY": "ON" }
+        },
+        {
+            "name": "release",
+            "displayName": "Release (shipping, no profiler)",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "GODOTCPP_TARGET": "template_release",
+                "E5_ENABLE_TRACY": "OFF"
+            }
+        },
+        {
+            "name": "asan",
+            "displayName": "AddressSanitizer (standalone libs + unit tests)",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "E5_BUILD_GDEXTENSION": "OFF",
+                "E5_ENABLE_TRACY": "OFF",
+                "E5_ENABLE_ASAN": "ON"
+            }
+        },
+        {
+            "name": "macos-tests",
+            "displayName": "macOS: standalone libs + unit tests with ASan/UBSan (host architecture)",
+            "inherits": "macos-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "E5_BUILD_GDEXTENSION": "OFF",
+                "E5_ENABLE_TRACY": "OFF",
+                "E5_ENABLE_ASAN": "ON"
+            }
+        },
+        {
+            "name": "macos-relwithdebinfo",
+            "displayName": "macOS: universal extension for development",
+            "inherits": "macos-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
+                "GODOTCPP_TARGET": "template_debug",
+                "E5_ENABLE_TRACY": "ON",
+                "E5_BUILD_TESTS": "OFF",
+                "VCPKG_MANIFEST_INSTALL": "OFF"
+            }
+        },
+        {
+            "name": "macos-release",
+            "displayName": "macOS: universal extension for shipping",
+            "inherits": "macos-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
+                "GODOTCPP_TARGET": "template_release",
+                "E5_ENABLE_TRACY": "OFF",
+                "E5_BUILD_TESTS": "OFF",
+                "VCPKG_MANIFEST_INSTALL": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "debug", "configurePreset": "debug" },
+        { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo" },
+        { "name": "release", "configurePreset": "release" },
+        { "name": "asan", "configurePreset": "asan" },
+        { "name": "macos-tests", "configurePreset": "macos-tests" },
+        { "name": "macos-relwithdebinfo", "configurePreset": "macos-relwithdebinfo" },
+        { "name": "macos-release", "configurePreset": "macos-release" }
+    ],
+    "testPresets": [
+        { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "integration" } } },
+        { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "integration" } } },
+        { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "integration" } } },
+        { "name": "asan", "configurePreset": "asan", "output": { "outputOnFailure": true } },
+        { "name": "integration", "configurePreset": "relwithdebinfo", "output": { "outputOnFailure": true }, "filter": { "include": { "label": "integration" } } },
+        { "name": "macos-tests", "configurePreset": "macos-tests", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "integration" } } }
+    ]
+}

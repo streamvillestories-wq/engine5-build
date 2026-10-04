@@ -1,0 +1,5 @@
+/build/
+/game/bin/*.dll
+/game/bin/*.pdb
+/game/bin/*.so
+/game/bin/*.dylib

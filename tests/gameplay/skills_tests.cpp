@@ -1,0 +1,246 @@
+#include "e5/gameplay/skills.hpp"
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <cmath>
+
+using Catch::Approx;
+using namespace e5::gameplay;
+
+TEST_CASE("the skill bar starts with the six skills in order", "[skills]") {
+    const SkillBar bar;
+    CHECK(bar.selected() == SkillId::Shot);
+    CHECK(bar.slot(0) == SkillId::Shot);
+    CHECK(bar.slot(1) == SkillId::PowerShot);
+    CHECK(bar.slot(2) == SkillId::ArrowRain);
+    CHECK(bar.slot(3) == SkillId::FrostFan);
+    CHECK(bar.slot(4) == SkillId::FireArrow);
+    CHECK(bar.slot(5) == SkillId::ThunderKick);
+    CHECK(bar.slot(6) == SkillId::Kingfishers);
+    CHECK(bar.slot(7) == SkillId::None);
+    CHECK(bar.slot(99) == SkillId::None);
+}
+
+TEST_CASE("selecting changes the active skill", "[skills]") {
+    SkillBar bar;
+    CHECK(bar.select(2));
+    CHECK(bar.selected() == SkillId::ArrowRain);
+    CHECK(bar.selected_index() == 2);
+    CHECK_FALSE(bar.select(2)); // already selected
+}
+
+TEST_CASE("empty and out-of-range slots cannot be selected", "[skills]") {
+    SkillBar bar;
+    CHECK_FALSE(bar.select(8));
+    CHECK_FALSE(bar.select(10));
+    CHECK(bar.selected() == SkillId::Shot);
+}
+
+TEST_CASE("only the power shot charges", "[skills]") {
+    CHECK_FALSE(skill_info(SkillId::Shot).charges);
+    CHECK(skill_info(SkillId::PowerShot).charges);
+    CHECK_FALSE(skill_info(SkillId::ArrowRain).charges);
+    CHECK(skill_info(SkillId::None).name.empty());
+    CHECK(skill_info(SkillId::ArrowRain).name == "Arrow Rain");
+}
+
+TEST_CASE("the kick and the summon are used without drawing the bow", "[skills]") {
+    CHECK(skill_info(SkillId::ThunderKick).kind == SkillKind::Instant);
+    CHECK(skill_info(SkillId::Kingfishers).kind == SkillKind::Instant);
+    for (const SkillId skill : {SkillId::Shot, SkillId::PowerShot, SkillId::ArrowRain, SkillId::FrostFan,
+                                SkillId::FireArrow, SkillId::None}) {
+        CHECK(skill_info(skill).kind == SkillKind::Bow);
+        CHECK_FALSE((skill != SkillId::PowerShot && skill_info(skill).charges));
+    }
+}
+
+TEST_CASE("every skill does damage, and charging a power shot triples it", "[skills]") {
+    for (const SkillId skill : {SkillId::Shot, SkillId::PowerShot, SkillId::ArrowRain, SkillId::FrostFan,
+                                SkillId::FireArrow, SkillId::ThunderKick, SkillId::Kingfishers}) {
+        CHECK(skill_damage(skill) > 0.0F);
+    }
+    CHECK(skill_damage(SkillId::None) == Approx(0.0F));
+    CHECK(skill_damage(SkillId::PowerShot, 0.0F) == Approx(skill_damage(SkillId::Shot)));
+    CHECK(skill_damage(SkillId::PowerShot, 1.0F) == Approx(3.0F * skill_damage(SkillId::Shot)));
+    CHECK(skill_damage(SkillId::PowerShot, 7.0F) == Approx(skill_damage(SkillId::PowerShot, 1.0F)));
+    // Charge only matters for the power shot.
+    CHECK(skill_damage(SkillId::Shot, 1.0F) == Approx(skill_damage(SkillId::Shot)));
+}
+
+TEST_CASE("a fan of arrows is symmetric and covers the spread", "[skills]") {
+    constexpr float spread = 0.4F;
+    CHECK(fan_yaw_offset(0, 5, spread) == Approx(-0.2F));
+    CHECK(fan_yaw_offset(2, 5, spread) == Approx(0.0F).margin(1e-6));
+    CHECK(fan_yaw_offset(4, 5, spread) == Approx(0.2F));
+    CHECK(fan_yaw_offset(1, 5, spread) == Approx(-fan_yaw_offset(3, 5, spread)));
+    // A single arrow, or a bad index, flies straight.
+    CHECK(fan_yaw_offset(0, 1, spread) == Approx(0.0F));
+    CHECK(fan_yaw_offset(5, 5, spread) == Approx(0.0F));
+    CHECK(fan_yaw_offset(-1, 5, spread) == Approx(0.0F));
+}
+
+TEST_CASE("distance to a disc is measured to its nearest point", "[skills]") {
+    constexpr float radius = 2.0F;
+    CHECK(distance_to_disc({.x = 0.5F, .y = 1.0F, .z = 0.0F}, radius) == Approx(0.0F));
+    CHECK(distance_to_disc({.x = 0.0F, .y = 0.0F, .z = -1.5F}, radius) == Approx(1.5F)); // above the face
+    CHECK(distance_to_disc({.x = 5.0F, .y = 0.0F, .z = 0.0F}, radius) == Approx(3.0F));  // beside the rim
+    CHECK(distance_to_disc({.x = 0.0F, .y = 5.0F, .z = 4.0F}, radius) == Approx(5.0F));  // 3 out, 4 up
+}
+
+TEST_CASE("an instant action runs once and strikes once", "[skills]") {
+    const ActionTimings timings{.duration_seconds = 1.0F, .strike_at_seconds = 0.4F};
+    constexpr float dt = 1.0F / 60.0F;
+
+    ActionState state;
+    CHECK_FALSE(step_action(state, false, timings, dt).state.active);
+
+    ActionStep step = step_action(state, true, timings, dt);
+    CHECK(step.started);
+    CHECK(step.state.active);
+    CHECK_FALSE(step.strike);
+    state = step.state;
+
+    int strikes = 0;
+    int restarts = 0;
+    int steps = 0;
+    float strike_time = 0.0F;
+    while (state.active && steps < 1000) {
+        // Asking again while it runs must not restart it.
+        step = step_action(state, true, timings, dt);
+        restarts += step.started ? 1 : 0;
+        if (step.strike) {
+            ++strikes;
+            strike_time = state.elapsed + dt;
+        }
+        state = step.state;
+        ++steps;
+    }
+    CHECK(strikes == 1);
+    CHECK(restarts == 0);
+    CHECK(strike_time == Approx(0.4F).margin(dt));
+    CHECK(steps == Approx(60).margin(1));
+}
+
+TEST_CASE("an action's blow lands even in one very long step", "[skills]") {
+    const ActionTimings timings{.duration_seconds = 1.0F, .strike_at_seconds = 0.4F};
+    const ActionStep step = step_action({.active = true, .elapsed = 0.0F}, false, timings, 5.0F);
+    CHECK(step.strike);
+    CHECK_FALSE(step.state.active);
+}
+
+TEST_CASE("rain arrows land inside the radius and are spread out", "[skills]") {
+    constexpr int count = 24;
+    constexpr float radius = 3.0F;
+    float furthest = 0.0F;
+    int in_inner_half_of_area = 0;
+    for (int i = 0; i < count; ++i) {
+        const Vec3 offset = rain_arrow_offset(i, count, radius);
+        const float distance = std::hypot(offset.x, offset.z);
+        CHECK(offset.y == Approx(0.0F));
+        CHECK(distance <= radius);
+        furthest = std::max(furthest, distance);
+        if (distance <= radius * std::sqrt(0.5F)) {
+            ++in_inner_half_of_area;
+        }
+    }
+    CHECK(furthest > radius * 0.9F);
+    // Evenly spread by area: half of the arrows in the inner half of the disc.
+    CHECK(in_inner_half_of_area == count / 2);
+}
+
+TEST_CASE("the rain pattern is deterministic and rejects bad indices", "[skills]") {
+    const Vec3 first = rain_arrow_offset(7, 24, 3.0F);
+    const Vec3 again = rain_arrow_offset(7, 24, 3.0F);
+    CHECK(first.x == again.x);
+    CHECK(first.z == again.z);
+
+    CHECK(rain_arrow_offset(-1, 24, 3.0F).x == Approx(0.0F));
+    CHECK(rain_arrow_offset(24, 24, 3.0F).x == Approx(0.0F));
+    CHECK(rain_arrow_offset(0, 0, 3.0F).x == Approx(0.0F));
+}
+
+TEST_CASE("the wizard has his own skills on the bar", "[skills]") {
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Wizard);
+
+    CHECK(bar.slot(0) == e5::gameplay::SkillId::ArcaneBolt);
+    CHECK(bar.slot(1) == e5::gameplay::SkillId::Fireball);
+    CHECK(bar.slot(2) == e5::gameplay::SkillId::FrostNova);
+    CHECK(bar.slot(3) == e5::gameplay::SkillId::ChainLightning);
+    CHECK(bar.slot(4) == e5::gameplay::SkillId::Meteor);
+    CHECK(bar.slot(5) == e5::gameplay::SkillId::StarBarrage);
+    CHECK(bar.slot(6) == e5::gameplay::SkillId::BlackHole);
+    CHECK(bar.slot(7) == e5::gameplay::SkillId::None);
+    CHECK(bar.selected() == e5::gameplay::SkillId::ArcaneBolt);
+    for (const e5::gameplay::SkillId spell :
+         {e5::gameplay::SkillId::ArcaneBolt, e5::gameplay::SkillId::Fireball, e5::gameplay::SkillId::FrostNova,
+          e5::gameplay::SkillId::ChainLightning, e5::gameplay::SkillId::Meteor, e5::gameplay::SkillId::StarBarrage,
+          e5::gameplay::SkillId::BlackHole}) {
+        // None of them needs a bow, all of them hurt, and all have a name for the bar.
+        CHECK(e5::gameplay::skill_info(spell).kind == e5::gameplay::SkillKind::Instant);
+        CHECK(e5::gameplay::skill_damage(spell) > 0.0F);
+        CHECK_FALSE(e5::gameplay::skill_info(spell).name.empty());
+    }
+    // The slow, big spell hits harder than the quick one.
+    CHECK(e5::gameplay::skill_damage(e5::gameplay::SkillId::Fireball) >
+          e5::gameplay::skill_damage(e5::gameplay::SkillId::ArcaneBolt));
+}
+
+TEST_CASE("the warrior has her own skills on the bar", "[skills]") {
+    using e5::gameplay::SkillId;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Warrior);
+
+    CHECK(bar.slot(0) == SkillId::Slash);
+    CHECK(bar.slot(1) == SkillId::FlameBlade);
+    CHECK(bar.slot(2) == SkillId::FrostEdge);
+    CHECK(bar.slot(3) == SkillId::ThunderCleave);
+    CHECK(bar.slot(4) == SkillId::StarWhirl);
+    CHECK(bar.slot(5) == SkillId::None);
+    for (const SkillId skill :
+         {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl}) {
+        CHECK(e5::gameplay::skill_info(skill).kind == e5::gameplay::SkillKind::Instant);
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+        CHECK_FALSE(e5::gameplay::skill_info(skill).name.empty());
+    }
+    // Every special blow hits harder than a plain one.
+    CHECK(e5::gameplay::skill_damage(SkillId::FrostEdge) > e5::gameplay::skill_damage(SkillId::Slash));
+}
+
+TEST_CASE("the sword combo goes on while she keeps striking, and starts over when she waits", "[skills]") {
+    using e5::gameplay::next_combo_step;
+    constexpr float window = 0.7F;
+
+    CHECK(next_combo_step(-1, 0.0F, window) == 0); // never struck before
+    CHECK(next_combo_step(0, 0.2F, window) == 1);
+    CHECK(next_combo_step(1, 0.6F, window) == 2);
+    CHECK(next_combo_step(2, 0.1F, window) == 0); // after the finisher
+    CHECK(next_combo_step(0, 0.9F, window) == 0); // waited too long
+    CHECK(next_combo_step(1, 5.0F, window) == 0);
+
+    // The finisher is the hardest blow, and steps beyond the combo count as it.
+    CHECK(e5::gameplay::combo_damage_factor(0) == 1.0F);
+    CHECK(e5::gameplay::combo_damage_factor(2) > e5::gameplay::combo_damage_factor(1));
+    CHECK(e5::gameplay::combo_damage_factor(9) == e5::gameplay::combo_damage_factor(2));
+}
+
+TEST_CASE("the dwarf has his own skills on the bar", "[skills]") {
+    using e5::gameplay::SkillId;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Dwarf);
+
+    CHECK(bar.slot(0) == SkillId::AxeCombo);
+    CHECK(bar.slot(1) == SkillId::Whirlwind);
+    CHECK(bar.slot(2) == SkillId::Earthbreaker);
+    CHECK(bar.slot(3) == SkillId::LeapStrike);
+    CHECK(bar.slot(4) == SkillId::Battlecry);
+    CHECK(bar.slot(5) == SkillId::None);
+    for (const SkillId skill :
+         {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike, SkillId::Battlecry}) {
+        CHECK(e5::gameplay::skill_info(skill).kind == e5::gameplay::SkillKind::Instant);
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+        CHECK_FALSE(e5::gameplay::skill_info(skill).name.empty());
+    }
+    // His axe hits harder than her sword, blow for blow; the cry is for the push, not the damage.
+    CHECK(e5::gameplay::skill_damage(SkillId::AxeCombo) > e5::gameplay::skill_damage(SkillId::Slash));
+    CHECK(e5::gameplay::skill_damage(SkillId::Battlecry) < e5::gameplay::skill_damage(SkillId::AxeCombo));
+}
