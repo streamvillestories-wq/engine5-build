@@ -30,6 +30,10 @@ public:
     [[nodiscard]] std::size_t size() const noexcept { return count_; }
     [[nodiscard]] std::size_t capacity() const noexcept { return samples_.size(); }
 
+    // The samples in the order they were recorded: 0 is the oldest still kept, size() - 1 the
+    // newest. For drawing the history as a graph.
+    [[nodiscard]] double sample(std::size_t index) const noexcept;
+
     // Not const: reuses an internal scratch buffer for the percentile sort.
     [[nodiscard]] FrameTimeSummary summarize();
 

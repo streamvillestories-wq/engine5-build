@@ -62,7 +62,8 @@ std::vector<float> heights_along(std::span<const PathPoint> trail, const GroundH
     std::vector<float> backward = uncut;
     for (std::size_t index = 1; index < count; ++index) {
         const float run = std::hypot(trail[index].x - trail[index - 1].x, trail[index].z - trail[index - 1].z);
-        forward[index] = std::clamp(uncut[index], forward[index - 1] - max_grade * run, forward[index - 1] + max_grade * run);
+        forward[index] =
+            std::clamp(uncut[index], forward[index - 1] - max_grade * run, forward[index - 1] + max_grade * run);
     }
     for (std::size_t index = count - 1; index-- > 0;) {
         const float run = std::hypot(trail[index].x - trail[index + 1].x, trail[index].z - trail[index + 1].z);
@@ -139,8 +140,8 @@ void TrailField::build(std::span<const std::vector<PathPoint>> trails, const Gro
         float end_height = 0.0F;
         const bool start_joins = height_on_earlier(trail.front(), start_height);
         const bool end_joins = height_on_earlier(trail.back(), end_height);
-        const std::vector<float> heights = heights_along(trail, ground, params.max_grade,
-                                                         start_joins ? &start_height : nullptr, end_joins ? &end_height : nullptr);
+        const std::vector<float> heights = heights_along(
+            trail, ground, params.max_grade, start_joins ? &start_height : nullptr, end_joins ? &end_height : nullptr);
         for (std::size_t index = 0; index + 1 < trail.size(); ++index) {
             const PathPoint a = trail[index];
             const PathPoint b = trail[index + 1];
@@ -148,20 +149,22 @@ void TrailField::build(std::span<const std::vector<PathPoint>> trails, const Gro
             const float along_z = b.z - a.z;
             const float length_squared = std::max(along_x * along_x + along_z * along_z, 1.0e-6F);
             const int first_column = std::max(static_cast<int>(std::floor(std::min(a.x, b.x) + half_)) - reach, 0);
-            const int last_column = std::min(static_cast<int>(std::ceil(std::max(a.x, b.x) + half_)) + reach, nodes_ - 1);
+            const int last_column =
+                std::min(static_cast<int>(std::ceil(std::max(a.x, b.x) + half_)) + reach, nodes_ - 1);
             const int first_row = std::max(static_cast<int>(std::floor(std::min(a.z, b.z) + half_)) - reach, 0);
             const int last_row = std::min(static_cast<int>(std::ceil(std::max(a.z, b.z) + half_)) + reach, nodes_ - 1);
             for (int row = first_row; row <= last_row; ++row) {
                 for (int column = first_column; column <= last_column; ++column) {
                     const float x = static_cast<float>(column) - half_;
                     const float z = static_cast<float>(row) - half_;
-                    const float t = std::clamp(((x - a.x) * along_x + (z - a.z) * along_z) / length_squared, 0.0F, 1.0F);
+                    const float t =
+                        std::clamp(((x - a.x) * along_x + (z - a.z) * along_z) / length_squared, 0.0F, 1.0F);
                     const float away = std::hypot(x - (a.x + along_x * t), z - (a.z + along_z * t));
                     if (away >= params.shoulder) {
                         continue;
                     }
-                    const std::size_t node =
-                        static_cast<std::size_t>(row) * static_cast<std::size_t>(nodes_) + static_cast<std::size_t>(column);
+                    const std::size_t node = static_cast<std::size_t>(row) * static_cast<std::size_t>(nodes_) +
+                                             static_cast<std::size_t>(column);
                     const float here = 1.0F - smooth_step(params.half_width, params.shoulder, away);
                     // To the sixth power: of two stretches the nearer all but decides.
                     const float counts = here * here * here * here * here * here + 1.0e-6F;
@@ -225,8 +228,8 @@ std::vector<PathPoint> plan_trail(const GroundHeight& ground, PathPoint from, Pa
     for (int row = 0; row < across; ++row) {
         for (int column = 0; column < across; ++column) {
             const PathPoint place = place_of(column, row);
-            heights[static_cast<std::size_t>(row) * static_cast<std::size_t>(across) + static_cast<std::size_t>(column)] =
-                ground(place.x, place.z);
+            heights[static_cast<std::size_t>(row) * static_cast<std::size_t>(across) +
+                    static_cast<std::size_t>(column)] = ground(place.x, place.z);
         }
     }
 
@@ -248,8 +251,8 @@ std::vector<PathPoint> plan_trail(const GroundHeight& ground, PathPoint from, Pa
                         ++taken;
                     }
                 }
-                heights[static_cast<std::size_t>(row) * static_cast<std::size_t>(across) + static_cast<std::size_t>(column)] =
-                    sum / static_cast<float>(taken);
+                heights[static_cast<std::size_t>(row) * static_cast<std::size_t>(across) +
+                        static_cast<std::size_t>(column)] = sum / static_cast<float>(taken);
             }
         }
     }
@@ -335,7 +338,8 @@ std::vector<PathPoint> plan_trail(const GroundHeight& ground, PathPoint from, Pa
             const float relative = grade / max_grade;
             float through = so_far + run * (1.0F + 1.2F * relative * relative);
             if (cell != start) {
-                const float same = heading[way].first * heading[entered_by].first + heading[way].second * heading[entered_by].second;
+                const float same =
+                    heading[way].first * heading[entered_by].first + heading[way].second * heading[entered_by].second;
                 through += hairpin_cost * 0.5F * (1.0F - same);
             }
             const std::size_t next_state = next * ways + way;
@@ -352,7 +356,8 @@ std::vector<PathPoint> plan_trail(const GroundHeight& ground, PathPoint from, Pa
     std::vector<PathPoint> way;
     for (std::uint32_t state = arrived; state != nowhere; state = came_from[state]) {
         const std::size_t cell = state / ways;
-        way.push_back(place_of(static_cast<int>(cell % static_cast<std::size_t>(across)), static_cast<int>(cell / static_cast<std::size_t>(across))));
+        way.push_back(place_of(static_cast<int>(cell % static_cast<std::size_t>(across)),
+                               static_cast<int>(cell / static_cast<std::size_t>(across))));
     }
     std::ranges::reverse(way);
 

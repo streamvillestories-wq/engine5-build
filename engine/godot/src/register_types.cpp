@@ -20,10 +20,10 @@
 #include "pickup.hpp"
 #include "player_controller.hpp"
 #include "skill_bar_hud.hpp"
+#include "spawn_point.hpp"
 #include "spell_bolt.hpp"
 #include "target.hpp"
 #include "terrain.hpp"
-#include "spawn_point.hpp"
 #include "wanderer.hpp"
 
 #include <gdextension_interface.h>

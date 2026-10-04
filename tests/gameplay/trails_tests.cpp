@@ -64,8 +64,8 @@ TEST_CASE("without trails the ground stays as it is", "[trails]") {
 
 TEST_CASE("a planned trail winds up a slope too steep to climb straight", "[trails]") {
     // Straight up would be a grade of 1; the plan may not be steeper than 0.3 anywhere.
-    const std::vector<PathPoint> way = plan_trail(steep_slope, {.x = 0.0F, .z = 0.0F}, {.x = 30.0F, .z = 0.0F}, 240.0F,
-                                                  3.0F, 0.3F, 6.0F);
+    const std::vector<PathPoint> way =
+        plan_trail(steep_slope, {.x = 0.0F, .z = 0.0F}, {.x = 30.0F, .z = 0.0F}, 240.0F, 3.0F, 0.3F, 6.0F);
 
     REQUIRE(way.size() > 4);
     CHECK(way.front().x == Approx(0.0F));

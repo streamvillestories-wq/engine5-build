@@ -45,4 +45,43 @@ RenderMetrics sample_render_metrics(const godot::RID& viewport) {
     return metrics;
 }
 
+DetailMetrics sample_detail_metrics(const godot::RID& viewport) {
+    using godot::Performance;
+    using godot::RenderingServer;
+    const Performance* const perf = Performance::get_singleton();
+    RenderingServer* const rs = RenderingServer::get_singleton();
+
+    const auto count = [perf](Performance::Monitor monitor) {
+        return static_cast<std::int64_t>(perf->get_monitor(monitor));
+    };
+    const auto pass = [rs, &viewport](RenderingServer::ViewportRenderInfoType type) {
+        PassMetrics metrics;
+        metrics.draw_calls =
+            rs->viewport_get_render_info(viewport, type, RenderingServer::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME);
+        metrics.objects =
+            rs->viewport_get_render_info(viewport, type, RenderingServer::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME);
+        metrics.primitives =
+            rs->viewport_get_render_info(viewport, type, RenderingServer::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME);
+        return metrics;
+    };
+
+    DetailMetrics metrics;
+    metrics.navigation_ms = perf->get_monitor(Performance::TIME_NAVIGATION_PROCESS) * ms_per_second;
+    metrics.scene = pass(RenderingServer::VIEWPORT_RENDER_INFO_TYPE_VISIBLE);
+    metrics.shadows = pass(RenderingServer::VIEWPORT_RENDER_INFO_TYPE_SHADOW);
+    metrics.interface = pass(RenderingServer::VIEWPORT_RENDER_INFO_TYPE_CANVAS);
+    metrics.pipelines_compiled =
+        count(Performance::PIPELINE_COMPILATIONS_CANVAS) + count(Performance::PIPELINE_COMPILATIONS_MESH) +
+        count(Performance::PIPELINE_COMPILATIONS_SURFACE) + count(Performance::PIPELINE_COMPILATIONS_DRAW) +
+        count(Performance::PIPELINE_COMPILATIONS_SPECIALIZATION);
+    metrics.static_memory_peak_mb = perf->get_monitor(Performance::MEMORY_STATIC_MAX) / bytes_per_mb;
+    metrics.object_count = count(Performance::OBJECT_COUNT);
+    metrics.resource_count = count(Performance::OBJECT_RESOURCE_COUNT);
+    metrics.orphan_node_count = count(Performance::OBJECT_ORPHAN_NODE_COUNT);
+    metrics.physics_active_bodies = count(Performance::PHYSICS_3D_ACTIVE_OBJECTS);
+    metrics.physics_collision_pairs = count(Performance::PHYSICS_3D_COLLISION_PAIRS);
+    metrics.physics_islands = count(Performance::PHYSICS_3D_ISLAND_COUNT);
+    return metrics;
+}
+
 } // namespace e5::bridge

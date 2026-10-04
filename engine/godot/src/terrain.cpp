@@ -245,11 +245,16 @@ godot::Ref<godot::Image> E5Terrain::make_map_image() const {
             } else {
                 colour = mix(sand, meadow, step(0.9F, 1.8F, height));
                 colour = mix(colour, upland, step(6.0F, 30.0F, height));
-                colour = mix(colour, rock, std::max(step(0.55F, 0.95F, steep), step(map_tree_line - 6.0F, map_tree_line + 6.0F, height)));
-                colour = mix(colour, snow, step(map_snow_line - 5.0F, map_snow_line + 6.0F, height) * (1.0F - step(1.3F, 2.2F, steep)));
+                colour =
+                    mix(colour, rock,
+                        std::max(step(0.55F, 0.95F, steep), step(map_tree_line - 6.0F, map_tree_line + 6.0F, height)));
+                colour =
+                    mix(colour, snow,
+                        step(map_snow_line - 5.0F, map_snow_line + 6.0F, height) * (1.0F - step(1.3F, 2.2F, steep)));
                 // Lit from the north-west: slopes facing it are lighter, those turned away darker.
                 const float lit = std::clamp((rise_x + rise_z) * 0.42F, -0.45F, 0.4F);
-                colour = Rgb{.r = colour.r * (1.0F + lit), .g = colour.g * (1.0F + lit), .b = colour.b * (1.0F + lit * 0.9F)};
+                colour = Rgb{
+                    .r = colour.r * (1.0F + lit), .g = colour.g * (1.0F + lit), .b = colour.b * (1.0F + lit * 0.9F)};
                 // A height line every ten metres, fainter on the lowland.
                 const float level = height / 10.0F;
                 const float to_line = std::abs(level - std::round(level)) * 10.0F / std::max(steep, 0.08F);
@@ -346,8 +351,7 @@ void E5Terrain::build_chunk(int first_column, int first_row, int cells) {
     float highest = -1000.0F;
     for (int row = 0; row <= cells; row += 4) {
         for (int column = 0; column <= cells; column += 4) {
-            highest = std::max(highest, ground(x0 + static_cast<float>(column),
-                                                                z0 + static_cast<float>(row)));
+            highest = std::max(highest, ground(x0 + static_cast<float>(column), z0 + static_cast<float>(row)));
         }
     }
     const int step = highest < submerged_below ? submerged_step : 1;
@@ -365,10 +369,8 @@ void E5Terrain::build_chunk(int first_column, int first_row, int cells) {
             const std::int64_t index = static_cast<std::int64_t>(row) * points + column;
             vertices.set(index, godot::Vector3(x, ground(x, z), z));
             // The normal comes from the function, not from the triangles: chunks then meet without a visible seam.
-            const float rise_x =
-                ground(x + 1.0F, z) - ground(x - 1.0F, z);
-            const float rise_z =
-                ground(x, z + 1.0F) - ground(x, z - 1.0F);
+            const float rise_x = ground(x + 1.0F, z) - ground(x - 1.0F, z);
+            const float rise_z = ground(x, z + 1.0F) - ground(x, z - 1.0F);
             normals.set(index, godot::Vector3(-rise_x, 2.0F, -rise_z).normalized());
         }
     }
@@ -411,9 +413,8 @@ void E5Terrain::build_collision(int cells_across) {
     const float half = static_cast<float>(cells_across) * 0.5F;
     for (int row = 0; row < samples; ++row) {
         for (int column = 0; column < samples; ++column) {
-            heights.set(
-                static_cast<std::int64_t>(row) * samples + column,
-                static_cast<double>(ground(static_cast<float>(column) - half, static_cast<float>(row) - half)));
+            heights.set(static_cast<std::int64_t>(row) * samples + column,
+                        static_cast<double>(ground(static_cast<float>(column) - half, static_cast<float>(row) - half)));
         }
     }
     heights_.assign(heights.ptr(), heights.ptr() + heights.size()); // kept for the map

@@ -710,18 +710,18 @@ void E5PlayerController::_physics_process(double delta) {
     // the button is let go; with nothing going on, the left one comes first.
     const bool standard_pressed = attack_held();
     const bool selected_pressed = aim_held();
-    const bool held = use_button_ == UseButton::Standard ? standard_pressed
-                                                         : use_button_ == UseButton::Selected && selected_pressed;
+    const bool held =
+        use_button_ == UseButton::Standard ? standard_pressed : use_button_ == UseButton::Selected && selected_pressed;
     if (!held && !is_busy()) {
         set_use_button(standard_pressed   ? UseButton::Standard
                        : selected_pressed ? UseButton::Selected
                                           : UseButton::None);
     }
-    const bool aim_pressed = use_button_ == UseButton::Standard ? standard_pressed
-                                                                : use_button_ == UseButton::Selected && selected_pressed;
+    const bool aim_pressed =
+        use_button_ == UseButton::Standard ? standard_pressed : use_button_ == UseButton::Selected && selected_pressed;
     // The other button, pressed while aiming, cancels.
-    const bool other_pressed = use_button_ == UseButton::Standard ? selected_pressed
-                                                                  : use_button_ == UseButton::Selected && standard_pressed;
+    const bool other_pressed =
+        use_button_ == UseButton::Standard ? selected_pressed : use_button_ == UseButton::Selected && standard_pressed;
     const bool other_just_pressed = other_pressed && !other_button_was_pressed_;
     other_button_was_pressed_ = other_pressed;
     const bool aim_just_pressed = aim_pressed && !aim_was_pressed_;
@@ -949,8 +949,9 @@ bool E5PlayerController::aim_held() const {
 
 godot::String E5PlayerController::get_last_skill() const {
     const std::string_view name = gameplay::skill_info(last_skill_).name;
-    return last_skill_ == gameplay::SkillId::None ? godot::String()
-                                                  : godot::String::utf8(name.data(), static_cast<std::int64_t>(name.size()));
+    return last_skill_ == gameplay::SkillId::None
+               ? godot::String()
+               : godot::String::utf8(name.data(), static_cast<std::int64_t>(name.size()));
 }
 
 godot::String E5PlayerController::get_skill_name(int slot) const {
@@ -1727,8 +1728,7 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
         // A ring of frost around him, on the ground he stands on.
         const godot::Vector3 centre = get_global_position();
         E5Effect::spawn(nova_effect_, get_parent(), centre + godot::Vector3(0.0F, 0.08F, 0.0F));
-        combat::blast(this, centre + godot::Vector3(0.0F, nova_height, 0.0F), nova_radius,
-                      dealt(spell));
+        combat::blast(this, centre + godot::Vector3(0.0F, nova_height, 0.0F), nova_radius, dealt(spell));
         return;
     }
     if (spell == gameplay::SkillId::ChainLightning) {
@@ -2107,7 +2107,8 @@ void E5PlayerController::fire_rain() {
 void E5PlayerController::select_skill(int slot) {
     // Not while the bow is raised: the skill in use must not change under the player's hands.
     // Nor while the left button has the bar on its first slot.
-    if (slot < 0 || is_busy() || use_button_ == UseButton::Standard || !skills_.select(static_cast<std::size_t>(slot))) {
+    if (slot < 0 || is_busy() || use_button_ == UseButton::Standard ||
+        !skills_.select(static_cast<std::size_t>(slot))) {
         return;
     }
     if (skill_hud_ != nullptr) {

@@ -58,3 +58,19 @@ TEST_CASE("zero capacity is clamped to one", "[frame_stats]") {
     CHECK(history.capacity() == 1);
     CHECK(history.summarize().average_ms == Approx(7.0));
 }
+
+TEST_CASE("samples are read back oldest first", "[frame_stats]") {
+    e5::FrameTimeHistory history(4);
+    history.record(1.0);
+    history.record(2.0);
+    CHECK(history.sample(0) == Approx(1.0));
+    CHECK(history.sample(1) == Approx(2.0));
+    CHECK(history.sample(2) == 0.0); // not recorded yet
+
+    for (const double ms : {3.0, 4.0, 5.0, 6.0}) {
+        history.record(ms);
+    }
+    // 1 and 2 have been overwritten.
+    CHECK(history.sample(0) == Approx(3.0));
+    CHECK(history.sample(3) == Approx(6.0));
+}

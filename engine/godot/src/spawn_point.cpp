@@ -19,7 +19,7 @@
 namespace e5::bridge {
 namespace {
 
-constexpr float lowest_ground = 0.8F;   // metres above the sea: nothing is made in the water
+constexpr float lowest_ground = 0.8F;    // metres above the sea: nothing is made in the water
 constexpr float steepest_ground = 0.75F; // rise over run an enemy can still stand on
 constexpr int tries_for_a_spot = 16;
 
@@ -64,9 +64,8 @@ void E5SpawnPoint::_bind_methods() {
                  "get_count");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "radius", godot::PROPERTY_HINT_RANGE, "0,60,0.5,suffix:m"),
                  "set_radius", "get_radius");
-    ADD_PROPERTY(
-        PropertyInfo(godot::Variant::FLOAT, "respawn_seconds", godot::PROPERTY_HINT_RANGE, "0,600,1,suffix:s"),
-        "set_respawn_seconds", "get_respawn_seconds");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "respawn_seconds", godot::PROPERTY_HINT_RANGE, "0,600,1,suffix:s"),
+                 "set_respawn_seconds", "get_respawn_seconds");
     ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "seed"), "set_seed", "get_seed");
     ADD_PROPERTY(PropertyInfo(godot::Variant::STRING, "label"), "set_label", "get_label");
     ADD_PROPERTY(PropertyInfo(godot::Variant::STRING, "kind"), "set_kind", "get_kind");
@@ -86,9 +85,10 @@ void E5SpawnPoint::spawn() {
     const auto* const terrain =
         godot::Object::cast_to<E5Terrain>(get_tree()->get_first_node_in_group(E5Terrain::group_name));
     const godot::Vector3 centre = get_global_position();
-    const auto place_seed = static_cast<std::uint32_t>(seed_) * 7919U +
-                            static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(static_cast<double>(centre.x) * 3.0))) * 31U +
-                            static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(static_cast<double>(centre.z) * 3.0)));
+    const auto place_seed =
+        static_cast<std::uint32_t>(seed_) * 7919U +
+        static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(static_cast<double>(centre.x) * 3.0))) * 31U +
+        static_cast<std::uint32_t>(static_cast<std::int32_t>(std::lround(static_cast<double>(centre.z) * 3.0)));
     int made = 0;
     for (int index = 0; index < count_; ++index) {
         // A spot within the radius, evenly over its area; another if this one will not do.

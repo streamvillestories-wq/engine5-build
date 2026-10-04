@@ -18,6 +18,8 @@ struct RuntimeConfig {
     std::string benchmark_output;  // JSON report path; empty = do not write
     std::string screenshot_output; // PNG path; empty = no screenshot
     bool show_overlay = true;
+    // Starts with the detailed statistics open (what F4 shows), for pictures of it.
+    bool overlay_detail = false;
     // Holds "move forward" for the whole run, so unattended tests exercise
     // movement, collision and animation instead of a standing character.
     // One of "forward", "back", "left", "right"; empty = no automatic input.

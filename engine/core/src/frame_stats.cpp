@@ -29,6 +29,15 @@ void FrameTimeHistory::clear() noexcept {
     count_ = 0;
 }
 
+double FrameTimeHistory::sample(std::size_t index) const noexcept {
+    if (index >= count_) {
+        return 0.0;
+    }
+    // Once the buffer has wrapped, the oldest sample is the one about to be overwritten.
+    const std::size_t oldest = count_ < samples_.size() ? 0 : next_;
+    return samples_[(oldest + index) % samples_.size()];
+}
+
 FrameTimeSummary FrameTimeHistory::summarize() {
     FrameTimeSummary summary;
     summary.sample_count = count_;

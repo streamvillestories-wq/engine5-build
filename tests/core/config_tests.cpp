@@ -23,6 +23,7 @@ TEST_CASE("benchmark options are parsed", "[config]") {
                           "--benchmark-output=out/report.json"sv,
                           "--screenshot=out/shot.png"sv,
                           "--no-overlay"sv,
+                          "--overlay-detail"sv,
                           "--auto-move"sv,
                           "--auto-aim"sv,
                           "--auto-attack"sv,
@@ -36,6 +37,7 @@ TEST_CASE("benchmark options are parsed", "[config]") {
     CHECK(config->benchmark_output == "out/report.json");
     CHECK(config->screenshot_output == "out/shot.png");
     CHECK_FALSE(config->show_overlay);
+    CHECK(config->overlay_detail);
     CHECK(config->auto_move == "forward");
     CHECK(config->auto_aim);
     CHECK(config->auto_attack);

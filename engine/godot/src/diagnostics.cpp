@@ -95,11 +95,12 @@ void E5Diagnostics::_ready() {
     config_ = std::move(*config);
 
     godot::SceneTree* const tree = get_tree();
-    if (!config_.show_overlay) {
+    if (!config_.show_overlay || config_.overlay_detail) {
         const godot::TypedArray<godot::Node> overlays = tree->get_nodes_in_group(E5PerfOverlay::group_name);
         for (const godot::Variant& node : overlays) {
-            if (auto* const overlay = godot::Object::cast_to<godot::CanvasLayer>(node)) {
-                overlay->set_visible(false);
+            if (auto* const overlay = godot::Object::cast_to<E5PerfOverlay>(node)) {
+                overlay->set_visible(config_.show_overlay);
+                overlay->set_detailed(config_.overlay_detail);
             }
         }
     }
@@ -179,9 +180,10 @@ void E5Diagnostics::_process(double /*delta*/) {
             }
             if (config_.start_x && config_.start_z) {
                 // Onto the ground there, if there is ground; otherwise she falls onto whatever is.
-                godot::Vector3 start(*config_.start_x, static_cast<float>(player->get_global_position().y), *config_.start_z);
-                if (const auto* const terrain = godot::Object::cast_to<E5Terrain>(
-                        get_tree()->get_first_node_in_group(E5Terrain::group_name))) {
+                godot::Vector3 start(*config_.start_x, static_cast<float>(player->get_global_position().y),
+                                     *config_.start_z);
+                if (const auto* const terrain =
+                        godot::Object::cast_to<E5Terrain>(get_tree()->get_first_node_in_group(E5Terrain::group_name))) {
                     start.y = terrain->height_at(*config_.start_x, *config_.start_z) + 0.5F;
                 }
                 player->set_global_position(start);
