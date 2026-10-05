@@ -313,3 +313,23 @@ TEST_CASE("hills, ridges and valleys shape the lowland where they are put", "[is
     }
     CHECK(most > 0.3F);
 }
+
+TEST_CASE("a site near the coast is level too", "[island]") {
+    e5::gameplay::IslandParams params;
+    params.radius = 400.0F;
+    params.hill_height = 24.0F;
+    // Out where the land has begun to fall towards the beach: find such a place on the way south.
+    float z = 200.0F;
+    while (z < 380.0F && std::abs(e5::gameplay::island_height(params, 70.0F, z + 12.0F) -
+                                  e5::gameplay::island_height(params, 70.0F, z - 12.0F)) < 1.0F) {
+        z += 4.0F;
+    }
+    REQUIRE(z < 380.0F);
+    REQUIRE(e5::gameplay::island_height(params, 70.0F, z) > 1.0F); // still land
+    params.sites = {{.x = 70.0F, .z = z, .radius = 17.0F}};
+    const float middle = e5::gameplay::island_height(params, 70.0F, z);
+    for (float away = -16.0F; away <= 16.0F; away += 4.0F) {
+        CHECK(e5::gameplay::island_height(params, 70.0F + away, z) == Catch::Approx(middle).margin(0.02));
+        CHECK(e5::gameplay::island_height(params, 70.0F, z + away) == Catch::Approx(middle).margin(0.02));
+    }
+}

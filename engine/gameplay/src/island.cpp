@@ -356,7 +356,7 @@ OpenGround open_ground(const IslandParams& params, float x, float z) noexcept {
 
 float island_height(const IslandParams& params, float x, float z) noexcept {
     const OpenGround open = open_ground(params, x, z);
-    const float land = open.land;
+    float land = open.land;
     const float from_coast = open.from_coast;
     float inland = open.inland;
     // Building ground is levelled before the water is cut, so that a river still runs
@@ -365,8 +365,13 @@ float island_height(const IslandParams& params, float x, float z) noexcept {
         const float away = std::hypot(x - site.x, z - site.z);
         const float reach = site.radius * 1.5F;
         if (away < reach) {
-            const float level = open_ground(params, site.x, site.z).inland;
-            inland = std::lerp(inland, level, smooth_step(reach, site.radius, away));
+            // Level means level: near the coast the land already falls towards the beach
+            // (`land` below 1), and a site there sloped with it, a metre from one side to the
+            // other: boulders set on it hung in the air. The fall is taken from its middle too.
+            const OpenGround middle = open_ground(params, site.x, site.z);
+            const float within = smooth_step(reach, site.radius, away);
+            inland = std::lerp(inland, middle.inland, within);
+            land = std::lerp(land, middle.land, within);
         }
     }
 
