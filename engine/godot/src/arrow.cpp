@@ -4,6 +4,7 @@
 #include "e5/core/profiling.hpp"
 #include "effect.hpp"
 #include "enemy.hpp"
+#include "player_controller.hpp"
 
 #include <godot_cpp/classes/box_mesh.hpp>
 #include <godot_cpp/classes/cylinder_mesh.hpp>
@@ -153,6 +154,19 @@ void E5Arrow::_physics_process(double delta) {
     // metre per step and would otherwise pass through thin targets.
     godot::TypedArray<godot::RID> excluded;
     excluded.push_back(shooter_);
+    if (!shaft_swept_) {
+        // Once, as it leaves the string: what stands where its own shaft is. The sweep below
+        // starts at the tip, an arrow's length ahead of the string: whoever stood closer than
+        // that was never touched, and a point-blank shot went through them (bug report 10).
+        shaft_swept_ = true;
+        const godot::Ref<godot::PhysicsRayQueryParameters3D> along_shaft =
+            godot::PhysicsRayQueryParameters3D::create(from, from + direction * length, 0xFFFFFFFF, excluded);
+        const godot::Dictionary close = get_world_3d()->get_direct_space_state()->intersect_ray(along_shaft);
+        if (!close.is_empty()) {
+            stick(close["position"], direction, close["collider"]);
+            return;
+        }
+    }
     const godot::Ref<godot::PhysicsRayQueryParameters3D> query = godot::PhysicsRayQueryParameters3D::create(
         from + direction * length, to + direction * length, 0xFFFFFFFF, excluded);
     const godot::Dictionary hit = get_world_3d()->get_direct_space_state()->intersect_ray(query);
@@ -189,6 +203,12 @@ void E5Arrow::stick(const godot::Vector3& hit_position, const godot::Vector3& di
         // The collision shape is wider than the body inside it: push the arrow in until it reaches the body.
         translate_object_local(godot::Vector3(0.0F, 0.0F, -enemy->get_body_radius() * 0.6F));
         enemy->attach(this);
+    } else if (auto* const hero = godot::Object::cast_to<E5PlayerController>(collider)) {
+        // Another player's hero: she walks on, and the arrow goes with her. (It stayed where
+        // it struck, hanging in the air once she had moved: bug report 9.) Her body is a
+        // capsule wider than she is: pushed in a little, the arrow reaches her.
+        translate_object_local(godot::Vector3(0.0F, 0.0F, -0.22F));
+        call_deferred("reparent", hero);
     }
 }
 

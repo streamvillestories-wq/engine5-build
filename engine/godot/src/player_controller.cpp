@@ -77,6 +77,9 @@ constexpr float aim_shoulder_offset = 0.45F;  // metres to the right
 constexpr float aim_camera_distance = 1.7F;   // metres behind
 constexpr float aim_camera_blend_rate = 8.0F; // 1/s
 constexpr float aim_ray_length = 200.0F;      // metres
+// Whoever stands this close ahead of her chest is what she shoots at, whatever the crosshair covers.
+constexpr float point_blank_reach = 2.6F;  // metres
+constexpr float point_blank_height = 1.2F; // metres above her feet
 // The arrow appears on the string once the draw clip has had time to reach the quiver.
 constexpr float arrow_appears_at_draw = 0.35F;
 // From this point of the draw the string starts following the drawing hand;
@@ -881,8 +884,12 @@ void E5PlayerController::_physics_process(double delta) {
         }
         const gameplay::BowInput bow_input{
             // The bow can only be raised on the ground; leaving it lowers the bow.
+            // A draw that has begun may be held; a new one needs the skill to be ready. (The
+            // follow-through of a shot counted as "still aiming", so with the button held the
+            // next draw began at once and the cooldown was never asked: bug report 13.)
             .aim_held = aim_pressed && !aim_blocked_ && !instant && !action_.active && is_on_floor() &&
-                        (is_aiming() || skill_ready(skills_.selected())),
+                        (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming ||
+                         skill_ready(skills_.selected())),
             .cancel_pressed = cancel,
             .build_charge = gameplay::skill_info(skills_.selected()).charges,
         };
@@ -1709,6 +1716,24 @@ E5PlayerController::AimPoint E5PlayerController::find_aim_point(const godot::Vec
     const godot::Vector3 far_point = origin + direction * aim_ray_length;
     godot::TypedArray<godot::RID> excluded;
     excluded.push_back(get_rid());
+    // Point blank the crosshair lies: the camera looks past her shoulder, so its line runs
+    // beside whoever stands right in front of her, and the shot went by on the right (bug
+    // report 10). A creature or hero within arm's reach ahead of her chest takes the shot.
+    {
+        const godot::Vector3 chest = get_global_position() + godot::Vector3(0.0F, point_blank_height, 0.0F);
+        godot::Vector3 ahead(direction.x, 0.0F, direction.z);
+        if (ahead.length_squared() > 0.0001F) {
+            ahead = ahead.normalized();
+            const godot::Ref<godot::PhysicsRayQueryParameters3D> near_query =
+                godot::PhysicsRayQueryParameters3D::create(chest, chest + ahead * point_blank_reach, 0xFFFFFFFF,
+                                                           excluded);
+            const godot::Dictionary near_hit = get_world_3d()->get_direct_space_state()->intersect_ray(near_query);
+            if (!near_hit.is_empty() && godot::Object::cast_to<godot::CharacterBody3D>(
+                                            static_cast<godot::Object*>(near_hit["collider"])) != nullptr) {
+                return {.position = near_hit["position"], .hit = true};
+            }
+        }
+    }
     const godot::Ref<godot::PhysicsRayQueryParameters3D> query =
         godot::PhysicsRayQueryParameters3D::create(origin, far_point, 0xFFFFFFFF, excluded);
     const godot::Dictionary hit = get_world_3d()->get_direct_space_state()->intersect_ray(query);

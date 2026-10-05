@@ -57,6 +57,7 @@ private:
     gameplay::Projectile projectile_;
     godot::RID shooter_;
     bool flying_ = false;
+    bool shaft_swept_ = false; // the stretch from the string to the tip has been looked at
     float power_ = 0.0F;
     float blast_radius_ = 0.0F;
     float damage_ = 20.0F;
