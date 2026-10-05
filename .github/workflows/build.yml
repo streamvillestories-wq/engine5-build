@@ -15,7 +15,9 @@ env:
 jobs:
   macos:
     name: macOS release library
-    runs-on: macos-15
+    # Intel machines: the Apple Silicon ones were not to be had for an hour (2026-10-05). The
+    # library is universal either way.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
         with:
