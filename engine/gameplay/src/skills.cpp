@@ -63,17 +63,20 @@ SkillInfo skill_info(SkillId skill) noexcept {
     return {.name = "", .charges = false, .kind = SkillKind::Bow};
 }
 
+// Balanced on 2026-10-05 from a simulation of every hero's damage (docs/ASSET_PIPELINE.md, "The
+// balance of the heroes"): against one enemy the ranged heroes do about 32 to 35 a second with
+// their skills and the two who must stand in the fight 38 to 44.
 float skill_damage(SkillId skill, float power) noexcept {
     switch (skill) {
     case SkillId::Shot:
-        return 20.0F;
+        return 28.0F;
     case SkillId::PowerShot:
         // A full charge triples the arrow.
-        return 20.0F * (1.0F + 2.0F * std::clamp(power, 0.0F, 1.0F));
+        return 28.0F * (1.0F + 2.0F * std::clamp(power, 0.0F, 1.0F));
     case SkillId::ArrowRain:
         return 12.0F;
     case SkillId::FrostFan:
-        return 15.0F;
+        return 24.0F; // each of its five arrows
     case SkillId::FireArrow:
         return 45.0F;
     case SkillId::ThunderKick:
@@ -104,17 +107,17 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::ThunderCleave:
         return 62.0F;
     case SkillId::StarWhirl:
-        return 40.0F;
+        return 85.0F; // it takes a full charge: it has to be worth one
     case SkillId::AxeCombo:
         return 26.0F; // the first blow of the combo; see combo_damage_factor
     case SkillId::Whirlwind:
-        return 40.0F;
+        return 56.0F;
     case SkillId::Earthbreaker:
         return 64.0F;
     case SkillId::LeapStrike:
-        return 52.0F;
+        return 82.0F;
     case SkillId::Battlecry:
-        return 10.0F; // and it throws everything around him back
+        return 45.0F; // and it throws everything around him back
     case SkillId::None:
         break;
     }
@@ -178,10 +181,10 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 5.0F;
     // In between.
     case SkillId::FireArrow:
+    case SkillId::FrostFan:
     case SkillId::ChainLightning:
     case SkillId::Whirlwind:
         return 6.0F;
-    case SkillId::FrostFan:
     case SkillId::FrostEdge:
     case SkillId::LeapStrike:
         return 7.0F;

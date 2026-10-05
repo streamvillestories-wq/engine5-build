@@ -240,9 +240,12 @@ TEST_CASE("the dwarf has his own skills on the bar", "[skills]") {
         CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
         CHECK_FALSE(e5::gameplay::skill_info(skill).name.empty());
     }
-    // His axe hits harder than her sword, blow for blow; the cry is for the push, not the damage.
+    // His axe hits harder than her sword, blow for blow.
     CHECK(e5::gameplay::skill_damage(SkillId::AxeCombo) > e5::gameplay::skill_damage(SkillId::Slash));
-    CHECK(e5::gameplay::skill_damage(SkillId::Battlecry) < e5::gameplay::skill_damage(SkillId::AxeCombo));
+    // The cry takes a full charge, so it must be worth more than a blow of the axe; but it is
+    // still about throwing them back, not his hardest hit.
+    CHECK(e5::gameplay::skill_damage(SkillId::Battlecry) > e5::gameplay::skill_damage(SkillId::AxeCombo));
+    CHECK(e5::gameplay::skill_damage(SkillId::Battlecry) < e5::gameplay::skill_damage(SkillId::Earthbreaker));
 }
 
 TEST_CASE("the sword combo carries her forward by each blow's distance", "[skills]") {
@@ -348,6 +351,17 @@ TEST_CASE("standard attacks are always ready, specials cool down, one skill a he
         CHECK(skill_cooldown_seconds(special) >= 4.0F);
         CHECK(skill_cooldown_seconds(special) <= 10.0F);
     }
+}
+
+TEST_CASE("a skill that takes a charge is worth more than the same hero's skills on a cooldown", "[skills]") {
+    using e5::gameplay::skill_damage;
+    using e5::gameplay::SkillId;
+    // The warrior's: before the balance of 2026-10-05 her whirl was weaker than her cleave.
+    CHECK(skill_damage(SkillId::StarWhirl) > skill_damage(SkillId::ThunderCleave));
+    // And no special is weaker, blow for blow, than the standard attack of the hero who has it.
+    CHECK(skill_damage(SkillId::FrostFan) * 5.0F > skill_damage(SkillId::Shot));
+    CHECK(skill_damage(SkillId::Whirlwind) > skill_damage(SkillId::AxeCombo));
+    CHECK(skill_damage(SkillId::LeapStrike) > skill_damage(SkillId::AxeCombo));
 }
 
 TEST_CASE("the charge fills from kills and a little from damage, and no further than full", "[skills]") {
