@@ -72,9 +72,23 @@ inline constexpr int combo_length = 3;
 // she moves forward (metres a second) `seconds` into blow `step`: nothing, then a smooth
 // push, then nothing. The clips are made for exactly these steps (tools/godot/warrior_combo.gd,
 // "step": the same distances and times), so that her feet do not slide.
-[[nodiscard]] float combo_advance_speed(int step, float seconds) noexcept;
+// `axe`: the dwarf's combo, which has steps of its own (shorter, and none of them a leap).
+[[nodiscard]] float combo_advance_speed(int step, float seconds, bool axe = false) noexcept;
 // How far blow `step` carries her in all.
-[[nodiscard]] float combo_advance_distance(int step) noexcept;
+[[nodiscard]] float combo_advance_distance(int step, bool axe = false) noexcept;
+
+// How often a skill can be used. A hero's standard attack: always. Her special skills: again
+// after their cooldown, longer for the stronger ones. And one skill for each hero, the
+// strongest (Kingfishers, Black Hole, Star Whirl, Battle Cry), has no cooldown at all: it
+// takes a full charge, which fighting fills and using it empties.
+[[nodiscard]] float skill_cooldown_seconds(SkillId skill) noexcept;
+[[nodiscard]] bool skill_needs_charge(SkillId skill) noexcept;
+// The charge is a share, 0 to 1. A kill is worth a tenth and damage a little (a hundred
+// points: a twenty-fifth), so that a hero who fights beside others and seldom lands the last
+// blow fills it too: about seven enemies alone.
+inline constexpr float charge_per_kill = 0.1F;
+inline constexpr float charge_per_damage = 0.0004F;
+[[nodiscard]] float charge_after(float charge, float damage_dealt, bool killed) noexcept;
 
 // The warrior's shield. While a key is held she raises it, for a limited time; then, or when
 // the key is let go, it comes down and cannot be raised again until it has cooled down. A

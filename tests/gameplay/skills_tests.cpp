@@ -260,6 +260,15 @@ TEST_CASE("the sword combo carries her forward by each blow's distance", "[skill
         }
         CHECK(travelled == Catch::Approx(combo_advance_distance(step)).margin(0.005));
     }
+    // The dwarf's axe has steps of its own, and they add up the same way.
+    for (int step = 0; step < e5::gameplay::combo_length; ++step) {
+        float travelled = 0.0F;
+        constexpr float dt = 0.001F;
+        for (float seconds = 0.0F; seconds < 1.5F; seconds += dt) {
+            travelled += combo_advance_speed(step, seconds, true) * dt;
+        }
+        CHECK(travelled == Catch::Approx(combo_advance_distance(step, true)).margin(0.005));
+    }
     // The finisher is a leap: it goes furthest.
     CHECK(combo_advance_distance(2) > combo_advance_distance(0));
 }
@@ -314,4 +323,40 @@ TEST_CASE("a raised shield covers the front and the sides, not the back", "[skil
     const float quarter = 1.5707963F; // looking along +x
     CHECK(shield_covers(quarter, 2.0F, 0.0F));
     CHECK_FALSE(shield_covers(quarter, -2.0F, 0.0F));
+}
+
+TEST_CASE("standard attacks are always ready, specials cool down, one skill a hero takes a charge", "[skills]") {
+    using e5::gameplay::skill_cooldown_seconds;
+    using e5::gameplay::skill_needs_charge;
+    using e5::gameplay::SkillId;
+    for (const SkillId standard : {SkillId::Shot, SkillId::ArcaneBolt, SkillId::Slash, SkillId::AxeCombo}) {
+        CHECK(skill_cooldown_seconds(standard) == 0.0F);
+        CHECK_FALSE(skill_needs_charge(standard));
+    }
+    // One for each hero, and none of them also has a cooldown.
+    for (const SkillId charged : {SkillId::Kingfishers, SkillId::BlackHole, SkillId::StarWhirl, SkillId::Battlecry}) {
+        CHECK(skill_needs_charge(charged));
+        CHECK(skill_cooldown_seconds(charged) == 0.0F);
+    }
+    // Every other special has one, between four and ten seconds.
+    for (const SkillId special :
+         {SkillId::PowerShot, SkillId::ArrowRain, SkillId::FrostFan, SkillId::FireArrow, SkillId::ThunderKick,
+          SkillId::Fireball, SkillId::FrostNova, SkillId::ChainLightning, SkillId::Meteor, SkillId::StarBarrage,
+          SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::Whirlwind, SkillId::Earthbreaker,
+          SkillId::LeapStrike}) {
+        CHECK_FALSE(skill_needs_charge(special));
+        CHECK(skill_cooldown_seconds(special) >= 4.0F);
+        CHECK(skill_cooldown_seconds(special) <= 10.0F);
+    }
+}
+
+TEST_CASE("the charge fills from kills and a little from damage, and no further than full", "[skills]") {
+    using e5::gameplay::charge_after;
+    CHECK(charge_after(0.0F, 0.0F, true) == Catch::Approx(0.1F));
+    CHECK(charge_after(0.0F, 100.0F, false) == Catch::Approx(0.04F));
+    // An enemy of a hundred points, killed alone: both.
+    CHECK(charge_after(0.5F, 100.0F, true) == Catch::Approx(0.64F));
+    CHECK(charge_after(0.97F, 100.0F, true) == Catch::Approx(1.0F));
+    // Healing an enemy, should that ever happen, takes nothing away.
+    CHECK(charge_after(0.5F, -40.0F, false) == Catch::Approx(0.5F));
 }

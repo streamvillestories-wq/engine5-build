@@ -166,6 +166,9 @@ void E5Diagnostics::_process(double /*delta*/) {
         auto* const player = godot::Object::cast_to<E5PlayerController>(
             get_tree()->get_first_node_in_group(E5PlayerController::group_name));
         if (player != nullptr) {
+            if ((config_.auto_skill || config_.auto_fire || config_.auto_charge) && !config_.cooldowns) {
+                player->set_cooldowns_enabled(false);
+            }
             if (config_.auto_skill) {
                 player->select_skill(*config_.auto_skill - 1);
             } else if (config_.auto_charge) {
@@ -392,6 +395,7 @@ bool E5Diagnostics::write_report() {
     std::int64_t enemy_casts = 0;
     // Of the living enemies that have noticed the hero: how many, and how many of them do not
     // look at her (none should: one that comes at her backwards is a bug).
+    std::int64_t enemies_asleep = 0;
     std::int64_t enemies_aggro = 0;
     std::int64_t enemies_facing_away = 0;
     const auto* const hero =
@@ -402,6 +406,7 @@ bool E5Diagnostics::write_report() {
             enemy_damage += static_cast<double>(enemy->get_damage_taken());
             enemy_deaths += enemy->get_death_count();
             enemy_casts += enemy->get_cast_count();
+            enemies_asleep += enemy->is_asleep() ? 1 : 0;
             if (hero != nullptr && enemy->is_alive() && enemy->is_aggro()) {
                 ++enemies_aggro;
                 enemies_facing_away += enemy->looks_towards(hero->get_global_position()) ? 0 : 1;
@@ -410,6 +415,7 @@ bool E5Diagnostics::write_report() {
     }
     scene["enemies"] = enemies.size();
     scene["enemies_aggro"] = enemies_aggro;
+    scene["enemies_asleep"] = enemies_asleep;
     scene["enemies_facing_away"] = enemies_facing_away;
     scene["enemy_damage"] = enemy_damage;
     if (const auto* const wanderer =
@@ -455,6 +461,7 @@ bool E5Diagnostics::write_report() {
         player_info["last_skill"] = player->get_last_skill();
         player_info["skills_used"] = player->get_skills_used();
         player_info["hits_blocked"] = player->get_hits_blocked();
+        player_info["charge"] = player->get_charge();
         player_info["blocking"] = player->is_blocking();
         if (const E5Inventory* const inventory = player->get_inventory()) {
             player_info["gold"] = inventory->get_gold();

@@ -89,6 +89,10 @@ Result<void> apply_option(RuntimeConfig& config, std::string_view key, OptionVal
         config.show_overlay = false;
         return {};
     }
+    if (key == "--cooldowns") {
+        config.cooldowns = true;
+        return {};
+    }
     if (key == "--auto-block") {
         config.auto_block = true;
         return {};

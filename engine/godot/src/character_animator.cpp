@@ -156,6 +156,12 @@ void CharacterAnimator::set_upper(const godot::StringName& clip) {
     }
 }
 
+void CharacterAnimator::set_active(bool active) {
+    if (tree_ != nullptr && tree_->is_active() != active) {
+        tree_->set_active(active);
+    }
+}
+
 void CharacterAnimator::update(float delta_seconds) {
     if (tree_ == nullptr) {
         return;

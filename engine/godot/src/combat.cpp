@@ -7,16 +7,31 @@
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <algorithm>
+
 namespace e5::bridge::combat {
 namespace {
 
 constexpr float hero_chest_height = 0.95F; // metres above her feet: the middle of a hero
 constexpr float hero_body_radius = 0.4F;   // metres: allowance for area effects
 
+// What the hero played here did to an enemy fills her charge. (Everything that hurts an
+// enemy on this machine is hers: other players' heroes are replays that do no damage.)
+void credit(E5Enemy* enemy, float damage) {
+    if (damage <= 0.0F || !enemy->is_alive() || !enemy->is_inside_tree()) {
+        return;
+    }
+    if (auto* const hero = godot::Object::cast_to<E5PlayerController>(
+            enemy->get_tree()->get_first_node_in_group(E5PlayerController::group_name))) {
+        hero->credit_damage(std::min(damage, enemy->get_health()), enemy->get_health() <= damage);
+    }
+}
+
 } // namespace
 
 bool hit(godot::Object* struck, const godot::Vector3& position, float damage, int score_multiplier) {
     if (auto* const enemy = godot::Object::cast_to<E5Enemy>(struck)) {
+        credit(enemy, damage);
         enemy->take_damage(damage, position);
         return true;
     }
@@ -48,6 +63,7 @@ int blast(godot::Node* context, const godot::Vector3& centre, float radius, floa
         // Measured to the middle of the body, with the body's own width as allowance.
         const godot::Vector3 body = enemy->get_aim_point();
         if (body.distance_to(centre) <= radius + enemy->get_body_radius()) {
+            credit(enemy, damage);
             enemy->take_damage(damage, body);
             ++count;
         }

@@ -414,6 +414,48 @@ void E5Enemy::update_remote(float dt) {
     animator_.update(dt);
 }
 
+// Beyond this distance from every hero an idle enemy sleeps; it wakes a little nearer than
+// it fell asleep, so that a hero walking along the line does not switch it on and off.
+// Both are far beyond the distance at which any enemy notices a hero.
+constexpr float sleep_beyond = 70.0F;
+constexpr float wake_within = 60.0F;
+constexpr float sleep_check_interval = 0.4F;
+
+bool E5Enemy::should_sleep(float dt) {
+    // Anything that hurts it, holds it or throws it wakes it at once.
+    if (pending_damage_ > 0.0F || held_ || flung_ || !is_alive() || state_.aggro ||
+        state_.phase != gameplay::EnemyPhase::Idle) {
+        sleep_check_seconds_ = 0.0F;
+        return false;
+    }
+    sleep_check_seconds_ -= dt;
+    if (sleep_check_seconds_ > 0.0F) {
+        return asleep_;
+    }
+    // Not all in the same frame: each has its own beat.
+    sleep_check_seconds_ = sleep_check_interval * (0.75F + 0.5F * static_cast<float>(get_instance_id() % 16U) / 16.0F);
+    // On the machine that decides it, any hero counts; where it is only shown, the one who looks.
+    float distance = distance_to_local_player();
+    if (!remote_) {
+        const godot::Node3D* const nearest = nearest_player();
+        distance = nearest != nullptr
+                       ? static_cast<float>(get_global_position().distance_to(nearest->get_global_position()))
+                       : sleep_beyond * 2.0F;
+    }
+    return distance > (asleep_ ? wake_within : sleep_beyond);
+}
+
+void E5Enemy::set_asleep(bool asleep) {
+    if (asleep == asleep_) {
+        return;
+    }
+    asleep_ = asleep;
+    animator_.set_active(!asleep);
+    if (asleep) {
+        set_velocity(godot::Vector3());
+    }
+}
+
 godot::Node3D* E5Enemy::nearest_player() const {
     godot::Node3D* nearest = nullptr;
     float nearest_distance = 0.0F;
@@ -595,7 +637,17 @@ void E5Enemy::_physics_process(double delta) {
     const auto dt = static_cast<float>(delta);
 
     if (remote_) {
+        // Shown here, decided elsewhere: it sleeps when the hero played here is far and what
+        // arrives says it stands idle. Where it is it still learns from what arrives.
+        set_asleep(should_sleep(dt));
+        if (asleep_) {
+            return;
+        }
         update_remote(dt);
+        return;
+    }
+    set_asleep(should_sleep(dt));
+    if (asleep_) {
         return;
     }
     if (held_) {

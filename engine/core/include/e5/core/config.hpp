@@ -29,6 +29,9 @@ struct RuntimeConfig {
     bool auto_aim = false;
     // Attacks repeatedly with the attack button (left mouse: the standard attack), like auto_fire.
     bool auto_attack = false;
+    // Runs that repeat one skill (auto_fire, auto_charge, auto_skill) switch the cooldowns
+    // and the charge off, or they would test waiting. This keeps them on.
+    bool cooldowns = false;
     // Holds the block key (the warrior's shield) for the whole run.
     bool auto_block = false;
     // Shoots repeatedly: holds aim until the bow is drawn, then lets go.

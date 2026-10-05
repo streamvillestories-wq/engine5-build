@@ -139,20 +139,85 @@ constexpr std::array<ComboAdvance, combo_length> combo_advances{
     ComboAdvance{.distance = 0.6F, .from = 0.1F, .to = 0.46F},
     ComboAdvance{.distance = 1.4F, .from = 0.22F, .to = 0.5F}};
 
-} // namespace
+// The dwarf's: "step" of DWARF_BLOWS in the same tool. In the warrior's measures, as the tool
+// has them; the game carries him the share of that by which his legs are shorter.
+constexpr std::array<ComboAdvance, combo_length> axe_advances{
+    ComboAdvance{.distance = 0.5F, .from = 0.24F, .to = 0.44F},
+    ComboAdvance{.distance = 0.35F, .from = 0.14F, .to = 0.34F},
+    ComboAdvance{.distance = 0.6F, .from = 0.18F, .to = 0.38F}};
 
-float combo_advance_distance(int step) noexcept {
-    return combo_advances.at(static_cast<std::size_t>(std::clamp(step, 0, combo_length - 1))).distance;
+const ComboAdvance& advance_of(int step, bool axe) noexcept {
+    const auto index = static_cast<std::size_t>(std::clamp(step, 0, combo_length - 1));
+    return axe ? axe_advances.at(index) : combo_advances.at(index);
 }
 
-float combo_advance_speed(int step, float seconds) noexcept {
-    const ComboAdvance& advance = combo_advances.at(static_cast<std::size_t>(std::clamp(step, 0, combo_length - 1)));
+} // namespace
+
+float combo_advance_distance(int step, bool axe) noexcept {
+    return advance_of(step, axe).distance;
+}
+
+float combo_advance_speed(int step, float seconds, bool axe) noexcept {
+    const ComboAdvance& advance = advance_of(step, axe);
     const float u = (seconds - advance.from) / (advance.to - advance.from);
     if (u <= 0.0F || u >= 1.0F) {
         return 0.0F;
     }
     // The way goes as a smooth step (3u^2 - 2u^3); this is how fast that is.
     return advance.distance * 6.0F * u * (1.0F - u) / (advance.to - advance.from);
+}
+
+float skill_cooldown_seconds(SkillId skill) noexcept {
+    switch (skill) {
+    // Quick ones.
+    case SkillId::PowerShot:
+        return 4.0F;
+    case SkillId::ThunderKick:
+    case SkillId::Fireball:
+    case SkillId::FlameBlade:
+        return 5.0F;
+    // In between.
+    case SkillId::FireArrow:
+    case SkillId::ChainLightning:
+    case SkillId::Whirlwind:
+        return 6.0F;
+    case SkillId::FrostFan:
+    case SkillId::FrostEdge:
+    case SkillId::LeapStrike:
+        return 7.0F;
+    case SkillId::FrostNova:
+    case SkillId::Earthbreaker:
+        return 8.0F;
+    // The ones that clear a place.
+    case SkillId::ArrowRain:
+    case SkillId::StarBarrage:
+    case SkillId::ThunderCleave:
+        return 9.0F;
+    case SkillId::Meteor:
+        return 10.0F;
+    // The standard attacks, and the skills that take a charge instead.
+    case SkillId::None:
+    case SkillId::Shot:
+    case SkillId::ArcaneBolt:
+    case SkillId::Slash:
+    case SkillId::AxeCombo:
+    case SkillId::Kingfishers:
+    case SkillId::BlackHole:
+    case SkillId::StarWhirl:
+    case SkillId::Battlecry:
+        return 0.0F;
+    }
+    return 0.0F;
+}
+
+bool skill_needs_charge(SkillId skill) noexcept {
+    return skill == SkillId::Kingfishers || skill == SkillId::BlackHole || skill == SkillId::StarWhirl ||
+           skill == SkillId::Battlecry;
+}
+
+float charge_after(float charge, float damage_dealt, bool killed) noexcept {
+    const float gained = std::max(damage_dealt, 0.0F) * charge_per_damage + (killed ? charge_per_kill : 0.0F);
+    return std::clamp(charge + gained, 0.0F, 1.0F);
 }
 
 BlockStep step_block(const BlockState& state, bool pressed, bool held, bool able, const BlockParams& params,

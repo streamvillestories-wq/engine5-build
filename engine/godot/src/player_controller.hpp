@@ -178,6 +178,16 @@ public:
     // Health. Damage is collected and applied in the next physics step. At zero she dies, lies
     // for a few seconds, and comes back where she started.
     void take_damage(float amount);
+    // Cooldowns and the charge (e5/gameplay/skills.hpp). The skill bar reads these.
+    [[nodiscard]] float get_charge() const { return charge_; }
+    [[nodiscard]] float get_skill_cooldown(int slot) const;         // seconds left
+    [[nodiscard]] float get_skill_cooldown_seconds(int slot) const; // of how many
+    [[nodiscard]] bool skill_takes_charge(int slot) const;
+    [[nodiscard]] bool is_skill_ready(int slot) const;
+    // What she did to an enemy: fills the charge. Called by whatever does damage for her.
+    void credit_damage(float damage, bool killed);
+    // Tests that use one skill again and again switch the waiting off.
+    void set_cooldowns_enabled(bool enabled) { cooldowns_enabled_ = enabled; }
     // Damage that comes from somewhere: a raised shield stops it if it is not behind her.
     void take_damage_from(float amount, const godot::Vector3& from);
     // The shield (the warrior's): whether it is up, how long until it can be raised again,
@@ -397,6 +407,12 @@ private:
     int hits_blocked_ = 0;
     godot::StringName clip_block_;
     godot::Ref<godot::PackedScene> block_spark_;
+    // Seconds until each skill can be used again, by its number; and the charge, 0 to 1.
+    std::array<float, 32> cooldown_left_{};
+    float charge_ = 0.0F;
+    bool cooldowns_enabled_ = true;
+    [[nodiscard]] bool skill_ready(gameplay::SkillId skill) const;
+    void spend(gameplay::SkillId skill);
     bool combo_queued_ = false;
     bool combo_arc_shown_ = false; // this blow's arc is in the air already
     godot::Ref<godot::PackedScene> slash_arc_;

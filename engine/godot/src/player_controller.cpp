@@ -129,19 +129,27 @@ constexpr std::array<SpellTiming, 3> combo_timings{
     SpellTiming{
         .playback_scale = combo_playback, .strike_at = 0.52F, .end_at = 1.05F}}; // combo_3: the leap, the finisher
 // The dwarf's: the same three-blow combo with his axe, then his special blows.
+// The dwarf's axe combo: blows of his own from the same tool (--hero=dwarf, DWARF_BLOWS), these
+// its "strike" and "end". He is carried forward by the share of the tool's distances by
+// which his legs are shorter than the warrior's (the tool prints it).
+constexpr float axe_playback = 0.92F;
+constexpr float axe_advance_share = 0.69F;
 constexpr std::array<SpellTiming, 3> axe_combo_timings{
-    SpellTiming{.playback_scale = 1.6F, .strike_at = 0.93F, .end_at = 1.45F},  // horizontal
-    SpellTiming{.playback_scale = 1.6F, .strike_at = 1.03F, .end_at = 1.6F},   // backhand
-    SpellTiming{.playback_scale = 1.5F, .strike_at = 0.97F, .end_at = 1.65F}}; // spin_low, the finisher
+    SpellTiming{.playback_scale = axe_playback, .strike_at = 0.4F, .end_at = 0.72F},   // axe_1: round from the right
+    SpellTiming{.playback_scale = axe_playback, .strike_at = 0.3F, .end_at = 0.62F},   // axe_2: ripped up from below
+    SpellTiming{.playback_scale = axe_playback, .strike_at = 0.36F, .end_at = 0.95F}}; // axe_3: down into the ground
 constexpr SpellTiming whirlwind_timing{.playback_scale = 1.5F, .strike_at = 1.03F, .end_at = 1.9F};
 constexpr SpellTiming earthbreaker_timing{.playback_scale = 1.3F, .strike_at = 0.83F, .end_at = 1.6F};
 constexpr SpellTiming leap_timing{.playback_scale = 1.5F, .strike_at = 1.7F, .end_at = 2.6F};
 constexpr SpellTiming battlecry_timing{.playback_scale = 1.3F, .strike_at = 0.75F, .end_at = 2.0F};
 constexpr float combo_window = 0.7F; // seconds after a blow in which the next press continues the combo
-constexpr SpellTiming flame_timing{.playback_scale = 1.25F, .strike_at = 0.8F, .end_at = 1.4F};
-constexpr SpellTiming frost_timing{.playback_scale = 1.15F, .strike_at = 0.6F, .end_at = 1.2F};
-constexpr SpellTiming thunder_timing{.playback_scale = 1.2F, .strike_at = 1.13F, .end_at = 1.95F};
-constexpr SpellTiming star_timing{.playback_scale = 1.3F, .strike_at = 1.33F, .end_at = 2.0F};
+// Her four special blows are made by tools/godot/warrior_combo.gd, like the combo: these are
+// its "strike" and "end", and they are played a little slower than made, like the combo.
+constexpr float special_playback = 0.9F;
+constexpr SpellTiming flame_timing{.playback_scale = special_playback, .strike_at = 0.5F, .end_at = 0.94F};
+constexpr SpellTiming frost_timing{.playback_scale = special_playback, .strike_at = 0.46F, .end_at = 0.88F};
+constexpr SpellTiming thunder_timing{.playback_scale = special_playback, .strike_at = 0.72F, .end_at = 1.25F};
+constexpr SpellTiming star_timing{.playback_scale = special_playback, .strike_at = 0.62F, .end_at = 1.2F};
 struct MeleeBlow {
     float reach = 0.0F;  // metres in front of her where the blow is centred
     float radius = 0.0F; // metres around that
@@ -183,6 +191,18 @@ const std::array<ComboLook, 3> combo_looks{
     // Straight down in front of her, turned a little aside so that it is not seen edge on.
     ComboLook{
         .x = {0.5F, 0.0F, 0.85F}, .y = {0.0F, 1.0F, 0.0F}, .before = 0.08F, .shake = 0.085F, .arc_seconds = 0.26F}};
+// The same for the dwarf's axe.
+const std::array<ComboLook, 3> axe_looks{
+    // Level, from his right round the front to his left.
+    ComboLook{.x = {0.0F, -0.34F, 0.94F}, .y = {1.0F, 0.0F, 0.0F}, .before = 0.1F, .shake = 0.03F, .arc_seconds = 0.3F},
+    // From low at his left up through the front and over his head.
+    ComboLook{.x = {0.3F, 0.15F, 0.9F}, .y = {-0.6F, -0.8F, 0.0F}, .before = 0.1F, .shake = 0.02F, .arc_seconds = 0.3F},
+    // Straight down in front of him.
+    ComboLook{.x = {0.5F, 0.0F, 0.85F}, .y = {0.0F, 1.0F, 0.0F}, .before = 0.08F, .shake = 0.1F, .arc_seconds = 0.26F}};
+const ComboLook& look_of(gameplay::SkillId skill, int step) {
+    const auto index = static_cast<std::size_t>(std::clamp(step, 0, 2));
+    return skill == gameplay::SkillId::AxeCombo ? axe_looks.at(index) : combo_looks.at(index);
+}
 constexpr MeleeBlow flame_blow{.reach = 1.4F, .radius = 1.9F};
 constexpr MeleeBlow frost_blow{.reach = 1.3F, .radius = 2.3F};
 constexpr MeleeBlow thunder_blow{.reach = 1.5F, .radius = 2.6F};
@@ -438,6 +458,12 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_max_health"), &E5PlayerController::get_max_health);
     ClassDB::bind_method(D_METHOD("select_skill", "slot"), &E5PlayerController::select_skill);
     ClassDB::bind_method(D_METHOD("get_selected_skill"), &E5PlayerController::get_selected_skill);
+    ClassDB::bind_method(D_METHOD("get_charge"), &E5PlayerController::get_charge);
+    ClassDB::bind_method(D_METHOD("get_skill_cooldown", "slot"), &E5PlayerController::get_skill_cooldown);
+    ClassDB::bind_method(D_METHOD("get_skill_cooldown_seconds", "slot"),
+                         &E5PlayerController::get_skill_cooldown_seconds);
+    ClassDB::bind_method(D_METHOD("skill_takes_charge", "slot"), &E5PlayerController::skill_takes_charge);
+    ClassDB::bind_method(D_METHOD("is_skill_ready", "slot"), &E5PlayerController::is_skill_ready);
     ClassDB::bind_method(D_METHOD("set_remote", "remote"), &E5PlayerController::set_remote);
     ClassDB::bind_method(D_METHOD("is_remote"), &E5PlayerController::is_remote);
     ClassDB::bind_method(D_METHOD("get_net_state"), &E5PlayerController::get_net_state);
@@ -538,11 +564,11 @@ void E5PlayerController::_ready() {
     clip_barrage_ = godot::StringName("attack_2h_2");
     clip_black_hole_ = godot::StringName("area_2");
     clip_combo_ = {godot::StringName("combo_1"), godot::StringName("combo_2"), godot::StringName("combo_3")};
-    clip_flame_ = godot::StringName("slash_3");
-    clip_frost_ = godot::StringName("attack_2");
-    clip_thunder_ = godot::StringName("attack_1");
-    clip_star_ = godot::StringName("slash_4");
-    clip_axe_combo_ = {godot::StringName("horizontal"), godot::StringName("backhand"), godot::StringName("spin_low")};
+    clip_flame_ = godot::StringName("flame_blade");
+    clip_frost_ = godot::StringName("frost_edge");
+    clip_thunder_ = godot::StringName("thunder_cleave");
+    clip_star_ = godot::StringName("star_whirl");
+    clip_axe_combo_ = {godot::StringName("axe_1"), godot::StringName("axe_2"), godot::StringName("axe_3")};
     clip_whirlwind_ = godot::StringName("spin_high");
     clip_earthbreaker_ = godot::StringName("downward");
     clip_leap_ = godot::StringName("leap");
@@ -782,6 +808,9 @@ void E5PlayerController::_physics_process(double delta) {
     other_button_was_pressed_ = other_pressed;
     const bool aim_just_pressed = aim_pressed && !aim_was_pressed_;
     aim_was_pressed_ = aim_pressed;
+    for (float& left : cooldown_left_) {
+        left = std::max(left - static_cast<float>(delta), 0.0F);
+    }
     // The shield: up while the key is held, as long as it lasts.
     if (block_enabled_) {
         const bool block_key = !input_blocked_ && input->is_action_pressed(actions::block);
@@ -836,9 +865,8 @@ void E5PlayerController::_physics_process(double delta) {
             cast_spell(action_skill_);
         }
         tick_combo(static_cast<float>(delta));
-        if (action_.active && action_skill_ == gameplay::SkillId::Slash && combo_step_ >= 0 && !combo_arc_shown_ &&
-            action_.elapsed >=
-                action_timings_.strike_at_seconds - combo_looks.at(static_cast<std::size_t>(combo_step_)).before) {
+        if (action_.active && is_combo(action_skill_) && combo_step_ >= 0 && !combo_arc_shown_ &&
+            action_.elapsed >= action_timings_.strike_at_seconds - look_of(action_skill_, combo_step_).before) {
             combo_arc_shown_ = true;
             show_slash_arc();
         }
@@ -853,7 +881,8 @@ void E5PlayerController::_physics_process(double delta) {
         }
         const gameplay::BowInput bow_input{
             // The bow can only be raised on the ground; leaving it lowers the bow.
-            .aim_held = aim_pressed && !aim_blocked_ && !instant && !action_.active && is_on_floor(),
+            .aim_held = aim_pressed && !aim_blocked_ && !instant && !action_.active && is_on_floor() &&
+                        (is_aiming() || skill_ready(skills_.selected())),
             .cancel_pressed = cancel,
             .build_charge = gameplay::skill_info(skills_.selected()).charges,
         };
@@ -896,10 +925,12 @@ void E5PlayerController::_physics_process(double delta) {
     gameplay::Vec3 next = gameplay::step_velocity(state, motor_input, look_.yaw, params, static_cast<float>(delta));
     // The sword combo is not fought on the spot: every blow carries her a step towards
     // where she faces (the clips are made for exactly these steps).
-    if (action_.active && action_skill_ == gameplay::SkillId::Slash && combo_step_ >= 0 && is_on_floor()) {
+    if (action_.active && is_combo(action_skill_) && combo_step_ >= 0 && is_on_floor()) {
         // In the clip's time: it may be played slower or faster than it was made.
-        const float forward = gameplay::combo_advance_speed(combo_step_, action_.elapsed * action_playback_scale_) *
-                              action_playback_scale_;
+        const bool axe = action_skill_ == gameplay::SkillId::AxeCombo;
+        const float forward =
+            gameplay::combo_advance_speed(combo_step_, action_.elapsed * action_playback_scale_, axe) *
+            action_playback_scale_ * (axe ? axe_advance_share : 1.0F);
         combo_push_ = godot::Vector3(std::sin(model_yaw_) * forward, 0.0F, std::cos(model_yaw_) * forward);
         next.x += static_cast<float>(combo_push_.x);
         next.z += static_cast<float>(combo_push_.z);
@@ -1041,6 +1072,57 @@ void E5PlayerController::update_remote(float delta) {
         animator_.set_base(net_clip_, net_speed_);
     }
     animator_.update(delta);
+}
+
+bool E5PlayerController::skill_ready(gameplay::SkillId skill) const {
+    if (!cooldowns_enabled_ || remote_) {
+        return true; // a remote hero replays what her own machine has decided
+    }
+    if (gameplay::skill_needs_charge(skill)) {
+        return charge_ >= 1.0F;
+    }
+    return cooldown_left_.at(static_cast<std::size_t>(skill)) <= 0.0F;
+}
+
+void E5PlayerController::spend(gameplay::SkillId skill) {
+    if (!cooldowns_enabled_ || remote_) {
+        return;
+    }
+    if (gameplay::skill_needs_charge(skill)) {
+        charge_ = 0.0F;
+    } else {
+        cooldown_left_.at(static_cast<std::size_t>(skill)) = gameplay::skill_cooldown_seconds(skill);
+    }
+}
+
+void E5PlayerController::credit_damage(float damage, bool killed) {
+    if (!remote_) {
+        charge_ = gameplay::charge_after(charge_, damage, killed);
+    }
+}
+
+float E5PlayerController::get_skill_cooldown(int slot) const {
+    if (slot < 0 || static_cast<std::size_t>(slot) >= gameplay::SkillBar::slot_count) {
+        return 0.0F;
+    }
+    return cooldown_left_.at(static_cast<std::size_t>(skills_.slot(static_cast<std::size_t>(slot))));
+}
+
+float E5PlayerController::get_skill_cooldown_seconds(int slot) const {
+    if (slot < 0 || static_cast<std::size_t>(slot) >= gameplay::SkillBar::slot_count) {
+        return 0.0F;
+    }
+    return gameplay::skill_cooldown_seconds(skills_.slot(static_cast<std::size_t>(slot)));
+}
+
+bool E5PlayerController::skill_takes_charge(int slot) const {
+    return slot >= 0 && static_cast<std::size_t>(slot) < gameplay::SkillBar::slot_count &&
+           gameplay::skill_needs_charge(skills_.slot(static_cast<std::size_t>(slot)));
+}
+
+bool E5PlayerController::is_skill_ready(int slot) const {
+    return slot >= 0 && static_cast<std::size_t>(slot) < gameplay::SkillBar::slot_count &&
+           skill_ready(skills_.slot(static_cast<std::size_t>(slot)));
 }
 
 void E5PlayerController::take_damage_from(float amount, const godot::Vector3& from) {
@@ -1637,6 +1719,7 @@ E5PlayerController::AimPoint E5PlayerController::find_aim_point(const godot::Vec
 }
 
 void E5PlayerController::use_skill(float power) {
+    spend(skills_.selected());
     last_skill_ = skills_.selected();
     ++skills_used_;
     note_net_event(1, power);
@@ -1750,7 +1833,7 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
 }
 
 bool E5PlayerController::can_start_instant_skill(gameplay::SkillId skill) const {
-    if (!is_on_floor() || instant_clip(skill) == nullptr) {
+    if (!is_on_floor() || instant_clip(skill) == nullptr || !skill_ready(skill)) {
         return false;
     }
     // One flock at a time: no new birds while the last ones are still flying. One black hole at a time.
@@ -1798,6 +1881,7 @@ void E5PlayerController::start_blade_effect(gameplay::SkillId skill) {
 }
 
 void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
+    spend(skill);
     last_skill_ = skill;
     ++skills_used_;
     action_skill_ = skill;
@@ -2015,7 +2099,7 @@ void E5PlayerController::show_slash_arc() {
     if (slash_arc_.is_null() || model_ == nullptr) {
         return;
     }
-    const ComboLook& look = combo_looks.at(static_cast<std::size_t>(std::clamp(combo_step_, 0, 2)));
+    const ComboLook& look = look_of(action_skill_, combo_step_);
     // Hung on her, so that it goes along with her step.
     godot::Node3D* const arc =
         E5Effect::spawn(slash_arc_, this, get_global_position() + godot::Vector3(0.0F, 1.2F, 0.0F));
@@ -2047,8 +2131,8 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
     }
     combat::blast(this, centre, blow.radius, damage);
     shake_ = std::max(shake_, blow.shake);
-    if (skill == gameplay::SkillId::Slash && combo_step_ >= 0) {
-        shake_ = std::max(shake_, combo_looks.at(static_cast<std::size_t>(combo_step_)).shake);
+    if (is_combo(skill) && combo_step_ >= 0) {
+        shake_ = std::max(shake_, look_of(skill, combo_step_).shake);
         // The finisher comes down out of the air: the ground answers.
         if (combo_step_ == gameplay::combo_length - 1 && landing_dust_.is_valid()) {
             E5Effect::spawn(landing_dust_, get_parent(),

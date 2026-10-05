@@ -42,6 +42,9 @@ public:
 
     // Advances the overlay's fade. Call once per physics step.
     void update(float delta_seconds);
+    // Stops and starts the animating itself: a body nobody is near enough to see move
+    // need not be posed every frame. It stays in the pose it had.
+    void set_active(bool active);
 
     [[nodiscard]] const godot::StringName& base_clip() const { return base_clip_; }
     [[nodiscard]] float base_scale() const { return base_scale_; }

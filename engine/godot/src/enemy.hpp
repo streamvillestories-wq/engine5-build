@@ -81,6 +81,9 @@ public:
     void take_damage_from_peer(float amount);
 
     [[nodiscard]] bool is_alive() const { return state_.phase != gameplay::EnemyPhase::Dead; }
+    // Far from every hero and with nothing to do, an enemy sleeps: it is not moved, not
+    // animated and asks nothing, until a hero comes near or something hurts it.
+    [[nodiscard]] bool is_asleep() const { return asleep_; }
     [[nodiscard]] bool is_aggro() const { return state_.aggro; }
     // Whether the model, as it is drawn, looks towards that place (within a quarter turn).
     // For tests: an enemy that has noticed the hero must face her.
@@ -230,6 +233,11 @@ private:
 
     // Damage that arrived since the last physics step.
     float pending_damage_ = 0.0F;
+    bool asleep_ = false;
+    float sleep_check_seconds_ = 0.0F; // until it looks again whether to sleep or wake
+    // Whether it should sleep now; looked at a few times a second, not every frame.
+    [[nodiscard]] bool should_sleep(float dt);
+    void set_asleep(bool asleep);
     float heaviest_pending_blow_ = 0.0F;
     float damage_taken_ = 0.0F;
     int death_count_ = 0;
