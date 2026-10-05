@@ -235,13 +235,14 @@ void E5Terrain::set_regions(const godot::PackedFloat32Array& regions) {
     }
 }
 
+// push_back takes a double (Apple's compiler refuses the silent widening of a float).
 godot::PackedFloat32Array E5Terrain::get_regions() const {
     godot::PackedFloat32Array regions;
     for (const gameplay::IslandRegion& region : params_.regions) {
-        regions.push_back(static_cast<float>(region.kind));
-        regions.push_back(region.x);
-        regions.push_back(region.z);
-        regions.push_back(region.radius);
+        regions.push_back(static_cast<double>(region.kind));
+        regions.push_back(static_cast<double>(region.x));
+        regions.push_back(static_cast<double>(region.z));
+        regions.push_back(static_cast<double>(region.radius));
     }
     return regions;
 }
@@ -313,10 +314,10 @@ void E5Terrain::set_hills(const godot::PackedFloat32Array& hills) {
 godot::PackedFloat32Array E5Terrain::get_hills() const {
     godot::PackedFloat32Array hills;
     for (const gameplay::IslandHill& hill : params_.hills) {
-        hills.push_back(hill.x);
-        hills.push_back(hill.z);
-        hills.push_back(hill.radius);
-        hills.push_back(hill.height);
+        hills.push_back(static_cast<double>(hill.x));
+        hills.push_back(static_cast<double>(hill.z));
+        hills.push_back(static_cast<double>(hill.radius));
+        hills.push_back(static_cast<double>(hill.height));
     }
     return hills;
 }
@@ -340,11 +341,11 @@ godot::Array E5Terrain::get_ridges() const {
     godot::Array ridges;
     for (const gameplay::IslandRidge& ridge : params_.ridges) {
         godot::PackedFloat32Array numbers;
-        numbers.push_back(ridge.height);
-        numbers.push_back(ridge.width);
+        numbers.push_back(static_cast<double>(ridge.height));
+        numbers.push_back(static_cast<double>(ridge.width));
         for (const gameplay::IslandPoint& point : ridge.points) {
-            numbers.push_back(point.x);
-            numbers.push_back(point.z);
+            numbers.push_back(static_cast<double>(point.x));
+            numbers.push_back(static_cast<double>(point.z));
         }
         ridges.push_back(numbers);
     }
