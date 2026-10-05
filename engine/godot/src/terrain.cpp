@@ -92,6 +92,33 @@ void E5Terrain::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_mountain_length"), &E5Terrain::get_mountain_length);
     ClassDB::bind_method(D_METHOD("set_mountain_direction", "radians"), &E5Terrain::set_mountain_direction);
     ClassDB::bind_method(D_METHOD("get_mountain_direction"), &E5Terrain::get_mountain_direction);
+    ClassDB::bind_method(D_METHOD("set_regions", "regions"), &E5Terrain::set_regions);
+    ClassDB::bind_method(D_METHOD("get_regions"), &E5Terrain::get_regions);
+    ClassDB::bind_method(D_METHOD("region_at", "world_x", "world_z"), &E5Terrain::region_at);
+    ClassDB::bind_method(D_METHOD("set_river", "points"), &E5Terrain::set_river);
+    ClassDB::bind_method(D_METHOD("get_river"), &E5Terrain::get_river);
+    ClassDB::bind_method(D_METHOD("set_river_width", "metres"), &E5Terrain::set_river_width);
+    ClassDB::bind_method(D_METHOD("get_river_width"), &E5Terrain::get_river_width);
+    ClassDB::bind_method(D_METHOD("set_lakes", "lakes"), &E5Terrain::set_lakes);
+    ClassDB::bind_method(D_METHOD("get_lakes"), &E5Terrain::get_lakes);
+    ClassDB::bind_method(D_METHOD("set_hills", "hills"), &E5Terrain::set_hills);
+    ClassDB::bind_method(D_METHOD("get_hills"), &E5Terrain::get_hills);
+    ClassDB::bind_method(D_METHOD("set_ridges", "ridges"), &E5Terrain::set_ridges);
+    ClassDB::bind_method(D_METHOD("get_ridges"), &E5Terrain::get_ridges);
+    ClassDB::bind_method(D_METHOD("set_rolling", "metres"), &E5Terrain::set_rolling);
+    ClassDB::bind_method(D_METHOD("get_rolling"), &E5Terrain::get_rolling);
+    ClassDB::bind_method(D_METHOD("set_sites", "sites"), &E5Terrain::set_sites);
+    ClassDB::bind_method(D_METHOD("get_sites"), &E5Terrain::get_sites);
+    ClassDB::bind_method(D_METHOD("set_islets", "islets"), &E5Terrain::set_islets);
+    ClassDB::bind_method(D_METHOD("get_islets"), &E5Terrain::get_islets);
+    ClassDB::bind_method(D_METHOD("set_bays", "bays"), &E5Terrain::set_bays);
+    ClassDB::bind_method(D_METHOD("get_bays"), &E5Terrain::get_bays);
+    ClassDB::bind_method(D_METHOD("set_cliffs", "cliffs"), &E5Terrain::set_cliffs);
+    ClassDB::bind_method(D_METHOD("get_cliffs"), &E5Terrain::get_cliffs);
+    ClassDB::bind_method(D_METHOD("set_mountain_pass", "pass"), &E5Terrain::set_mountain_pass);
+    ClassDB::bind_method(D_METHOD("get_mountain_pass"), &E5Terrain::get_mountain_pass);
+    ClassDB::bind_method(D_METHOD("river_distance_at", "world_x", "world_z"), &E5Terrain::river_distance_at);
+    ClassDB::bind_method(D_METHOD("lake_distance_at", "world_x", "world_z"), &E5Terrain::lake_distance_at);
     ClassDB::bind_method(D_METHOD("set_paths", "paths"), &E5Terrain::set_paths);
     ClassDB::bind_method(D_METHOD("get_paths"), &E5Terrain::get_paths);
     ClassDB::bind_method(D_METHOD("set_trails", "trails"), &E5Terrain::set_trails);
@@ -141,6 +168,20 @@ void E5Terrain::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "mountain_direction", godot::PROPERTY_HINT_RANGE,
                               "-180,180,1,radians_as_degrees"),
                  "set_mountain_direction", "get_mountain_direction");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_FLOAT32_ARRAY, "regions"), "set_regions", "get_regions");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::VECTOR2, "mountain_pass"), "set_mountain_pass", "get_mountain_pass");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_VECTOR2_ARRAY, "river"), "set_river", "get_river");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "river_width", godot::PROPERTY_HINT_RANGE, "1,40,0.5,suffix:m"),
+                 "set_river_width", "get_river_width");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_VECTOR3_ARRAY, "lakes"), "set_lakes", "get_lakes");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_VECTOR3_ARRAY, "islets"), "set_islets", "get_islets");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_VECTOR3_ARRAY, "sites"), "set_sites", "get_sites");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_FLOAT32_ARRAY, "hills"), "set_hills", "get_hills");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::ARRAY, "ridges"), "set_ridges", "get_ridges");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "rolling", godot::PROPERTY_HINT_RANGE, "0,6,0.1,suffix:m"),
+                 "set_rolling", "get_rolling");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_VECTOR3_ARRAY, "bays"), "set_bays", "get_bays");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::VECTOR3, "cliffs"), "set_cliffs", "get_cliffs");
     ADD_PROPERTY(PropertyInfo(godot::Variant::ARRAY, "paths"), "set_paths", "get_paths");
     ADD_PROPERTY(PropertyInfo(godot::Variant::ARRAY, "trails"), "set_trails", "get_trails");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "trail_grade", godot::PROPERTY_HINT_RANGE, "0.05,1,0.01"),
@@ -153,8 +194,241 @@ void E5Terrain::_bind_methods() {
                  "set_material", "get_material");
 }
 
+namespace {
+
+constexpr float radians_per_degree = 3.14159265F / 180.0F;
+
+// 0 at `from`, 1 at `to`, smooth between; `from` may be the larger.
+float smooth_step_between(float from, float to, float value) {
+    const float t = std::clamp((value - from) / (to - from), 0.0F, 1.0F);
+    return t * t * (3.0F - 2.0F * t);
+}
+
+std::vector<gameplay::IslandDisc> discs_from(const godot::PackedVector3Array& values) {
+    std::vector<gameplay::IslandDisc> discs;
+    for (const godot::Vector3& value : values) {
+        discs.push_back({.x = static_cast<float>(value.x),
+                         .z = static_cast<float>(value.y),
+                         .radius = static_cast<float>(value.z)});
+    }
+    return discs;
+}
+
+godot::PackedVector3Array discs_to(const std::vector<gameplay::IslandDisc>& discs) {
+    godot::PackedVector3Array values;
+    for (const gameplay::IslandDisc& disc : discs) {
+        values.push_back(godot::Vector3(disc.x, disc.z, disc.radius));
+    }
+    return values;
+}
+
+} // namespace
+
+void E5Terrain::set_regions(const godot::PackedFloat32Array& regions) {
+    params_.regions.clear();
+    for (std::int64_t index = 0; index + 3 < regions.size(); index += 4) {
+        const int kind = std::clamp(static_cast<int>(regions[index]), 0, 3);
+        params_.regions.push_back({.kind = static_cast<gameplay::IslandRegionKind>(kind),
+                                   .x = regions[index + 1],
+                                   .z = regions[index + 2],
+                                   .radius = regions[index + 3]});
+    }
+}
+
+godot::PackedFloat32Array E5Terrain::get_regions() const {
+    godot::PackedFloat32Array regions;
+    for (const gameplay::IslandRegion& region : params_.regions) {
+        regions.push_back(static_cast<float>(region.kind));
+        regions.push_back(region.x);
+        regions.push_back(region.z);
+        regions.push_back(region.radius);
+    }
+    return regions;
+}
+
+int E5Terrain::region_at(float world_x, float world_z) const {
+    const godot::Vector3 origin = get_global_position();
+    return static_cast<int>(gameplay::island_region(params_, world_x - static_cast<float>(origin.x),
+                                                    world_z - static_cast<float>(origin.z)));
+}
+
+void E5Terrain::build_regions(int cells_across) {
+    const godot::Ref<godot::ShaderMaterial> material = material_;
+    if (material.is_null()) {
+        return;
+    }
+    // A pixel every two metres is plenty: the borders are tens of metres wide.
+    const int size = std::max(cells_across / 2, 2);
+    godot::PackedByteArray bytes;
+    bytes.resize(static_cast<std::int64_t>(size) * size * 3);
+    const float side = static_cast<float>(cells_across);
+    for (int row = 0; row < size; ++row) {
+        for (int column = 0; column < size; ++column) {
+            const float x = (static_cast<float>(column) + 0.5F) / static_cast<float>(size) * side - side * 0.5F;
+            const float z = (static_cast<float>(row) + 0.5F) / static_cast<float>(size) * side - side * 0.5F;
+            const gameplay::RegionShares shares = gameplay::island_regions(params_, x, z);
+            const std::int64_t at = (static_cast<std::int64_t>(row) * size + column) * 3;
+            bytes[at] = static_cast<std::uint8_t>(std::lround(shares.pine * 255.0F));
+            bytes[at + 1] = static_cast<std::uint8_t>(std::lround(shares.dry * 255.0F));
+            bytes[at + 2] = static_cast<std::uint8_t>(std::lround(shares.marsh * 255.0F));
+        }
+    }
+    const godot::Ref<godot::Image> image =
+        godot::Image::create_from_data(size, size, false, godot::Image::FORMAT_RGB8, bytes);
+    material->set_shader_parameter("region_picture", godot::ImageTexture::create_from_image(image));
+    material->set_shader_parameter("region_picture_side", side);
+}
+
+void E5Terrain::set_river(const godot::PackedVector2Array& points) {
+    params_.river.clear();
+    for (const godot::Vector2& point : points) {
+        params_.river.push_back({.x = static_cast<float>(point.x), .z = static_cast<float>(point.y)});
+    }
+}
+
+godot::PackedVector2Array E5Terrain::get_river() const {
+    godot::PackedVector2Array points;
+    for (const gameplay::IslandPoint& point : params_.river) {
+        points.push_back(godot::Vector2(point.x, point.z));
+    }
+    return points;
+}
+
+void E5Terrain::set_lakes(const godot::PackedVector3Array& lakes) {
+    params_.lakes = discs_from(lakes);
+}
+
+godot::PackedVector3Array E5Terrain::get_lakes() const {
+    return discs_to(params_.lakes);
+}
+
+void E5Terrain::set_hills(const godot::PackedFloat32Array& hills) {
+    params_.hills.clear();
+    for (std::int64_t index = 0; index + 3 < hills.size(); index += 4) {
+        params_.hills.push_back(
+            {.x = hills[index], .z = hills[index + 1], .radius = hills[index + 2], .height = hills[index + 3]});
+    }
+}
+
+godot::PackedFloat32Array E5Terrain::get_hills() const {
+    godot::PackedFloat32Array hills;
+    for (const gameplay::IslandHill& hill : params_.hills) {
+        hills.push_back(hill.x);
+        hills.push_back(hill.z);
+        hills.push_back(hill.radius);
+        hills.push_back(hill.height);
+    }
+    return hills;
+}
+
+void E5Terrain::set_ridges(const godot::Array& ridges) {
+    params_.ridges.clear();
+    for (const godot::Variant& entry : ridges) {
+        const godot::PackedFloat32Array numbers = entry;
+        if (numbers.size() < 6) {
+            continue;
+        }
+        gameplay::IslandRidge ridge{.points = {}, .width = numbers[1], .height = numbers[0]};
+        for (std::int64_t index = 2; index + 1 < numbers.size(); index += 2) {
+            ridge.points.push_back({.x = numbers[index], .z = numbers[index + 1]});
+        }
+        params_.ridges.push_back(std::move(ridge));
+    }
+}
+
+godot::Array E5Terrain::get_ridges() const {
+    godot::Array ridges;
+    for (const gameplay::IslandRidge& ridge : params_.ridges) {
+        godot::PackedFloat32Array numbers;
+        numbers.push_back(ridge.height);
+        numbers.push_back(ridge.width);
+        for (const gameplay::IslandPoint& point : ridge.points) {
+            numbers.push_back(point.x);
+            numbers.push_back(point.z);
+        }
+        ridges.push_back(numbers);
+    }
+    return ridges;
+}
+
+void E5Terrain::set_sites(const godot::PackedVector3Array& sites) {
+    params_.sites = discs_from(sites);
+}
+
+godot::PackedVector3Array E5Terrain::get_sites() const {
+    return discs_to(params_.sites);
+}
+
+void E5Terrain::set_islets(const godot::PackedVector3Array& islets) {
+    params_.islets = discs_from(islets);
+}
+
+godot::PackedVector3Array E5Terrain::get_islets() const {
+    return discs_to(params_.islets);
+}
+
+void E5Terrain::set_bays(const godot::PackedVector3Array& bays) {
+    params_.bays.clear();
+    for (const godot::Vector3& bay : bays) {
+        params_.bays.push_back({.direction = static_cast<float>(bay.x) * radians_per_degree,
+                                .width = static_cast<float>(bay.y) * radians_per_degree,
+                                .depth = static_cast<float>(bay.z)});
+    }
+}
+
+godot::PackedVector3Array E5Terrain::get_bays() const {
+    godot::PackedVector3Array bays;
+    for (const gameplay::IslandBay& bay : params_.bays) {
+        bays.push_back(godot::Vector3(bay.direction / radians_per_degree, bay.width / radians_per_degree, bay.depth));
+    }
+    return bays;
+}
+
+void E5Terrain::set_cliffs(const godot::Vector3& cliffs) {
+    params_.cliff_from = static_cast<float>(cliffs.x) * radians_per_degree;
+    params_.cliff_to = static_cast<float>(cliffs.y) * radians_per_degree;
+    params_.cliff_height = static_cast<float>(cliffs.z);
+}
+
+godot::Vector3 E5Terrain::get_cliffs() const {
+    return {params_.cliff_from / radians_per_degree, params_.cliff_to / radians_per_degree, params_.cliff_height};
+}
+
+float E5Terrain::river_distance_at(float world_x, float world_z) const {
+    const godot::Vector3 origin = get_global_position();
+    return gameplay::island_river_distance(params_, world_x - static_cast<float>(origin.x),
+                                           world_z - static_cast<float>(origin.z));
+}
+
+float E5Terrain::lake_distance_at(float world_x, float world_z) const {
+    const godot::Vector3 origin = get_global_position();
+    return gameplay::island_lake_distance(params_, world_x - static_cast<float>(origin.x),
+                                          world_z - static_cast<float>(origin.z));
+}
+
 float E5Terrain::ground(float x, float z) const {
-    return trail_field_.apply(x, z, gameplay::island_height(params_, x, z));
+    float height = trail_field_.apply(x, z, gameplay::island_height(params_, x, z));
+    // A road keeps its feet dry: where it runs through shallows (a marsh's pools, the wet
+    // banks of a river) the ground under it is raised to a causeway. Not in the river or
+    // a lake themselves: there a bridge belongs.
+    constexpr float causeway_height = 0.6F;
+    constexpr float causeway_reach = 7.0F;
+    if (height < causeway_height && height > -2.0F && path_count_ > 0) {
+        float nearest = causeway_reach;
+        for (int index = 0; index < path_count_; ++index) {
+            nearest =
+                std::min(nearest, gameplay::distance_to_path(smoothed_paths_[static_cast<std::size_t>(index)], x, z));
+        }
+        if (nearest < causeway_reach) {
+            const float open_water =
+                std::min(gameplay::island_river_distance(params_, x, z) - params_.river_width * 0.5F,
+                         gameplay::island_lake_distance(params_, x, z));
+            const float raised =
+                smooth_step_between(causeway_reach, 2.5F, nearest) * smooth_step_between(0.5F, 3.0F, open_water);
+            height = std::lerp(height, causeway_height, raised);
+        }
+    }
+    return height;
 }
 
 int E5Terrain::cells_across() const {
@@ -436,6 +710,7 @@ void E5Terrain::_ready() {
     const int chunks_across = cells_across / chunk_cells;
     const int first = -cells_across / 2;
     build_paths(cells_across);
+    build_regions(cells_across);
     for (int row = 0; row < chunks_across; ++row) {
         for (int column = 0; column < chunks_across; ++column) {
             build_chunk(first + column * chunk_cells, first + row * chunk_cells, chunk_cells);

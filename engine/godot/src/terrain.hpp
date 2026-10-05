@@ -82,6 +82,49 @@ public:
     [[nodiscard]] float get_mountain_length() const { return params_.mountain_length; }
     void set_mountain_direction(float radians) { params_.mountain_direction = radians; }
     [[nodiscard]] float get_mountain_direction() const { return params_.mountain_direction; }
+    // Water, coast and the pass (e5/gameplay/island.hpp). Directions in degrees: 0 is east,
+    // 90 south, 180 west, 270 north.
+    void set_river(const godot::PackedVector2Array& points);
+    [[nodiscard]] godot::PackedVector2Array get_river() const;
+    void set_river_width(float metres) { params_.river_width = metres; }
+    [[nodiscard]] float get_river_width() const { return params_.river_width; }
+    // Each (x, z, radius).
+    void set_lakes(const godot::PackedVector3Array& lakes);
+    [[nodiscard]] godot::PackedVector3Array get_lakes() const;
+    // The lowland's relief. Hills: four numbers each (x, z, radius, height). Ridges: one list
+    // of numbers each (height, width to either side, then x, z of every point along it); a
+    // negative height cuts a valley. Rolling: metres of gentle up and down everywhere.
+    void set_hills(const godot::PackedFloat32Array& hills);
+    [[nodiscard]] godot::PackedFloat32Array get_hills() const;
+    void set_ridges(const godot::Array& ridges);
+    [[nodiscard]] godot::Array get_ridges() const;
+    void set_rolling(float metres) { params_.rolling = metres; }
+    [[nodiscard]] float get_rolling() const { return params_.rolling; }
+    // Level building ground, each (x, z, radius).
+    void set_sites(const godot::PackedVector3Array& sites);
+    [[nodiscard]] godot::PackedVector3Array get_sites() const;
+    void set_islets(const godot::PackedVector3Array& islets);
+    [[nodiscard]] godot::PackedVector3Array get_islets() const;
+    // Each (direction, width to either side, depth as a share of the radius).
+    void set_bays(const godot::PackedVector3Array& bays);
+    [[nodiscard]] godot::PackedVector3Array get_bays() const;
+    // (from, to, height in metres): cliffs along the coast from one direction round to the other.
+    void set_cliffs(const godot::Vector3& cliffs);
+    [[nodiscard]] godot::Vector3 get_cliffs() const;
+    // (metres along the crest from its middle, width): a pass through the mountains.
+    void set_mountain_pass(const godot::Vector2& pass) {
+        params_.pass_along = static_cast<float>(pass.x);
+        params_.pass_width = static_cast<float>(pass.y);
+    }
+    [[nodiscard]] godot::Vector2 get_mountain_pass() const { return {params_.pass_along, params_.pass_width}; }
+    // The regions, four numbers each: kind (1 pine forest, 2 dry highland, 3 marsh), x, z, radius.
+    void set_regions(const godot::PackedFloat32Array& regions);
+    [[nodiscard]] godot::PackedFloat32Array get_regions() const;
+    // The kind of country at a place: 0 meadow, 1 pine forest, 2 dry highland, 3 marsh.
+    [[nodiscard]] int region_at(float world_x, float world_z) const;
+    // Metres to the middle of the river and to the nearest lake's shore (negative in it).
+    [[nodiscard]] float river_distance_at(float world_x, float world_z) const;
+    [[nodiscard]] float lake_distance_at(float world_x, float world_z) const;
     void set_paths(const godot::Array& paths) { paths_ = paths; }
     [[nodiscard]] godot::Array get_paths() const { return paths_; }
     void set_trails(const godot::Array& trails) { trails_ = trails; }
@@ -115,6 +158,8 @@ private:
     void build_collision(int cells_across);
     // Smooths the paths and hands the material a picture of where they run.
     void build_paths(int cells_across);
+    // Hands the material a picture of the regions: red pine forest, green dry highland, blue marsh.
+    void build_regions(int cells_across);
     // The height of the ground at a place in the node's space, trails cut in.
     [[nodiscard]] float ground(float x, float z) const;
     [[nodiscard]] int cells_across() const;

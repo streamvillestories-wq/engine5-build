@@ -157,7 +157,9 @@ Result<void> apply_option(RuntimeConfig& config, std::string_view key, OptionVal
         return signed_number_option(key, value).transform([&config](float metres) { config.start_z = metres; });
     }
     if (key == "--camera-yaw") {
-        return number_option(key, value).transform([&config](float degrees) { config.camera_yaw_degrees = degrees; });
+        return signed_number_option(key, value).transform([&config](float degrees) {
+            config.camera_yaw_degrees = degrees;
+        });
     }
     if (key == "--benchmark-warmup") {
         return number_option(key, value).transform([&config](float s) { config.benchmark_warmup_seconds = s; });

@@ -106,6 +106,8 @@ void E5Forest::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_near_distance"), &E5Forest::get_near_distance);
     ClassDB::bind_method(D_METHOD("set_far_distance", "metres"), &E5Forest::set_far_distance);
     ClassDB::bind_method(D_METHOD("get_far_distance"), &E5Forest::get_far_distance);
+    ClassDB::bind_method(D_METHOD("set_region", "region"), &E5Forest::set_region);
+    ClassDB::bind_method(D_METHOD("get_region"), &E5Forest::get_region);
     ClassDB::bind_method(D_METHOD("set_min_height", "metres"), &E5Forest::set_min_height);
     ClassDB::bind_method(D_METHOD("get_min_height"), &E5Forest::get_min_height);
     ClassDB::bind_method(D_METHOD("set_max_height", "metres"), &E5Forest::set_max_height);
@@ -146,6 +148,8 @@ void E5Forest::_bind_methods() {
                  "set_near_distance", "get_near_distance");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "far_distance", godot::PROPERTY_HINT_RANGE, "0,200,0.5,suffix:m"),
                  "set_far_distance", "get_far_distance");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "region", godot::PROPERTY_HINT_RANGE, "-1,3,1"), "set_region",
+                 "get_region");
     ADD_PROPERTY(
         PropertyInfo(godot::Variant::FLOAT, "min_height", godot::PROPERTY_HINT_RANGE, "-100,1000,0.1,suffix:m"),
         "set_min_height", "get_min_height");
@@ -299,6 +303,33 @@ void E5Forest::build_cells(const std::vector<Planted>& plants) {
     }
 
     const float cell_radius = cell_size_ * half_diagonal;
+    // Far away the cards are batched again, by blocks many cells wide: a wide view over a
+    // large island was thousands of draw calls of a few cards each. A block takes over from
+    // where its middle is `far_cards_from` away; the cells go on a block's radius further,
+    // so that every card is drawn by one or the other, and in between by both, in the same
+    // place and looking the same.
+    constexpr float block_size = 64.0F;
+    constexpr float far_cards_from = 100.0F;
+    constexpr float block_radius = block_size * half_diagonal;
+    std::map<CellKey, Cell> blocks;
+    for (const Planted& plant : plants) {
+        if (species_.at(plant.species).card.is_valid()) {
+            blocks[{static_cast<int>(std::floor(plant.local.origin.x / block_size)),
+                    static_cast<int>(std::floor(plant.local.origin.z / block_size)), plant.species}]
+                .plants.push_back(plant.local);
+        }
+    }
+    for (const auto& [key, block] : blocks) {
+        const auto& [column, row, species_index] = key;
+        const godot::Vector3 centre((static_cast<float>(column) + 0.5F) * block_size, block.plants.front().origin.y,
+                                    (static_cast<float>(row) + 0.5F) * block_size);
+        godot::MultiMeshInstance3D* const cards = make_batch(species_.at(species_index).card, block.plants, centre);
+        cards->set_cast_shadows_setting(godot::GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+        cards->set_visibility_range_begin(far_cards_from);
+        cards->set_visibility_range_fade_mode(godot::GeometryInstance3D::VISIBILITY_RANGE_FADE_DISABLED);
+        add_child(cards);
+    }
+
     for (const auto& [key, cell] : cells) {
         const auto& [column, row, species_index] = key;
         const Species& species = species_.at(species_index);
@@ -313,6 +344,8 @@ void E5Forest::build_cells(const std::vector<Planted>& plants) {
             // the shader from the player, hence the camera's reach.
             cards->set_visibility_range_begin(std::max(
                 species.impostor_distance - half_band(species.impostor_distance) - cell_radius - camera_reach, 0.0F));
+            // Further off the blocks below draw the same cards in far fewer batches.
+            cards->set_visibility_range_end(far_cards_from + block_radius + cell_radius);
             cards->set_visibility_range_fade_mode(godot::GeometryInstance3D::VISIBILITY_RANGE_FADE_DISABLED);
             add_child(cards);
         }
@@ -345,6 +378,9 @@ std::optional<float> E5Forest::ground_for(const E5Terrain& terrain, float world_
     const float slope = terrain.slope_at(world_x, world_z);
     if (height < min_height_ || height > max_height_ || slope > max_slope_) {
         return std::nullopt;
+    }
+    if (region_ >= 0 && terrain.region_at(world_x, world_z) != region_) {
+        return std::nullopt; // this forest belongs to another kind of country
     }
     const float to_path = terrain.path_distance_at(world_x, world_z);
     if (to_path < path_clearance_ || (path_reach_ > 0.0F && to_path > path_reach_)) {

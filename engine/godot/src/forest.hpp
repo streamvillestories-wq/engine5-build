@@ -74,6 +74,10 @@ public:
     [[nodiscard]] float get_near_distance() const { return near_distance_; }
     void set_far_distance(float metres) { far_distance_ = metres; }
     [[nodiscard]] float get_far_distance() const { return far_distance_; }
+    // Only in one kind of country: 0 meadow, 1 pine forest, 2 dry highland, 3 marsh
+    // (E5Terrain.region_at); -1 = anywhere.
+    void set_region(int region) { region_ = region; }
+    [[nodiscard]] int get_region() const { return region_; }
     void set_min_height(float metres) { min_height_ = metres; }
     [[nodiscard]] float get_min_height() const { return min_height_; }
     void set_max_height(float metres) { max_height_ = metres; }
@@ -152,6 +156,7 @@ private:
     float near_distance_ = 0.0F; // metres: full mesh up to here
     float far_distance_ = 0.0F;  // metres: mid mesh up to here
     // On a terrain: plants grow only between these heights (world space) and on ground no steeper than this.
+    int region_ = -1;
     float min_height_ = 1.2F;     // metres; above the beach
     float max_height_ = 1000.0F;  // metres
     float max_slope_ = 0.55F;     // 0 = level, 1 = 45 degrees
