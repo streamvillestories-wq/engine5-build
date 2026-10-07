@@ -462,6 +462,9 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("select_skill", "slot"), &E5PlayerController::select_skill);
     ClassDB::bind_method(D_METHOD("get_selected_skill"), &E5PlayerController::get_selected_skill);
     ClassDB::bind_method(D_METHOD("get_charge"), &E5PlayerController::get_charge);
+    ClassDB::bind_method(D_METHOD("get_cast_progress"), &E5PlayerController::get_cast_progress);
+    ClassDB::bind_method(D_METHOD("get_cast_seconds"), &E5PlayerController::get_cast_seconds);
+    ClassDB::bind_method(D_METHOD("get_cast_power"), &E5PlayerController::get_cast_power);
     ClassDB::bind_method(D_METHOD("get_skill_cooldown", "slot"), &E5PlayerController::get_skill_cooldown);
     ClassDB::bind_method(D_METHOD("get_skill_cooldown_seconds", "slot"),
                          &E5PlayerController::get_skill_cooldown_seconds);
@@ -1106,6 +1109,32 @@ void E5PlayerController::credit_damage(float damage, bool killed) {
     if (!remote_) {
         charge_ = gameplay::charge_after(charge_, damage, killed);
     }
+}
+
+float E5PlayerController::get_cast_progress() const {
+    const float seconds = get_cast_seconds();
+    if (seconds <= 0.0F) {
+        return -1.0F;
+    }
+    if (bow_.phase == gameplay::BowPhase::Aiming) {
+        return 1.0F;
+    }
+    const float waited = bow_.phase == gameplay::BowPhase::Drawing ? bow_.phase_seconds : action_.elapsed;
+    return std::clamp(waited / seconds, 0.0F, 1.0F);
+}
+
+float E5PlayerController::get_cast_seconds() const {
+    if (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming) {
+        return bow_timings_.draw_seconds;
+    }
+    if (action_.active && !is_combo(action_skill_) && action_.elapsed < action_timings_.strike_at_seconds) {
+        return action_timings_.strike_at_seconds;
+    }
+    return 0.0F;
+}
+
+float E5PlayerController::get_cast_power() const {
+    return bow_.phase == gameplay::BowPhase::Aiming ? bow_.charge : 0.0F;
 }
 
 float E5PlayerController::get_skill_cooldown(int slot) const {

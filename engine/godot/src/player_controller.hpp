@@ -184,6 +184,13 @@ public:
     [[nodiscard]] float get_skill_cooldown_seconds(int slot) const; // of how many
     [[nodiscard]] bool skill_takes_charge(int slot) const;
     [[nodiscard]] bool is_skill_ready(int slot) const;
+    // The draw or cast under way, for the bar over the skills. Progress: 0..1 up to the moment
+    // a drawn bow may be let go or a spell strikes; -1 when there is nothing to wait for (a
+    // weapon's blows are too quick for a bar). Seconds: how long that wait is in all. Power:
+    // 0..1, what a skill that charges has built up at full draw.
+    [[nodiscard]] float get_cast_progress() const;
+    [[nodiscard]] float get_cast_seconds() const;
+    [[nodiscard]] float get_cast_power() const;
     // What she did to an enemy: fills the charge. Called by whatever does damage for her.
     void credit_damage(float damage, bool killed);
     // Tests that use one skill again and again switch the waiting off.
