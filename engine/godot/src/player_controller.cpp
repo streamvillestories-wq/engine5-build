@@ -505,6 +505,9 @@ void E5PlayerController::_bind_methods() {
     ADD_PROPERTY(
         PropertyInfo(godot::Variant::FLOAT, "mouse_sensitivity", godot::PROPERTY_HINT_RANGE, "0.0001,0.02,0.0001"),
         "set_mouse_sensitivity", "get_mouse_sensitivity");
+    ClassDB::bind_method(D_METHOD("set_quick_cast", "enabled"), &E5PlayerController::set_quick_cast);
+    ClassDB::bind_method(D_METHOD("get_quick_cast"), &E5PlayerController::get_quick_cast);
+    ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "quick_cast"), "set_quick_cast", "get_quick_cast");
     ADD_PROPERTY(
         PropertyInfo(godot::Variant::FLOAT, "aim_move_speed", godot::PROPERTY_HINT_RANGE, "0,10,0.1,suffix:m/s"),
         "set_aim_move_speed", "get_aim_move_speed");
@@ -798,6 +801,9 @@ void E5PlayerController::_physics_process(double delta) {
     // the button is let go; with nothing going on, the left one comes first.
     const bool standard_pressed = attack_held();
     const bool selected_pressed = aim_held();
+    if (quick_key_slot_ >= 0 && !selected_pressed) {
+        quick_key_slot_ = -1; // the key was let go: it is the right button no longer
+    }
     const bool held =
         use_button_ == UseButton::Standard ? standard_pressed : use_button_ == UseButton::Selected && selected_pressed;
     if (!held && !is_busy()) {
@@ -1188,7 +1194,13 @@ void E5PlayerController::take_damage(float amount) {
 }
 
 bool E5PlayerController::aim_held() const {
-    return !input_blocked_ && godot::Input::get_singleton()->is_action_pressed(action_aim_);
+    if (input_blocked_) {
+        return false;
+    }
+    godot::Input* const input = godot::Input::get_singleton();
+    return input->is_action_pressed(action_aim_) ||
+           (quick_key_slot_ >= 0 &&
+            input->is_action_pressed(skill_actions_.at(static_cast<std::size_t>(quick_key_slot_))));
 }
 
 godot::String E5PlayerController::get_last_skill() const {
@@ -2467,6 +2479,10 @@ void E5PlayerController::_unhandled_input(const godot::Ref<godot::InputEvent>& e
         for (int slot = 0; slot < actions::skill_slot_count; ++slot) {
             if (event->is_action(skill_actions_.at(static_cast<std::size_t>(slot)))) {
                 select_skill(slot);
+                // Quick cast: if the skill was taken, the key now counts as the right button.
+                if (quick_cast_ && skills_.selected_index() == static_cast<std::size_t>(slot) && !is_busy()) {
+                    quick_key_slot_ = slot;
+                }
                 return;
             }
         }

@@ -84,6 +84,10 @@ public:
     [[nodiscard]] float get_turn_speed() const { return turn_speed_; }
     void set_mouse_sensitivity(float radians_per_pixel) { mouse_sensitivity_ = radians_per_pixel; }
     [[nodiscard]] float get_mouse_sensitivity() const { return mouse_sensitivity_; }
+    // Quick cast (a setting): a number key chooses its skill and uses it at once, the key
+    // doing what the right mouse button does: held it draws the bow, let go it shoots.
+    void set_quick_cast(bool enabled) { quick_cast_ = enabled; }
+    [[nodiscard]] bool get_quick_cast() const { return quick_cast_; }
     void set_aim_move_speed(float speed) { aim_move_speed_ = speed; }
     [[nodiscard]] float get_aim_move_speed() const { return aim_move_speed_; }
     void set_arrow_speed(float speed) { arrow_speed_ = speed; }
@@ -355,6 +359,8 @@ private:
     float model_yaw_ = 0.0F;
     float turn_speed_ = 12.0F; // rad/s: a half turn in about a quarter second
     float mouse_sensitivity_ = 0.0022F;
+    bool quick_cast_ = false;
+    int quick_key_slot_ = -1; // the number key that is held as the right button, or -1
     bool capture_mouse_on_ready_ = true;
     bool remote_ = false;
     bool has_net_state_ = false;
