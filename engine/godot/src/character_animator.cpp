@@ -148,7 +148,7 @@ void CharacterAnimator::set_base(const godot::StringName& clip, float playback_s
     }
     if (clip != base_clip_) {
         const bool usual = std::abs(fade_seconds - static_cast<float>(crossfade_seconds)) < 1e-4F;
-        base_selector_->set_xfade_time(fade_seconds);
+        base_selector_->set_xfade_time(static_cast<double>(fade_seconds));
         base_selector_->set_xfade_curve(usual ? godot::Ref<godot::Curve>() : eased_);
         tree_->set("parameters/base/transition_request", godot::String(clip));
         base_clip_ = clip;
