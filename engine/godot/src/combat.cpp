@@ -1,6 +1,8 @@
 #include "combat.hpp"
 
+#include "effect.hpp"
 #include "enemy.hpp"
+#include "lightning_arc.hpp"
 #include "player_controller.hpp"
 #include "target.hpp"
 
@@ -8,6 +10,7 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <algorithm>
+#include <vector>
 
 namespace e5::bridge::combat {
 namespace {
@@ -47,6 +50,39 @@ bool hit(godot::Object* struck, const godot::Vector3& position, float damage, in
         return true;
     }
     return false;
+}
+
+int chain(godot::Node* parent, const godot::Vector3& from, godot::Object* first, float damage, int jumps, float reach,
+          const godot::Color& colour, const godot::Ref<godot::PackedScene>& effect) {
+    if (parent == nullptr || !parent->is_inside_tree()) {
+        return 0;
+    }
+    std::vector<E5Enemy*> untouched;
+    const godot::TypedArray<godot::Node> enemies = parent->get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy != nullptr && enemy->is_alive() && enemy != first) {
+            untouched.push_back(enemy);
+        }
+    }
+    godot::Vector3 current = from;
+    int reached = 0;
+    for (int jump = 0; jump < jumps && !untouched.empty(); ++jump) {
+        const auto nearest = std::ranges::min_element(untouched, {}, [&current](const E5Enemy* enemy) {
+            return enemy->get_aim_point().distance_squared_to(current);
+        });
+        const godot::Vector3 body = (*nearest)->get_aim_point();
+        if (body.distance_to(current) > reach) {
+            break;
+        }
+        E5LightningArc::spawn(parent, current, body, colour);
+        E5Effect::spawn(effect, parent, body);
+        hit(*nearest, body, damage);
+        current = body;
+        untouched.erase(nearest);
+        ++reached;
+    }
+    return reached;
 }
 
 int blast(godot::Node* context, const godot::Vector3& centre, float radius, float damage, int score_multiplier) {

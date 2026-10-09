@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/variant/rid.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
 namespace e5::bridge {
@@ -42,6 +43,19 @@ public:
     void set_damage(float damage) { damage_ = damage; }
     // Effect played where the arrow lands (also set by set_power).
     void set_impact_effect(const godot::Ref<godot::PackedScene>& effect) { impact_effect_ = effect; }
+    // What else an arrow does where it strikes (the archer's newer skills).
+    enum class Special : unsigned char {
+        None,
+        Venom,   // leaves a cloud that hurts what stands in it, and stays on the enemy it struck
+        Gale,    // goes through enemies, throwing each back, and only sticks in the world
+        Storm,   // lightning leaps on to the enemies nearby
+        Bramble, // brambles hold every enemy around the place
+    };
+    // `damage`: of the cloud's ticks, or of each leap of the lightning. `first`: the cloud, the
+    // strike at each enemy the lightning reaches, the burst of leaves. `second`: the cage of
+    // brambles round each enemy held. Call before launch.
+    void set_special(Special special, float damage, const godot::Ref<godot::PackedScene>& first,
+                     const godot::Ref<godot::PackedScene>& second = {});
     // Seconds after which an arrow that has hit nothing is removed.
     void set_flight_lifetime(double seconds) { flight_lifetime_ = seconds; }
 
@@ -53,6 +67,9 @@ protected:
 
 private:
     void stick(const godot::Vector3& hit_position, const godot::Vector3& direction, godot::Object* collider);
+    // A gale arrow meeting an enemy: hurts it, throws it back and flies on. False if it does not go through.
+    bool pierce(const godot::Vector3& hit_position, const godot::Vector3& direction, godot::Object* collider);
+    void leave_behind(const godot::Vector3& hit_position, godot::Object* collider);
 
     gameplay::Projectile projectile_;
     godot::RID shooter_;
@@ -62,7 +79,12 @@ private:
     float blast_radius_ = 0.0F;
     float damage_ = 20.0F;
     godot::Ref<godot::PackedScene> impact_effect_;
-    godot::Node3D* trail_ = nullptr; // non-owning child
+    Special special_ = Special::None;
+    float special_damage_ = 0.0F;
+    godot::Ref<godot::PackedScene> special_first_;
+    godot::Ref<godot::PackedScene> special_second_;
+    godot::TypedArray<godot::RID> passed_; // the enemies a gale arrow has gone through
+    godot::Node3D* trail_ = nullptr;       // non-owning child
     double age_seconds_ = 0.0;
     double flight_lifetime_ = 6.0;
 };

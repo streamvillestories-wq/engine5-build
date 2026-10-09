@@ -93,6 +93,10 @@ Result<void> apply_option(RuntimeConfig& config, std::string_view key, OptionVal
         config.cooldowns = true;
         return {};
     }
+    if (key == "--auto-walk") {
+        config.auto_walk = true;
+        return {};
+    }
     if (key == "--auto-block") {
         config.auto_block = true;
         return {};
@@ -140,8 +144,8 @@ Result<void> apply_option(RuntimeConfig& config, std::string_view key, OptionVal
     }
     if (key == "--auto-skill") {
         return number_option(key, value).and_then([&config, key](float slot) -> Result<void> {
-            if (slot < 1.0F || slot > 10.0F || slot != std::floor(slot)) {
-                return fail(ErrorCode::InvalidArgument, std::format("option '{}' expects a slot from 1 to 10", key));
+            if (slot < 1.0F || slot > 12.0F || slot != std::floor(slot)) {
+                return fail(ErrorCode::InvalidArgument, std::format("option '{}' expects a slot from 1 to 12", key));
             }
             config.auto_skill = static_cast<int>(slot);
             return {};

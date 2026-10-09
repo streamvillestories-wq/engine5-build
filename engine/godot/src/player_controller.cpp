@@ -15,6 +15,7 @@
 #include "input_actions.hpp"
 #include "inventory.hpp"
 #include "lightning_arc.hpp"
+#include "lingering.hpp"
 #include "skill_bar_hud.hpp"
 #include "spell_bolt.hpp"
 #include "target.hpp"
@@ -77,6 +78,10 @@ constexpr float aim_shoulder_offset = 0.45F;  // metres to the right
 constexpr float aim_camera_distance = 1.7F;   // metres behind
 constexpr float aim_camera_blend_rate = 8.0F; // 1/s
 constexpr float aim_ray_length = 200.0F;      // metres
+constexpr float dodge_hand_over_seconds = 0.18F;
+constexpr float usual_fade_seconds = 0.2F;     // from one whole-body clip to the next
+constexpr float landing_fade_seconds = 0.38F;  // out of the jump clip
+constexpr float dodge_cooldown_seconds = 0.8F; // from the end of one dodge to the start of the next
 // Whoever stands this close ahead of her chest is what she shoots at, whatever the crosshair covers.
 constexpr float point_blank_reach = 2.6F;  // metres
 constexpr float point_blank_height = 1.2F; // metres above her feet
@@ -101,8 +106,53 @@ constexpr float rain_signal_arrow_speed = 60.0F;
 constexpr double rain_signal_arrow_seconds = 0.6;
 constexpr float tip_glow_particle_share = 0.2F;
 constexpr int fan_arrow_count = 5;
-constexpr float fan_spread = 0.42F;           // radians between the outermost arrows, about 24 degrees
-constexpr float fire_blast_radius = 3.0F;     // metres
+constexpr float fan_spread = 0.42F;       // radians between the outermost arrows, about 24 degrees
+constexpr float fire_blast_radius = 3.0F; // metres
+
+// The archer's newer arrows (to choose from): what each carries, shows and leaves behind. The
+// scenes are named here and not set on the hero: there may be fewer of these skills soon.
+struct SpecialArrow {
+    gameplay::SkillId skill;
+    E5Arrow::Special special;
+    const char* trail;
+    const char* impact;
+    const char* first;  // see E5Arrow::set_special
+    const char* second; //
+};
+constexpr std::array special_arrows{
+    SpecialArrow{.skill = gameplay::SkillId::VenomArrow,
+                 .special = E5Arrow::Special::Venom,
+                 .trail = "res://effects/venom_trail.tscn",
+                 .impact = "res://effects/venom_impact.tscn",
+                 .first = "res://effects/venom_cloud.tscn",
+                 .second = ""},
+    SpecialArrow{.skill = gameplay::SkillId::GaleArrow,
+                 .special = E5Arrow::Special::Gale,
+                 .trail = "res://effects/gale_trail.tscn",
+                 .impact = "res://effects/gale_impact.tscn",
+                 .first = "",
+                 .second = ""},
+    SpecialArrow{.skill = gameplay::SkillId::StormArrow,
+                 .special = E5Arrow::Special::Storm,
+                 .trail = "res://effects/storm_trail.tscn",
+                 .impact = "res://effects/lightning_strike.tscn",
+                 .first = "res://effects/lightning_strike.tscn",
+                 .second = ""},
+    SpecialArrow{.skill = gameplay::SkillId::BrambleArrow,
+                 .special = E5Arrow::Special::Bramble,
+                 .trail = "res://effects/bramble_trail.tscn",
+                 .impact = "res://effects/bramble_impact.tscn",
+                 .first = "res://effects/bramble_burst.tscn",
+                 .second = "res://effects/bramble_cage.tscn"},
+};
+
+godot::Ref<godot::PackedScene> effect_scene(const char* path) {
+    godot::ResourceLoader* const loader = godot::ResourceLoader::get_singleton();
+    if (path == nullptr || *path == '\0' || !loader->exists(path)) {
+        return {};
+    }
+    return loader->load(path);
+}
 constexpr float kick_strike_fraction = 0.42F; // of the clip: the moment the leg is stretched out
 constexpr float kick_reach = 1.2F;            // metres in front of her where the shockwave is centred
 constexpr float kick_radius = 2.2F;           // metres
@@ -505,6 +555,11 @@ void E5PlayerController::_bind_methods() {
     ADD_PROPERTY(
         PropertyInfo(godot::Variant::FLOAT, "mouse_sensitivity", godot::PROPERTY_HINT_RANGE, "0.0001,0.02,0.0001"),
         "set_mouse_sensitivity", "get_mouse_sensitivity");
+    ClassDB::bind_method(D_METHOD("set_dodge_distance", "metres"), &E5PlayerController::set_dodge_distance);
+    ClassDB::bind_method(D_METHOD("get_dodge_distance"), &E5PlayerController::get_dodge_distance);
+    ClassDB::bind_method(D_METHOD("is_dodging"), &E5PlayerController::is_dodging);
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "dodge_distance", godot::PROPERTY_HINT_RANGE, "0,10,0.1,suffix:m"),
+                 "set_dodge_distance", "get_dodge_distance");
     ClassDB::bind_method(D_METHOD("set_quick_cast", "enabled"), &E5PlayerController::set_quick_cast);
     ClassDB::bind_method(D_METHOD("get_quick_cast"), &E5PlayerController::get_quick_cast);
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "quick_cast"), "set_quick_cast", "get_quick_cast");
@@ -594,6 +649,9 @@ void E5PlayerController::_ready() {
     }
     clip_death_ = godot::StringName("death");
     clip_block_ = godot::StringName(block_clip);
+    clip_dodge_ = godot::StringName("dodge");
+    clip_dodge_alt_ = godot::StringName("dodge_alt");
+    dodge_clip_ = clip_dodge_;
     spawn_transform_ = get_global_transform();
     vitals_ = gameplay::full_vitals(vitals_params_);
     inventory_ = memnew(E5Inventory);
@@ -658,6 +716,13 @@ void E5PlayerController::setup_animation() {
         return;
     }
     animator_.set_base(clip_idle_, 1.0F);
+    // Whoever has the clip `dodge` and no shield clip can dodge, on the shield's key.
+    dodge_enabled_ = animator_.has_clip(clip_dodge_) && !animator_.has_clip(clip_block_);
+    if (dodge_enabled_) {
+        // It ends a little before its clip does: she is handed back to running while the clip
+        // still plays out under the cross-fade. Ended with the clip, she stood for a moment.
+        dodge_seconds_ = std::max(animator_.clip_length(clip_dodge_) - dodge_hand_over_seconds, 0.2F);
+    }
     // Prefer a held full-draw pose over the pack's aim clip: that clip keeps pulling for a
     // few seconds and then loops, which snaps the bow back to a half draw.
     if (animator_.has_clip("bow_hold")) {
@@ -840,6 +905,34 @@ void E5PlayerController::_physics_process(double delta) {
         }
     }
 
+    if (dodge_enabled_) {
+        dodge_cooldown_left_ = std::max(dodge_cooldown_left_ - static_cast<float>(delta), 0.0F);
+        const bool alt_key =
+            !input_blocked_ && animator_.has_clip(clip_dodge_alt_) && input->is_action_pressed(actions::dodge_alt);
+        const bool dodge_key = alt_key || (!input_blocked_ && input->is_action_pressed(actions::block));
+        if (dodge_key && !dodge_key_was_down_ && dodge_cooldown_left_ <= 0.0F && !is_busy() && is_on_floor() &&
+            !vitals_.dead) {
+            // The way she is steered (seen from the camera), or else the way she faces.
+            const float right = input->get_axis(action_left_, action_right_);
+            const float forward = input->get_axis(action_back_, action_forward_);
+            godot::Vector3 way(-std::sin(look_.yaw) * forward + std::cos(look_.yaw) * right, 0.0F,
+                               -std::cos(look_.yaw) * forward - std::sin(look_.yaw) * right);
+            if (way.length() < 0.2F) {
+                way = godot::Vector3(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+            }
+            dodge_direction_ = way.normalized();
+            dodge_clip_ = alt_key ? clip_dodge_alt_ : clip_dodge_;
+            dodge_seconds_ = std::max(animator_.clip_length(dodge_clip_) - dodge_hand_over_seconds, 0.2F);
+            dodge_left_ = dodge_seconds_;
+            model_yaw_ =
+                gameplay::facing_yaw(static_cast<float>(dodge_direction_.x), static_cast<float>(dodge_direction_.z));
+            if (model_ != nullptr) {
+                model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+            }
+        }
+        dodge_key_was_down_ = dodge_key;
+    }
+
     // Instant skills start on the press and play through; the bow stays down meanwhile.
     const bool instant = gameplay::skill_info(skills_.selected()).kind == gameplay::SkillKind::Instant;
     if (archery_enabled_ || spells_enabled_) {
@@ -918,7 +1011,8 @@ void E5PlayerController::_physics_process(double delta) {
 
     const gameplay::MotorParams params = motor_params();
     // She stands still for the length of a kick.
-    const bool rooted = action_.active || input_blocked_ || block_.raised;
+    const bool dodging = dodge_left_ > 0.0F;
+    const bool rooted = action_.active || input_blocked_ || block_.raised || dodging;
     const gameplay::MotorInput motor_input{
         .move_right = rooted ? 0.0F : input->get_axis(action_left_, action_right_),
         .move_forward = rooted ? 0.0F : input->get_axis(action_back_, action_forward_),
@@ -952,6 +1046,17 @@ void E5PlayerController::_physics_process(double delta) {
         next.z += static_cast<float>(combo_push_.z);
     }
 
+    if (dodging) {
+        // The roll carries her: its distance over its time, whatever the keys say.
+        const float speed = dodge_distance_ / dodge_seconds_;
+        next.x = static_cast<float>(dodge_direction_.x) * speed;
+        next.z = static_cast<float>(dodge_direction_.z) * speed;
+        dodge_left_ -= static_cast<float>(delta);
+        if (dodge_left_ <= 0.0F) {
+            dodge_left_ = 0.0F;
+            dodge_cooldown_left_ = dodge_cooldown_seconds;
+        }
+    }
     set_velocity(godot::Vector3(next.x, next.y, next.z));
     {
         E5_PROFILE_SCOPE("move_and_slide");
@@ -1168,8 +1273,8 @@ bool E5PlayerController::is_skill_ready(int slot) const {
 }
 
 void E5PlayerController::take_damage_from(float amount, const godot::Vector3& from) {
-    if (remote_ || amount <= 0.0F || vitals_.dead) {
-        return;
+    if (remote_ || amount <= 0.0F || vitals_.dead || dodge_left_ > 0.0F) {
+        return; // (a dodge is not hit)
     }
     const godot::Vector3 away = from - get_global_position();
     if (block_.raised && gameplay::shield_covers(model_yaw_, static_cast<float>(away.x), static_cast<float>(away.z))) {
@@ -1188,7 +1293,7 @@ void E5PlayerController::take_damage(float amount) {
     if (remote_) {
         return; // decided on its own machine
     }
-    if (amount > 0.0F && !vitals_.dead) {
+    if (amount > 0.0F && !vitals_.dead && dodge_left_ <= 0.0F) {
         pending_damage_ += amount;
     }
 }
@@ -1250,6 +1355,11 @@ gameplay::MotorParams E5PlayerController::motor_params() const {
         const float faster = 1.0F + inventory_->bonuses().speed;
         params.walk_speed *= faster;
         params.sprint_speed *= faster;
+    }
+    // Held to a walk: the pace her walking clip is made for, whatever else is pressed.
+    if (!input_blocked_ && !remote_ && godot::Input::get_singleton()->is_action_pressed(actions::walk)) {
+        params.walk_speed = walk_clip_speed;
+        params.sprint_speed = walk_clip_speed;
     }
     // While aiming she moves slowly and cannot sprint or jump.
     if (is_aiming()) {
@@ -1370,6 +1480,11 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
     }
     const float speed = std::hypot(velocity.x, velocity.z);
 
+    if (dodge_left_ > 0.0F) {
+        animator_.set_upper(godot::StringName());
+        animator_.set_base(dodge_clip_, 1.0F);
+        return;
+    }
     if (block_.raised) {
         // The clip brings the shield up and then holds it there.
         animator_.set_upper(godot::StringName());
@@ -1423,15 +1538,17 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
         }
     } else {
         animator_.set_upper(godot::StringName());
+        // Coming down from a jump she settles into standing or running over a longer stretch.
+        const float fade = animator_.base_clip() == clip_jump_ ? landing_fade_seconds : usual_fade_seconds;
         switch (gameplay::select_locomotion_state(speed, is_on_floor())) {
         case gameplay::LocomotionState::Idle:
-            animator_.set_base(clip_idle_, 1.0F);
+            animator_.set_base(clip_idle_, 1.0F, fade);
             break;
         case gameplay::LocomotionState::Walk:
-            animator_.set_base(clip_walk_, speed / walk_clip_speed);
+            animator_.set_base(clip_walk_, speed / walk_clip_speed, fade);
             break;
         case gameplay::LocomotionState::Run:
-            animator_.set_base(clip_run_, speed / run_clip_speed);
+            animator_.set_base(clip_run_, speed / run_clip_speed, fade);
             break;
         case gameplay::LocomotionState::Airborne:
             animator_.set_base(clip_jump_, 1.0F);
@@ -1544,8 +1661,12 @@ void E5PlayerController::setup_skill_ui() {
 
 void E5PlayerController::setup_tip_glows() {
     // The arrowhead glows in the colour of the selected skill while it is on the string.
-    for (const auto& [skill, scene] : {std::pair{gameplay::SkillId::FrostFan, frost_trail_effect_},
-                                       std::pair{gameplay::SkillId::FireArrow, fire_trail_effect_}}) {
+    std::vector<std::pair<gameplay::SkillId, godot::Ref<godot::PackedScene>>> glows{
+        {gameplay::SkillId::FrostFan, frost_trail_effect_}, {gameplay::SkillId::FireArrow, fire_trail_effect_}};
+    for (const SpecialArrow& special : special_arrows) {
+        glows.emplace_back(special.skill, effect_scene(special.trail));
+    }
+    for (const auto& [skill, scene] : glows) {
         if (scene.is_null()) {
             continue;
         }
@@ -1693,6 +1814,16 @@ void E5PlayerController::prewarm_effects() {
             prewarm_ids_.push_back(instance->get_instance_id());
         }
     }
+    if (bow_string_ != nullptr) {
+        for (const SpecialArrow& special : special_arrows) {
+            for (const char* const path : {special.trail, special.impact, special.first, special.second}) {
+                if (const godot::Node3D* const instance =
+                        E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
+                    prewarm_ids_.push_back(instance->get_instance_id());
+                }
+            }
+        }
+    }
     for (const godot::Ref<godot::PackedScene>& scene : weapon_impacts_) {
         if (const godot::Node3D* const instance = E5Effect::spawn(scene, get_parent(), out_of_sight)) {
             prewarm_ids_.push_back(instance->get_instance_id());
@@ -1799,6 +1930,12 @@ void E5PlayerController::use_skill(float power) {
     case gameplay::SkillId::FireArrow:
         fire_blast_arrow();
         break;
+    case gameplay::SkillId::VenomArrow:
+    case gameplay::SkillId::GaleArrow:
+    case gameplay::SkillId::StormArrow:
+    case gameplay::SkillId::BrambleArrow:
+        fire_special_arrow(skills_.selected());
+        break;
     case gameplay::SkillId::ThunderKick: // not bow skills; handled by the action timeline
     case gameplay::SkillId::Kingfishers:
     case gameplay::SkillId::ArcaneBolt:
@@ -1850,6 +1987,32 @@ void E5PlayerController::fire_blast_arrow() {
     arrow->set_trail_effect(fire_trail_effect_);
     arrow->set_impact_effect(fire_impact_effect_);
     arrow->set_blast_radius(fire_blast_radius);
+    arrow->launch(direction * arrow_speed_, get_rid());
+}
+
+void E5PlayerController::fire_special_arrow(gameplay::SkillId skill) {
+    const auto special = std::ranges::find(special_arrows, skill, &SpecialArrow::skill);
+    if (special == special_arrows.end()) {
+        return;
+    }
+    const godot::Vector3 spawn = bow_string_->to_global(bow_string_->get_nock_position());
+    const godot::Vector3 direction = (find_aim_point(spawn).position - spawn).normalized();
+    E5Arrow* const arrow = spawn_arrow(spawn, direction);
+    const float damage = dealt(skill);
+    arrow->set_damage(damage);
+    arrow->set_trail_effect(effect_scene(special->trail));
+    arrow->set_impact_effect(effect_scene(special->impact));
+    // A hero shown here for another player does no damage; neither does what her arrows leave.
+    const float share = damage > 0.0F ? 1.0F : 0.0F;
+    float second_damage = 0.0F;
+    if (skill == gameplay::SkillId::VenomArrow) {
+        second_damage = gameplay::venom_tick_damage * share;
+    } else if (skill == gameplay::SkillId::StormArrow) {
+        second_damage = damage * gameplay::storm_jump_share;
+    } else if (skill == gameplay::SkillId::BrambleArrow) {
+        arrow->set_blast_radius(gameplay::bramble_radius);
+    }
+    arrow->set_special(special->special, second_damage, effect_scene(special->first), effect_scene(special->second));
     arrow->launch(direction * arrow_speed_, get_rid());
 }
 

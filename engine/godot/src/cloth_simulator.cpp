@@ -2,6 +2,7 @@
 
 #include "e5/gameplay/cloth_rig.hpp"
 #include "godot_log.hpp"
+#include "hair_root.hpp"
 
 #include <godot_cpp/classes/skeleton3d.hpp>
 #include <godot_cpp/classes/skeleton_modifier3d.hpp>
@@ -48,6 +49,10 @@ void E5ClothSimulator::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_arm_radius"), &E5ClothSimulator::get_arm_radius);
     ClassDB::bind_method(D_METHOD("set_torso_radius", "radius"), &E5ClothSimulator::set_torso_radius);
     ClassDB::bind_method(D_METHOD("get_torso_radius"), &E5ClothSimulator::get_torso_radius);
+    ClassDB::bind_method(D_METHOD("set_hair_turn_share", "share"), &E5ClothSimulator::set_hair_turn_share);
+    ClassDB::bind_method(D_METHOD("get_hair_turn_share"), &E5ClothSimulator::get_hair_turn_share);
+    ClassDB::bind_method(D_METHOD("set_hair_follow_seconds", "seconds"), &E5ClothSimulator::set_hair_follow_seconds);
+    ClassDB::bind_method(D_METHOD("get_hair_follow_seconds"), &E5ClothSimulator::get_hair_follow_seconds);
     ClassDB::bind_method(D_METHOD("get_chain_count"), &E5ClothSimulator::get_chain_count);
 
     ADD_PROPERTY(PropertyInfo(godot::Variant::STRING, "hinged_parts"), "set_hinged_parts", "get_hinged_parts");
@@ -73,6 +78,11 @@ void E5ClothSimulator::_bind_methods() {
     ADD_PROPERTY(
         PropertyInfo(godot::Variant::FLOAT, "torso_radius", godot::PROPERTY_HINT_RANGE, "0,0.5,0.005,suffix:m"),
         "set_torso_radius", "get_torso_radius");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "hair_turn_share", godot::PROPERTY_HINT_RANGE, "0,1,0.01"),
+                 "set_hair_turn_share", "get_hair_turn_share");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "hair_follow_seconds", godot::PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"),
+        "set_hair_follow_seconds", "get_hair_follow_seconds");
 }
 
 godot::Skeleton3D* E5ClothSimulator::find_skeleton() const {
@@ -108,7 +118,15 @@ void E5ClothSimulator::_ready() {
         return;
     }
 
-    // Skeleton modifiers must be children of the skeleton they modify.
+    // Skeleton modifiers must be children of the skeleton they modify. What the hair hangs from
+    // is moved first, the chains after it.
+    if (skeleton->find_bone(E5HairRoot::bone_name) >= 0) {
+        auto* const root = memnew(E5HairRoot);
+        root->set_name("E5HairRoot");
+        root->set_turn_share(hair_turn_share_);
+        root->set_follow_seconds(hair_follow_seconds_);
+        skeleton->add_child(root);
+    }
     auto* const simulator = memnew(godot::SpringBoneSimulator3D);
     simulator->set_name("E5ClothSpringBones");
     skeleton->add_child(simulator);

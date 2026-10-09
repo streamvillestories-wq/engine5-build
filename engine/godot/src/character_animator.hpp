@@ -1,6 +1,8 @@
 #pragma once
 
 #include <godot_cpp/classes/animation_library.hpp>
+#include <godot_cpp/classes/animation_node_transition.hpp>
+#include <godot_cpp/classes/curve.hpp>
 #include <godot_cpp/variant/string_name.hpp>
 
 namespace godot {
@@ -35,6 +37,9 @@ public:
     // Cross-fades the whole body to `clip`. Asking for the clip that is already
     // playing only updates the speed; it does not restart it.
     void set_base(const godot::StringName& clip, float playback_scale);
+    // The same, but this one change takes `fade_seconds` and eases in and out (coming down
+    // from a jump: at the usual pace the flight pose snapped into the run).
+    void set_base(const godot::StringName& clip, float playback_scale, float fade_seconds);
 
     // Cross-fades the upper body to `clip`; an empty name removes the overlay.
     // Every change restarts the clip, so a one-shot can be played again.
@@ -54,6 +59,8 @@ private:
     godot::Ref<godot::AnimationLibrary> library_;
     // Non-owning: child nodes owned by the scene tree.
     godot::AnimationTree* tree_ = nullptr;
+    godot::Ref<godot::AnimationNodeTransition> base_selector_;
+    godot::Ref<godot::Curve> eased_;
     godot::Skeleton3D* skeleton_ = nullptr;
     godot::StringName base_clip_;
     float base_scale_ = 1.0F;

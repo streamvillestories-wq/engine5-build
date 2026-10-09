@@ -18,6 +18,7 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace e5::bridge {
@@ -92,7 +93,10 @@ bool CharacterAnimator::setup(godot::Node* owner, godot::Node3D* model,
 
     godot::Ref<godot::AnimationNodeBlendTree> root;
     root.instantiate();
-    add_selector(root.ptr(), "base", clips, library, false);
+    base_selector_ = add_selector(root.ptr(), "base", clips, library, false);
+    eased_.instantiate();
+    eased_->add_point(godot::Vector2(0.0F, 0.0F), 0.0F, 0.0F);
+    eased_->add_point(godot::Vector2(1.0F, 1.0F), 0.0F, 0.0F);
     add_selector(root.ptr(), "upper", clips, library, true);
 
     godot::Ref<godot::AnimationNodeTimeScale> speed;
@@ -135,10 +139,17 @@ float CharacterAnimator::clip_length(const godot::StringName& clip) const {
 }
 
 void CharacterAnimator::set_base(const godot::StringName& clip, float playback_scale) {
+    set_base(clip, playback_scale, static_cast<float>(crossfade_seconds));
+}
+
+void CharacterAnimator::set_base(const godot::StringName& clip, float playback_scale, float fade_seconds) {
     if (tree_ == nullptr) {
         return;
     }
     if (clip != base_clip_) {
+        const bool usual = std::abs(fade_seconds - static_cast<float>(crossfade_seconds)) < 1e-4F;
+        base_selector_->set_xfade_time(fade_seconds);
+        base_selector_->set_xfade_curve(usual ? godot::Ref<godot::Curve>() : eased_);
         tree_->set("parameters/base/transition_request", godot::String(clip));
         base_clip_ = clip;
     }

@@ -142,6 +142,9 @@ void E5Diagnostics::_ready() {
             action = actions::move_right;
         }
         godot::Input::get_singleton()->action_press(action);
+        if (config_.auto_walk) {
+            godot::Input::get_singleton()->action_press(actions::walk);
+        }
     }
 
     if (config_.benchmark) {

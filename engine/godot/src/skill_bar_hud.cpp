@@ -63,7 +63,8 @@ void E5SkillBarHud::_ready() {
 
         // Keys run 1..9 and then 0 for the tenth slot.
         godot::Label* const key = make_label(12, godot::Color(1.0F, 1.0F, 1.0F, 0.6F));
-        key->set_text(godot::String::num_int64(static_cast<std::int64_t>((index + 1) % slot_count)));
+        key->set_text(index < 10 ? godot::String::num_int64(static_cast<std::int64_t>((index + 1) % 10))
+                                 : godot::String(index == 10 ? "-" : "="));
         column->add_child(key);
 
         godot::Label* const name = make_label(14, godot::Color(1.0F, 1.0F, 1.0F, 0.95F));

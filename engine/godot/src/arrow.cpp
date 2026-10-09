@@ -2,8 +2,10 @@
 
 #include "combat.hpp"
 #include "e5/core/profiling.hpp"
+#include "e5/gameplay/skills.hpp"
 #include "effect.hpp"
 #include "enemy.hpp"
+#include "lingering.hpp"
 #include "player_controller.hpp"
 
 #include <godot_cpp/classes/box_mesh.hpp>
@@ -119,6 +121,14 @@ void E5Arrow::set_trail_effect(const godot::Ref<godot::PackedScene>& effect) {
     }
 }
 
+void E5Arrow::set_special(Special special, float damage, const godot::Ref<godot::PackedScene>& first,
+                          const godot::Ref<godot::PackedScene>& second) {
+    special_ = special;
+    special_damage_ = damage;
+    special_first_ = first;
+    special_second_ = second;
+}
+
 void E5Arrow::launch(const godot::Vector3& velocity, const godot::RID& shooter) {
     const godot::Vector3 start = get_global_position();
     projectile_.position = {
@@ -152,7 +162,7 @@ void E5Arrow::_physics_process(double delta) {
 
     // Sweep the tip's path for this step: a fast arrow moves more than a
     // metre per step and would otherwise pass through thin targets.
-    godot::TypedArray<godot::RID> excluded;
+    godot::TypedArray<godot::RID> excluded = passed_.duplicate();
     excluded.push_back(shooter_);
     if (!shaft_swept_) {
         // Once, as it leaves the string: what stands where its own shaft is. The sweep below
@@ -162,21 +172,75 @@ void E5Arrow::_physics_process(double delta) {
         const godot::Ref<godot::PhysicsRayQueryParameters3D> along_shaft =
             godot::PhysicsRayQueryParameters3D::create(from, from + direction * length, 0xFFFFFFFF, excluded);
         const godot::Dictionary close = get_world_3d()->get_direct_space_state()->intersect_ray(along_shaft);
-        if (!close.is_empty()) {
+        if (!close.is_empty() && !pierce(close["position"], direction, close["collider"])) {
             stick(close["position"], direction, close["collider"]);
             return;
         }
     }
-    const godot::Ref<godot::PhysicsRayQueryParameters3D> query = godot::PhysicsRayQueryParameters3D::create(
-        from + direction * length, to + direction * length, 0xFFFFFFFF, excluded);
-    const godot::Dictionary hit = get_world_3d()->get_direct_space_state()->intersect_ray(query);
-    if (!hit.is_empty()) {
-        stick(hit["position"], direction, hit["collider"]);
-        return;
+    // More than once for an arrow that goes through what it meets: there may be another behind.
+    for (int met = 0; met <= gameplay::gale_max_pierced; ++met) {
+        excluded = passed_.duplicate();
+        excluded.push_back(shooter_);
+        const godot::Ref<godot::PhysicsRayQueryParameters3D> query = godot::PhysicsRayQueryParameters3D::create(
+            from + direction * length, to + direction * length, 0xFFFFFFFF, excluded);
+        const godot::Dictionary hit = get_world_3d()->get_direct_space_state()->intersect_ray(query);
+        if (hit.is_empty()) {
+            break;
+        }
+        if (!pierce(hit["position"], direction, hit["collider"])) {
+            stick(hit["position"], direction, hit["collider"]);
+            return;
+        }
     }
 
     projectile_ = next;
     set_global_transform(godot::Transform3D(facing(direction), to));
+}
+
+bool E5Arrow::pierce(const godot::Vector3& hit_position, const godot::Vector3& direction, godot::Object* collider) {
+    auto* const enemy = godot::Object::cast_to<E5Enemy>(collider);
+    if (special_ != Special::Gale || enemy == nullptr || passed_.size() >= gameplay::gale_max_pierced) {
+        return false;
+    }
+    passed_.push_back(enemy->get_rid());
+    E5Effect::spawn(impact_effect_, get_parent(), hit_position);
+    combat::hit(enemy, hit_position, damage_);
+    if (damage_ > 0.0F && enemy->is_alive()) {
+        // Back along its flight, and a little off the ground.
+        godot::Vector3 away(direction.x, 0.0F, direction.z);
+        away = away.length() > 0.01F ? away.normalized() : godot::Vector3();
+        enemy->fling(away * gameplay::gale_throw_speed +
+                     godot::Vector3(0.0F, gameplay::gale_throw_speed * 0.45F, 0.0F));
+    }
+    return true;
+}
+
+void E5Arrow::leave_behind(const godot::Vector3& hit_position, godot::Object* collider) {
+    auto* const enemy = godot::Object::cast_to<E5Enemy>(collider);
+    if (special_ == Special::Venom) {
+        E5Lingering::spawn(get_parent(), hit_position,
+                           {.radius = gameplay::venom_cloud_radius,
+                            .seconds = gameplay::venom_cloud_seconds,
+                            .tick_damage = special_damage_,
+                            .tick_seconds = gameplay::venom_tick_seconds,
+                            .root_seconds = 0.0F,
+                            .visual = special_first_,
+                            .cage = {}},
+                           enemy);
+    } else if (special_ == Special::Storm) {
+        combat::chain(get_parent(), hit_position, collider, special_damage_, gameplay::storm_jumps,
+                      gameplay::storm_jump_reach, godot::Color(0.5F, 0.9F, 3.0F), special_first_);
+    } else if (special_ == Special::Bramble) {
+        E5Lingering::spawn(get_parent(), hit_position,
+                           {.radius = gameplay::bramble_radius,
+                            .seconds = gameplay::bramble_root_seconds,
+                            .tick_damage = 0.0F,
+                            .tick_seconds = 0.5F,
+                            .root_seconds = gameplay::bramble_root_seconds,
+                            .visual = special_first_,
+                            .cage = special_second_},
+                           nullptr);
+    }
 }
 
 void E5Arrow::stick(const godot::Vector3& hit_position, const godot::Vector3& direction, godot::Object* collider) {
@@ -198,6 +262,7 @@ void E5Arrow::stick(const godot::Vector3& hit_position, const godot::Vector3& di
     } else {
         combat::hit(collider, hit_position, damage_, multiplier);
     }
+    leave_behind(hit_position, collider);
     // Stuck in a body that moves, the arrow has to move with it.
     if (auto* const enemy = godot::Object::cast_to<E5Enemy>(collider)) {
         // The collision shape is wider than the body inside it: push the arrow in until it reaches the body.

@@ -650,6 +650,7 @@ void E5Enemy::_physics_process(double delta) {
     if (asleep_) {
         return;
     }
+    rooted_left_ = std::max(rooted_left_ - dt, 0.0F);
     if (held_) {
         animator_.update(dt);
         return; // the holder moves it
@@ -709,10 +710,11 @@ void E5Enemy::_physics_process(double delta) {
     }
 
     const godot::Vector3 direction = to_player.length() > 0.01F ? to_player.normalized() : godot::Vector3();
+    const bool rooted = rooted_left_ > 0.0F;
     if (hover_height_ > 0.0F) {
         fly(step, to_player, dt);
     } else {
-        walk(step.moving, direction, dt);
+        walk(step.moving && !rooted, direction, dt);
     }
 
     // Once it has noticed the player it keeps facing her.
@@ -722,7 +724,7 @@ void E5Enemy::_physics_process(double delta) {
         model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
     }
     // Backing away is walking too; a flyer has no legs to show it with.
-    play_phase_animation(step.moving || step.retreating);
+    play_phase_animation((step.moving || step.retreating) && !rooted);
 }
 
 void E5Enemy::play_phase_animation(bool moving) {
@@ -790,6 +792,9 @@ void E5Enemy::fly(const gameplay::EnemyStep& step, const godot::Vector3& to_play
             circle_side_ = -circle_side_;
         }
         wanted += godot::Vector3(-direction.z, 0.0F, direction.x) * (circle_side_ * move_speed_ * circle_share);
+    }
+    if (rooted_left_ > 0.0F) {
+        wanted = godot::Vector3();
     }
     godot::Vector3 velocity = get_velocity();
     velocity.x =
@@ -864,6 +869,7 @@ void E5Enemy::respawn() {
     state_ = gameplay::spawn_enemy(params_);
     held_ = false;
     flung_ = false;
+    rooted_left_ = 0.0F;
     set_shrink(1.0F);
     pending_damage_ = 0.0F;
     heaviest_pending_blow_ = 0.0F;

@@ -71,7 +71,7 @@ TEST_CASE("invalid arguments are rejected with a message", "[config]") {
         CHECK_FALSE(e5::parse_runtime_args(args).has_value());
     }
     SECTION("skill slot out of range") {
-        const std::array args{"--auto-skill=11"sv};
+        const std::array args{"--auto-skill=13"sv};
         CHECK_FALSE(e5::parse_runtime_args(args).has_value());
     }
     SECTION("skill slot not a whole number") {

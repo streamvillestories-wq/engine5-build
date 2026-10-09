@@ -57,6 +57,14 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Leap Strike", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Battlecry:
         return {.name = "Battle Cry", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::VenomArrow:
+        return {.name = "Venom Arrow", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::GaleArrow:
+        return {.name = "Gale Arrow", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::StormArrow:
+        return {.name = "Storm Arrow", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::BrambleArrow:
+        return {.name = "Bramble Arrow", .charges = false, .kind = SkillKind::Bow};
     case SkillId::None:
         break;
     }
@@ -118,6 +126,16 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 82.0F;
     case SkillId::Battlecry:
         return 45.0F; // and it throws everything around him back
+    // The archer's arrows to choose from: not yet weighed against the others (the user picks
+    // among them first).
+    case SkillId::VenomArrow:
+        return 14.0F; // the arrow; its cloud does the rest (venom_tick_damage)
+    case SkillId::GaleArrow:
+        return 38.0F; // to each one it goes through
+    case SkillId::StormArrow:
+        return 32.0F; // what it strikes; see storm_jump_share
+    case SkillId::BrambleArrow:
+        return 18.0F; // to everything it catches
     case SkillId::None:
         break;
     }
@@ -184,12 +202,16 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::FrostFan:
     case SkillId::ChainLightning:
     case SkillId::Whirlwind:
+    case SkillId::GaleArrow:
         return 6.0F;
+    case SkillId::VenomArrow:
+        return 7.0F;
     case SkillId::FrostEdge:
     case SkillId::LeapStrike:
         return 7.0F;
     case SkillId::FrostNova:
     case SkillId::Earthbreaker:
+    case SkillId::StormArrow:
         return 8.0F;
     // The ones that clear a place.
     case SkillId::ArrowRain:
@@ -197,6 +219,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::ThunderCleave:
         return 9.0F;
     case SkillId::Meteor:
+    case SkillId::BrambleArrow:
         return 10.0F;
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
@@ -267,8 +290,9 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::ArcaneBolt, SkillId::Fireball,    SkillId::FrostNova, SkillId::ChainLightning,
                   SkillId::Meteor,     SkillId::StarBarrage, SkillId::BlackHole};
     } else {
-        slots_ = {SkillId::Shot,      SkillId::PowerShot,   SkillId::ArrowRain,  SkillId::FrostFan,
-                  SkillId::FireArrow, SkillId::ThunderKick, SkillId::Kingfishers};
+        slots_ = {SkillId::Shot,      SkillId::PowerShot,   SkillId::ArrowRain,   SkillId::FrostFan,
+                  SkillId::FireArrow, SkillId::ThunderKick, SkillId::Kingfishers, SkillId::VenomArrow,
+                  SkillId::GaleArrow, SkillId::StormArrow,  SkillId::BrambleArrow};
     }
 }
 

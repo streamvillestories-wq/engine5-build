@@ -84,6 +84,12 @@ public:
     [[nodiscard]] float get_turn_speed() const { return turn_speed_; }
     void set_mouse_sensitivity(float radians_per_pixel) { mouse_sensitivity_ = radians_per_pixel; }
     [[nodiscard]] float get_mouse_sensitivity() const { return mouse_sensitivity_; }
+    // The dodge (the block key, for a hero who has the clip `dodge` and no shield): a dive and
+    // roll the way she is steered, or the way she faces. `dodge_distance` is how far it carries
+    // her; nothing hurts her while it lasts.
+    void set_dodge_distance(float metres) { dodge_distance_ = metres; }
+    [[nodiscard]] float get_dodge_distance() const { return dodge_distance_; }
+    [[nodiscard]] bool is_dodging() const { return dodge_left_ > 0.0F; }
     // Quick cast (a setting): a number key chooses its skill and uses it at once, the key
     // doing what the right mouse button does: held it draws the bow, let go it shoots.
     void set_quick_cast(bool enabled) { quick_cast_ = enabled; }
@@ -331,6 +337,7 @@ private:
     void fire_rain();
     void fire_fan();
     void fire_blast_arrow();
+    void fire_special_arrow(gameplay::SkillId skill);
     void strike_kick();
     void release_birds();
     void update_summon(float delta);
@@ -352,7 +359,7 @@ private:
     void setup_charge_effect();
     [[nodiscard]] bool is_aiming() const { return bow_.phase != gameplay::BowPhase::Lowered; }
     // In the middle of using a skill: the selection must not change now.
-    [[nodiscard]] bool is_busy() const { return is_aiming() || action_.active || block_.raised; }
+    [[nodiscard]] bool is_busy() const { return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F; }
 
     gameplay::MotorParams params_;
     gameplay::LookAngles look_;
@@ -415,6 +422,16 @@ private:
     // The shield block: only a hero whose library has the block clip can.
     bool block_enabled_ = false;
     bool block_key_was_down_ = false;
+    godot::StringName clip_dodge_;
+    godot::StringName clip_dodge_alt_; // a second dodge to compare with the first, on its own key
+    godot::StringName dodge_clip_;     // the one under way
+    bool dodge_enabled_ = false;
+    bool dodge_key_was_down_ = false;
+    float dodge_distance_ = 3.4F;
+    float dodge_seconds_ = 1.0F;       // the clip's length
+    float dodge_left_ = 0.0F;          // seconds of the dodge under way
+    float dodge_cooldown_left_ = 0.0F; // seconds until the next one
+    godot::Vector3 dodge_direction_;
     gameplay::BlockParams block_params_;
     gameplay::BlockState block_;
     int hits_blocked_ = 0;
@@ -528,7 +545,7 @@ private:
     godot::StringName action_sprint_;
     godot::StringName action_aim_;
     godot::StringName action_attack_;
-    std::array<godot::StringName, 10> skill_actions_;
+    std::array<godot::StringName, 12> skill_actions_; // actions::skill_slot_count
     godot::StringName clip_idle_;
     godot::StringName clip_walk_;
     godot::StringName clip_run_;

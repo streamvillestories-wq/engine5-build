@@ -47,6 +47,13 @@ public:
     void set_leg_radius(float radius) { leg_radius_ = radius; }
     [[nodiscard]] float get_leg_radius() const { return leg_radius_; }
 
+    // Long hair that hangs from a `hair_root` bone (see E5HairRoot): how much of the head's turn
+    // to the side the hair takes, and how long it takes to catch up with the head.
+    void set_hair_turn_share(float share) { hair_turn_share_ = share; }
+    [[nodiscard]] float get_hair_turn_share() const { return hair_turn_share_; }
+    void set_hair_follow_seconds(float seconds) { hair_follow_seconds_ = seconds; }
+    [[nodiscard]] float get_hair_follow_seconds() const { return hair_follow_seconds_; }
+
     // Number of chains being simulated; 0 if the skeleton has no cloth bones.
     [[nodiscard]] int get_chain_count() const { return chain_count_; }
 
@@ -78,6 +85,8 @@ private:
     // Metres; thickness of colliders on the hips and belly. 0 = none: a skirt hangs from there
     // and would be pushed off the body. A cape down the back needs them, or the back comes through.
     float waist_radius_ = 0.0F;
+    float hair_turn_share_ = 0.25F;
+    float hair_follow_seconds_ = 0.12F;
     int chain_count_ = 0;
 };
 

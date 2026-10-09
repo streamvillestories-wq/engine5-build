@@ -18,6 +18,8 @@ add_library(e5_godot SHARED
     src/skill_bar_hud.cpp
     src/skill_bar_hud.hpp
     src/lightning_arc.cpp
+    src/lingering.cpp
+    src/lingering.hpp
     src/lightning_arc.hpp
     src/spell_bolt.cpp
     src/spell_bolt.hpp
@@ -27,6 +29,8 @@ add_library(e5_godot SHARED
     src/bow_string.cpp
     src/bow_string.hpp
     src/cloth_simulator.cpp
+    src/hair_root.cpp
+    src/hair_root.hpp
     src/cloth_simulator.hpp
     src/diagnostics.cpp
     src/diagnostics.hpp

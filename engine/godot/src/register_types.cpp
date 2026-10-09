@@ -13,9 +13,11 @@
 #include "effect.hpp"
 #include "enemy.hpp"
 #include "forest.hpp"
+#include "hair_root.hpp"
 #include "health_hud.hpp"
 #include "inventory.hpp"
 #include "lightning_arc.hpp"
+#include "lingering.hpp"
 #include "perf_overlay.hpp"
 #include "pickup.hpp"
 #include "player_controller.hpp"
@@ -52,10 +54,12 @@ void initialize_engine5(godot::ModuleInitializationLevel level) {
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5PerfOverlay);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5Diagnostics);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5ClothSimulator);
+    GDREGISTER_RUNTIME_CLASS(e5::bridge::E5HairRoot);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5BowString);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5Arrow);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5AimOffset);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5Effect);
+    GDREGISTER_RUNTIME_CLASS(e5::bridge::E5Lingering);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5ArrowRain);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5SkillBarHud);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5HealthHud);

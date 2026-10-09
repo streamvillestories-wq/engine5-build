@@ -38,6 +38,12 @@ enum class SkillId : unsigned char {
     Earthbreaker,
     LeapStrike,
     Battlecry,
+    // More of the archer's, to try out and choose from (2026-10-09). At the end, so that the
+    // numbers of the others stay what they were.
+    VenomArrow,   // drips venom as it flies; where it strikes a cloud of it lingers
+    GaleArrow,    // goes through every enemy in its way and throws them back
+    StormArrow,   // lightning leaps on from what it strikes
+    BrambleArrow, // brambles shoot up where it lands and hold what stands there
 };
 
 // Which skills a character has on the bar.
@@ -54,6 +60,19 @@ struct SkillInfo {
     bool charges;          // builds power while the bow is held at full draw
     SkillKind kind;
 };
+
+// What the archer's newer arrows do beside the hit itself (skill_damage).
+inline constexpr float venom_cloud_radius = 2.6F;   // metres
+inline constexpr float venom_cloud_seconds = 6.0F;  //
+inline constexpr float venom_tick_seconds = 0.5F;   // the cloud hurts this often ...
+inline constexpr float venom_tick_damage = 5.0F;    // ... this much: 60 to what stays in it
+inline constexpr int gale_max_pierced = 6;          // enemies one gale arrow goes through
+inline constexpr float gale_throw_speed = 7.0F;     // m/s along its flight, for each of them
+inline constexpr int storm_jumps = 4;               // enemies the lightning leaps on to
+inline constexpr float storm_jump_reach = 9.0F;     // metres from one to the next
+inline constexpr float storm_jump_share = 0.7F;     // of the arrow's damage, for each of them
+inline constexpr float bramble_radius = 4.0F;       // metres
+inline constexpr float bramble_root_seconds = 3.5F; // how long what it caught cannot move
 
 [[nodiscard]] SkillInfo skill_info(SkillId skill) noexcept;
 
@@ -116,11 +135,11 @@ struct BlockStep {
 // along `facing_yaw` (as facing_yaw() gives it): anything not behind her.
 [[nodiscard]] bool shield_covers(float facing_yaw, float dx, float dz) noexcept;
 
-// The ten quick slots (keys 1..9 and 0). Selecting an empty slot is ignored,
+// The twelve quick slots (keys 1..9, 0 and the two keys to the right of 0). Selecting an empty slot is ignored,
 // so the selection always names a usable skill.
 class SkillBar {
 public:
-    static constexpr std::size_t slot_count = 10;
+    static constexpr std::size_t slot_count = 12;
 
     explicit SkillBar(SkillSet set = SkillSet::Archer) noexcept;
 

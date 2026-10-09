@@ -11,6 +11,8 @@ inline constexpr const char* move_left = "e5_move_left";
 inline constexpr const char* move_right = "e5_move_right";
 inline constexpr const char* jump = "e5_jump";
 inline constexpr const char* sprint = "e5_sprint";
+inline constexpr const char* dodge_alt = "e5_dodge_alt"; // the second dodge, while two are compared
+inline constexpr const char* walk = "e5_walk";           // held: she walks instead of running
 // Left mouse: the hero's standard attack (the first slot of the bar), whatever is selected.
 inline constexpr const char* attack = "e5_attack";
 // Right mouse: the skill selected on the bar.
@@ -20,9 +22,10 @@ inline constexpr const char* use_potion = "e5_use_potion";
 inline constexpr const char* block = "e5_block";
 // Opens and closes the bag; the interface script listens for it.
 inline constexpr const char* inventory = "e5_inventory";
-// Skill slots are e5_skill_1 .. e5_skill_10 (keys 1..9 and 0).
+// Skill slots are e5_skill_1 .. e5_skill_12 (keys 1..9, 0 and the two keys to the right of 0:
+// - and = on an American keyboard, ß and ´ on a German one).
 inline constexpr const char* skill_prefix = "e5_skill_";
-inline constexpr int skill_slot_count = 10;
+inline constexpr int skill_slot_count = 12;
 } // namespace actions
 
 // Registers default key bindings for any action the project has not defined

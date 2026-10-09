@@ -34,6 +34,7 @@ struct RuntimeConfig {
     bool cooldowns = false;
     // Holds the block key (the warrior's shield) for the whole run.
     bool auto_block = false;
+    bool auto_walk = false; // with auto_move: at a walk
     // Shoots repeatedly: holds aim until the bow is drawn, then lets go.
     bool auto_fire = false;
     // Like auto_fire, but with the power shot selected and held until fully charged.

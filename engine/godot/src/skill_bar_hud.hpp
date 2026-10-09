@@ -23,7 +23,7 @@ class E5SkillBarHud : public godot::CanvasLayer {
     GDCLASS(E5SkillBarHud, godot::CanvasLayer)
 
 public:
-    static constexpr std::size_t slot_count = 10;
+    static constexpr std::size_t slot_count = 12;
 
     void _ready() override;
 

@@ -59,6 +59,10 @@ public:
     void set_shrink(float scale);
     // Turns the visible body about the vertical axis.
     void spin(float radians);
+    // Holds it where it stands for so many seconds (brambles): it cannot walk or fly on, but
+    // it still strikes and casts at what is in its reach, and can be hit.
+    void root(float seconds) { rooted_left_ = std::max(rooted_left_, seconds); }
+    [[nodiscard]] bool is_rooted() const { return rooted_left_ > 0.0F; }
     // Throws it: it flies under gravity until it lands, then carries on as before.
     void fling(const godot::Vector3& velocity);
 
@@ -222,6 +226,7 @@ private:
     float blow_in_seconds_ = -1.0F;
     bool held_ = false;
     bool flung_ = false;
+    float rooted_left_ = 0.0F; // seconds it still cannot move
     bool remote_ = false;
     bool has_net_state_ = false;
     godot::Vector3 net_position_;

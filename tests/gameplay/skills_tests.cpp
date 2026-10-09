@@ -9,7 +9,7 @@
 using Catch::Approx;
 using namespace e5::gameplay;
 
-TEST_CASE("the skill bar starts with the six skills in order", "[skills]") {
+TEST_CASE("the skill bar starts with the archer's skills in order", "[skills]") {
     const SkillBar bar;
     CHECK(bar.selected() == SkillId::Shot);
     CHECK(bar.slot(0) == SkillId::Shot);
@@ -19,7 +19,11 @@ TEST_CASE("the skill bar starts with the six skills in order", "[skills]") {
     CHECK(bar.slot(4) == SkillId::FireArrow);
     CHECK(bar.slot(5) == SkillId::ThunderKick);
     CHECK(bar.slot(6) == SkillId::Kingfishers);
-    CHECK(bar.slot(7) == SkillId::None);
+    CHECK(bar.slot(7) == SkillId::VenomArrow);
+    CHECK(bar.slot(8) == SkillId::GaleArrow);
+    CHECK(bar.slot(9) == SkillId::StormArrow);
+    CHECK(bar.slot(10) == SkillId::BrambleArrow);
+    CHECK(bar.slot(11) == SkillId::None);
     CHECK(bar.slot(99) == SkillId::None);
 }
 
@@ -33,8 +37,8 @@ TEST_CASE("selecting changes the active skill", "[skills]") {
 
 TEST_CASE("empty and out-of-range slots cannot be selected", "[skills]") {
     SkillBar bar;
-    CHECK_FALSE(bar.select(8));
-    CHECK_FALSE(bar.select(10));
+    CHECK_FALSE(bar.select(11));
+    CHECK_FALSE(bar.select(12));
     CHECK(bar.selected() == SkillId::Shot);
 }
 
