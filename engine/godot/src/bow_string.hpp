@@ -1,7 +1,10 @@
 #pragma once
 
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/vector3.hpp>
+
+#include <cstdint>
 
 namespace godot {
 class MeshInstance3D;
@@ -31,6 +34,16 @@ public:
     [[nodiscard]] godot::Vector3 get_pull_direction() const { return pull_direction_; }
     void set_thickness(float thickness) { thickness_ = thickness; }
     [[nodiscard]] float get_thickness() const { return thickness_; }
+    // What the string looks like: every bow's own (twine, a green cord, a thread of blue light).
+    // `glow` makes it shine by itself. Call refresh() after changing these on a string that is shown.
+    void set_colour(const godot::Color& colour) { colour_ = colour; }
+    [[nodiscard]] godot::Color get_colour() const { return colour_; }
+    void set_glow(float glow) { glow_ = glow; }
+    [[nodiscard]] float get_glow() const { return glow_; }
+    // Looks for the anchors again and makes the string anew: after the bow's model was changed
+    // for another, or its look. A node `string_ornament` in the bow (something modelled on the
+    // string: tools/blender/bow_set.py keeps it) is taken along with the nock from then on.
+    void refresh();
 
     // Lets the nock point follow something else (the drawing hand): weight 0
     // keeps the computed position, 1 puts the nock exactly on local_point.
@@ -68,6 +81,10 @@ private:
     // Non-owning: child nodes owned by the scene tree.
     godot::MeshInstance3D* upper_segment_ = nullptr;
     godot::MeshInstance3D* lower_segment_ = nullptr;
+    godot::Color colour_{0.82F, 0.8F, 0.74F};
+    float glow_ = 0.0F;
+    std::uint64_t ornament_ = 0;     // instance id of the node on the string, or 0
+    godot::Vector3 ornament_offset_; // from the nock at rest to it
 };
 
 } // namespace e5::bridge

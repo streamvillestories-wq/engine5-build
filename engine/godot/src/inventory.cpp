@@ -41,6 +41,8 @@ godot::Color rarity_color(gameplay::Rarity rarity) {
         return {0.36F, 0.66F, 1.0F};
     case gameplay::Rarity::Epic:
         return {0.76F, 0.48F, 1.0F};
+    case gameplay::Rarity::Legendary:
+        return {1.0F, 0.6F, 0.18F};
     case gameplay::Rarity::Common:
         break;
     }
@@ -53,6 +55,8 @@ void E5Inventory::_bind_methods() {
     using godot::PropertyInfo;
     ClassDB::bind_method(D_METHOD("get_slot_count"), &E5Inventory::get_slot_count);
     ClassDB::bind_method(D_METHOD("get_bag_slot_count"), &E5Inventory::get_bag_slot_count);
+    ClassDB::bind_method(D_METHOD("get_weapon_slot"), &E5Inventory::get_weapon_slot);
+    ClassDB::bind_method(D_METHOD("get_weapon_key"), &E5Inventory::get_weapon_key);
     ClassDB::bind_method(D_METHOD("get_slot", "slot"), &E5Inventory::get_slot);
     ClassDB::bind_method(D_METHOD("describe", "item"), &E5Inventory::describe);
     ClassDB::bind_method(D_METHOD("add", "item", "count"), &E5Inventory::add);
@@ -89,8 +93,8 @@ godot::Dictionary E5Inventory::get_slot(int slot) const {
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 godot::Dictionary E5Inventory::describe(int item) const {
     const gameplay::ItemInfo& info = gameplay::item_info(item_from(item));
-    static constexpr std::array<const char*, 3> kinds{"Consumable", "Material", "Charm"};
-    static constexpr std::array<const char*, 4> rarities{"Common", "Uncommon", "Rare", "Epic"};
+    static constexpr std::array<const char*, 4> kinds{"Consumable", "Material", "Charm", "Weapon"};
+    static constexpr std::array<const char*, 5> rarities{"Common", "Uncommon", "Rare", "Epic", "Legendary"};
     godot::Dictionary result;
     result["key"] = text(info.key);
     result["name"] = text(info.name);
@@ -104,6 +108,11 @@ godot::Dictionary E5Inventory::describe(int item) const {
     result["bonus_health"] = info.bonus_health;
     result["bonus_regen"] = info.bonus_regen;
     result["bonus_speed"] = info.bonus_speed;
+    result["level"] = info.level;
+    result["damage"] = info.damage;
+    result["draw_speed"] = info.draw_speed;
+    result["crit_chance"] = info.crit_chance;
+    result["crit_damage"] = info.crit_damage;
     return result;
 }
 
@@ -123,6 +132,18 @@ int E5Inventory::add(int item, int count) {
 
 void E5Inventory::give(gameplay::ItemId item, int count) {
     std::ignore = gameplay::add_item(inventory_, item, count);
+}
+
+void E5Inventory::arm(gameplay::ItemId weapon) {
+    if (gameplay::item_info(weapon).kind == gameplay::ItemKind::Weapon) {
+        inventory_.slots.at(static_cast<std::size_t>(gameplay::weapon_slot)) = {.item = weapon, .count = 1};
+        emit_signal("changed");
+    }
+}
+
+godot::String E5Inventory::get_weapon_key() const {
+    const gameplay::ItemStack held = gameplay::stack_at(inventory_, gameplay::weapon_slot);
+    return held.empty() ? godot::String() : text(gameplay::item_info(held.item).key);
 }
 
 void E5Inventory::add_gold(int amount) {
@@ -158,8 +179,8 @@ bool E5Inventory::use(int slot) {
         return false;
     }
     const gameplay::ItemInfo& info = gameplay::item_info(stack.item);
-    if (info.kind == gameplay::ItemKind::Charm) {
-        return move(slot, gameplay::charm_destination(inventory_, slot));
+    if (info.kind == gameplay::ItemKind::Charm || info.kind == gameplay::ItemKind::Weapon) {
+        return move(slot, gameplay::equip_destination(inventory_, slot));
     }
     if (info.kind != gameplay::ItemKind::Consumable) {
         return false;
@@ -190,7 +211,8 @@ bool E5Inventory::use_potion() {
 bool E5Inventory::drop(int slot) {
     const auto* const player = godot::Object::cast_to<E5PlayerController>(get_parent());
     const gameplay::ItemStack stack = gameplay::stack_at(inventory_, slot);
-    if (player == nullptr || stack.empty() || player->get_parent() == nullptr) {
+    // (The weapon in hand is not thrown away: she would stand unarmed.)
+    if (player == nullptr || stack.empty() || player->get_parent() == nullptr || gameplay::is_weapon_slot(slot)) {
         return false;
     }
     gameplay::take_from(inventory_, slot, stack.count);
@@ -225,6 +247,10 @@ godot::Dictionary E5Inventory::get_bonuses() const {
     result["health"] = worn.health;
     result["regen"] = worn.regen;
     result["speed"] = worn.speed;
+    result["damage"] = worn.damage;
+    result["draw_speed"] = worn.draw_speed;
+    result["crit_chance"] = gameplay::base_crit_chance + worn.crit_chance;
+    result["crit_damage"] = gameplay::base_crit_damage + worn.crit_damage;
     return result;
 }
 

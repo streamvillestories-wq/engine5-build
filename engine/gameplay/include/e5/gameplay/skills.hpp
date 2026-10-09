@@ -44,6 +44,9 @@ enum class SkillId : unsigned char {
     GaleArrow,    // goes through every enemy in its way and throws them back
     StormArrow,   // lightning leaps on from what it strikes
     BrambleArrow, // brambles shoot up where it lands and hold what stands there
+    // The archer's dagger, for what has come too close for the bow: like Slash, a blow that
+    // continues as a combo. On a key of its own (F).
+    DaggerCombo,
 };
 
 // Which skills a character has on the bar.

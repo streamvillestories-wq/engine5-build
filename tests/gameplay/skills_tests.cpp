@@ -23,7 +23,8 @@ TEST_CASE("the skill bar starts with the archer's skills in order", "[skills]") 
     CHECK(bar.slot(8) == SkillId::GaleArrow);
     CHECK(bar.slot(9) == SkillId::StormArrow);
     CHECK(bar.slot(10) == SkillId::BrambleArrow);
-    CHECK(bar.slot(11) == SkillId::None);
+    CHECK(bar.slot(11) == SkillId::DaggerCombo);
+    CHECK(bar.slot(12) == SkillId::None);
     CHECK(bar.slot(99) == SkillId::None);
 }
 
@@ -37,7 +38,8 @@ TEST_CASE("selecting changes the active skill", "[skills]") {
 
 TEST_CASE("empty and out-of-range slots cannot be selected", "[skills]") {
     SkillBar bar;
-    CHECK_FALSE(bar.select(11));
+    // The archer's bar is full; the wizard's is not.
+    CHECK_FALSE(SkillBar(SkillSet::Wizard).select(8));
     CHECK_FALSE(bar.select(12));
     CHECK(bar.selected() == SkillId::Shot);
 }

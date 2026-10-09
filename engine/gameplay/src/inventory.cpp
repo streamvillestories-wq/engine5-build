@@ -74,6 +74,105 @@ constexpr std::array<ItemInfo, static_cast<std::size_t>(Count)> items{{
      .max_stack = 1,
      .value = 200,
      .bonus_speed = 0.12F},
+    // --- the archer's bows -------------------------------------------------------------------
+    // A bow's worth is its level; its rarity says how many things it gives beside damage
+    // (common: none, uncommon: one, rare: two, epic: three, legendary: four). Damage is about
+    // one percent a level; the rest is spent from what a rarity allows.
+    {.key = "bow_warden",
+     .name = "Warden's Bow",
+     .description = "The bow every Warden is given with her oath. It has never failed one.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Common,
+     .max_stack = 1,
+     .value = 20,
+     .level = 1},
+    {.key = "bow_hunter",
+     .name = "Hunter's Bow",
+     .description = "Yew, twine and a grip of worn leather. Honest work.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Common,
+     .max_stack = 1,
+     .value = 45,
+     .level = 6,
+     .damage = 0.06F},
+    {.key = "bow_ironbound",
+     .name = "Ironbound Bow",
+     .description = "Bound in iron where lesser bows crack. It hits like a door slamming.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Uncommon,
+     .max_stack = 1,
+     .value = 110,
+     .level = 12,
+     .damage = 0.12F,
+     .crit_damage = 0.15F},
+    {.key = "bow_leafwood",
+     .name = "Leafwood Bow",
+     .description = "Cut green and never dried. It bends as if it wanted to.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Uncommon,
+     .max_stack = 1,
+     .value = 120,
+     .level = 13,
+     .damage = 0.11F,
+     .draw_speed = 0.1F},
+    {.key = "bow_moonglass",
+     .name = "Moonglass Bow",
+     .description = "Its string is a thread of moonlight. Arrows leave it without a sound.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Rare,
+     .max_stack = 1,
+     .value = 320,
+     .level = 20,
+     .damage = 0.2F,
+     .draw_speed = 0.1F,
+     .crit_chance = 0.06F},
+    {.key = "bow_briarbloom",
+     .name = "Briarbloom Bow",
+     .description = "Still in flower. Whoever carries it heals as a hedge does.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Rare,
+     .max_stack = 1,
+     .value = 340,
+     .bonus_health = 20.0F,
+     .bonus_regen = 1.5F,
+     .level = 22,
+     .damage = 0.2F},
+    {.key = "bow_stormfeather",
+     .name = "Stormfeather Bow",
+     .description = "Fletched from a thunderbird's wing. It is lighter than it has any right to be.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Epic,
+     .max_stack = 1,
+     .value = 800,
+     .bonus_speed = 0.06F,
+     .level = 30,
+     .damage = 0.3F,
+     .draw_speed = 0.18F,
+     .crit_chance = 0.08F},
+    {.key = "bow_nightthorn",
+     .name = "Nightthorn Bow",
+     .description = "It has no string that a hand can find. What it looses is not quite an arrow.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Epic,
+     .max_stack = 1,
+     .value = 850,
+     .level = 32,
+     .damage = 0.32F,
+     .crit_chance = 0.12F,
+     .crit_damage = 0.4F},
+    {.key = "bow_dragonfire",
+     .name = "Dragonfire Bow",
+     .description = "Two dragons, forever about to bite. The grip is warm, and gets warmer.",
+     .kind = ItemKind::Weapon,
+     .rarity = Rarity::Legendary,
+     .max_stack = 1,
+     .value = 2400,
+     .bonus_health = 25.0F,
+     .level = 40,
+     .damage = 0.42F,
+     .draw_speed = 0.1F,
+     .crit_chance = 0.1F,
+     .crit_damage = 0.5F},
 }};
 
 [[nodiscard]] constexpr bool valid_slot(int slot) noexcept {
@@ -85,7 +184,14 @@ constexpr std::array<ItemInfo, static_cast<std::size_t>(Count)> items{{
 }
 
 [[nodiscard]] bool fits(const ItemStack& stack, int slot) noexcept {
-    return stack.empty() || !is_charm_slot(slot) || item_info(stack.item).kind == ItemKind::Charm;
+    if (stack.empty()) {
+        return true;
+    }
+    const ItemKind kind = item_info(stack.item).kind;
+    if (is_charm_slot(slot)) {
+        return kind == ItemKind::Charm;
+    }
+    return !is_weapon_slot(slot) || kind == ItemKind::Weapon;
 }
 
 // A small, well-known generator (xorshift32): loot must be the same on every machine.
@@ -161,7 +267,11 @@ bool move_stack(Inventory& inventory, int from, int to) noexcept {
     if (source.empty() || !fits(source, to) || !fits(target, from)) {
         return false;
     }
-    if (target.item == source.item && !is_charm_slot(to)) {
+    // The weapon in hand is changed for another, never put away.
+    if (is_weapon_slot(from) && target.empty()) {
+        return false;
+    }
+    if (target.item == source.item && !is_charm_slot(to) && !is_weapon_slot(to) && !is_weapon_slot(from)) {
         const int moved = std::min(source.count, item_info(source.item).max_stack - target.count);
         if (moved <= 0) {
             return false;
@@ -196,6 +306,14 @@ int charm_destination(const Inventory& inventory, int slot) noexcept {
         }
     }
     return bag_slots;
+}
+
+int equip_destination(const Inventory& inventory, int slot) noexcept {
+    const ItemStack stack = stack_at(inventory, slot);
+    if (stack.empty() || item_info(stack.item).kind != ItemKind::Weapon) {
+        return charm_destination(inventory, slot);
+    }
+    return is_weapon_slot(slot) ? -1 : weapon_slot;
 }
 
 void sort_bag(Inventory& inventory) noexcept {
@@ -261,9 +379,22 @@ Bonuses worn_bonuses(const Inventory& inventory) noexcept {
             total.health += info.bonus_health;
             total.regen += info.bonus_regen;
             total.speed += info.bonus_speed;
+            total.damage += info.damage;
+            total.draw_speed += info.draw_speed;
+            total.crit_chance += info.crit_chance;
+            total.crit_damage += info.crit_damage;
         }
     }
     return total;
+}
+
+bool is_critical(const Bonuses& bonuses, float roll) noexcept {
+    return roll < base_crit_chance + bonuses.crit_chance;
+}
+
+float weapon_hit(float damage, const Bonuses& bonuses, float roll) noexcept {
+    const float raised = damage * (1.0F + bonuses.damage);
+    return is_critical(bonuses, roll) ? raised * (1.0F + base_crit_damage + bonuses.crit_damage) : raised;
 }
 
 Loot roll_loot(std::uint32_t seed) noexcept {

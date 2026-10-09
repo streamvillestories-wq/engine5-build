@@ -30,6 +30,7 @@ public:
     // NOLINTBEGIN(readability-convert-member-functions-to-static)
     [[nodiscard]] int get_slot_count() const { return gameplay::slot_count; }
     [[nodiscard]] int get_bag_slot_count() const { return gameplay::bag_slots; }
+    [[nodiscard]] int get_weapon_slot() const { return gameplay::weapon_slot; }
     // NOLINTEND(readability-convert-member-functions-to-static)
     // { item, count }; item 0 = empty.
     [[nodiscard]] godot::Dictionary get_slot(int slot) const;
@@ -40,12 +41,16 @@ public:
     int add(int item, int count);
     // What a character starts with: no notice, and not counted as picked up.
     void give(gameplay::ItemId item, int count);
+    // The weapon a character starts with, in her hand.
+    void arm(gameplay::ItemId weapon);
+    // The key of the weapon in hand ("bow_hunter"), or empty: the game shows that model.
+    [[nodiscard]] godot::String get_weapon_key() const;
     void add_gold(int amount);
     [[nodiscard]] int get_gold() const { return inventory_.gold; }
     [[nodiscard]] bool has_room_for(int item) const;
 
     bool move(int from, int to);
-    // A potion is drunk, a charm is put on or taken off. False when nothing happened.
+    // A potion is drunk, a charm is put on or taken off, a weapon taken in hand. False when nothing happened.
     bool use(int slot);
     // The quick key: the smallest potion that is there.
     bool use_potion();
@@ -55,7 +60,7 @@ public:
 
     [[nodiscard]] int count_of(int item) const;
     [[nodiscard]] int get_potion_count() const;
-    // { health, regen, speed } from the worn charms.
+    // { health, regen, speed, damage, draw_speed, crit_chance, crit_damage } from what is worn and held.
     [[nodiscard]] godot::Dictionary get_bonuses() const;
     [[nodiscard]] gameplay::Bonuses bonuses() const { return gameplay::worn_bonuses(inventory_); }
     // 0..1: how much of the pause between two potions is still to wait.

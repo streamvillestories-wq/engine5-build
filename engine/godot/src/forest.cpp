@@ -364,6 +364,12 @@ std::vector<godot::Vector3> E5Forest::read_clearings() const {
     const godot::TypedArray<godot::Node> keepers = get_tree()->get_nodes_in_group(clearing_group_name);
     for (const godot::Variant& item : keepers) {
         if (const auto* const keeper = godot::Object::cast_to<godot::Node3D>(item)) {
+            // A clearing may spare some forests (metadata `clear_spares`, their names with commas
+            // between): a wood of its own kind is kept free of every other forest's trees that way.
+            const godot::String spared = keeper->get_meta("clear_spares", godot::String());
+            if (spared.split(",", false).has(godot::String(get_name()))) {
+                continue;
+            }
             const godot::Vector3 centre = keeper->get_global_position();
             const float radius = keeper->get_meta("clear_radius", 0.0F);
             clearings.emplace_back(centre.x, radius, centre.z);

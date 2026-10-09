@@ -65,6 +65,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Storm Arrow", .charges = false, .kind = SkillKind::Bow};
     case SkillId::BrambleArrow:
         return {.name = "Bramble Arrow", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::DaggerCombo:
+        return {.name = "Dagger Combo", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -136,6 +138,8 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 32.0F; // what it strikes; see storm_jump_share
     case SkillId::BrambleArrow:
         return 18.0F; // to everything it catches
+    case SkillId::DaggerCombo:
+        return 20.0F; // the first blow; see combo_damage_factor. Less than an arrow, but at once
     case SkillId::None:
         break;
     }
@@ -227,6 +231,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::ArcaneBolt:
     case SkillId::Slash:
     case SkillId::AxeCombo:
+    case SkillId::DaggerCombo:
     case SkillId::Kingfishers:
     case SkillId::BlackHole:
     case SkillId::StarWhirl:
@@ -290,9 +295,9 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::ArcaneBolt, SkillId::Fireball,    SkillId::FrostNova, SkillId::ChainLightning,
                   SkillId::Meteor,     SkillId::StarBarrage, SkillId::BlackHole};
     } else {
-        slots_ = {SkillId::Shot,      SkillId::PowerShot,   SkillId::ArrowRain,   SkillId::FrostFan,
-                  SkillId::FireArrow, SkillId::ThunderKick, SkillId::Kingfishers, SkillId::VenomArrow,
-                  SkillId::GaleArrow, SkillId::StormArrow,  SkillId::BrambleArrow};
+        slots_ = {SkillId::Shot,      SkillId::PowerShot,   SkillId::ArrowRain,    SkillId::FrostFan,
+                  SkillId::FireArrow, SkillId::ThunderKick, SkillId::Kingfishers,  SkillId::VenomArrow,
+                  SkillId::GaleArrow, SkillId::StormArrow,  SkillId::BrambleArrow, SkillId::DaggerCombo};
     }
 }
 

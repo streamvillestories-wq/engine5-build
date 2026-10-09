@@ -43,6 +43,7 @@
 #include <godot_cpp/variant/node_path.hpp>
 #include <godot_cpp/variant/quaternion.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
 #include <algorithm>
@@ -77,6 +78,8 @@ constexpr float min_turn_speed = 0.3F;
 constexpr float aim_shoulder_offset = 0.45F;  // metres to the right
 constexpr float aim_camera_distance = 1.7F;   // metres behind
 constexpr float aim_camera_blend_rate = 8.0F; // 1/s
+constexpr float mount_camera_back = 2.2F;     // metres further back on the horse
+constexpr float mount_camera_rate = 3.0F;     // 1/s
 constexpr float aim_ray_length = 200.0F;      // metres
 constexpr float dodge_hand_over_seconds = 0.18F;
 constexpr float usual_fade_seconds = 0.2F;   // from one whole-body clip to the next
@@ -194,6 +197,21 @@ constexpr std::array<SpellTiming, 3> axe_combo_timings{
     SpellTiming{.playback_scale = axe_playback, .strike_at = 0.4F, .end_at = 0.72F},   // axe_1: round from the right
     SpellTiming{.playback_scale = axe_playback, .strike_at = 0.3F, .end_at = 0.62F},   // axe_2: ripped up from below
     SpellTiming{.playback_scale = axe_playback, .strike_at = 0.36F, .end_at = 0.95F}}; // axe_3: down into the ground
+// The archer's dagger: three quick blows made by the same tool (--hero=ranger, DAGGER_BLOWS).
+constexpr std::array<SpellTiming, 3> dagger_combo_timings{
+    SpellTiming{.playback_scale = 1.0F, .strike_at = 0.16F, .end_at = 0.34F}, // dagger_1: across from her right
+    SpellTiming{.playback_scale = 1.0F, .strike_at = 0.14F, .end_at = 0.32F}, // dagger_2: back from her left
+    SpellTiming{.playback_scale = 1.0F, .strike_at = 0.22F, .end_at = 0.5F}}; // dagger_3: the lunge
+// Every blow carries her a step in, the lunge the furthest (as "step" of each blow in the tool:
+// distance, from, to).
+struct DaggerStep {
+    float metres;
+    float from;
+    float to;
+};
+constexpr std::array<DaggerStep, 3> dagger_steps{DaggerStep{.metres = 0.35F, .from = 0.05F, .to = 0.2F},
+                                                 DaggerStep{.metres = 0.3F, .from = 0.03F, .to = 0.17F},
+                                                 DaggerStep{.metres = 0.7F, .from = 0.08F, .to = 0.24F}};
 constexpr SpellTiming whirlwind_timing{.playback_scale = 1.5F, .strike_at = 1.03F, .end_at = 1.9F};
 constexpr SpellTiming earthbreaker_timing{.playback_scale = 1.3F, .strike_at = 0.83F, .end_at = 1.6F};
 constexpr SpellTiming leap_timing{.playback_scale = 1.5F, .strike_at = 1.7F, .end_at = 2.6F};
@@ -255,10 +273,20 @@ const std::array<ComboLook, 3> axe_looks{
     ComboLook{.x = {0.3F, 0.15F, 0.9F}, .y = {-0.6F, -0.8F, 0.0F}, .before = 0.1F, .shake = 0.02F, .arc_seconds = 0.3F},
     // Straight down in front of him.
     ComboLook{.x = {0.5F, 0.0F, 0.85F}, .y = {0.0F, 1.0F, 0.0F}, .before = 0.08F, .shake = 0.1F, .arc_seconds = 0.26F}};
+// The dagger draws no ready-made arc: its streak follows the blade itself
+// (game/characters/blade_trail.gd). Only the shake of each blow is its own.
+const std::array<ComboLook, 3> dagger_looks{
+    ComboLook{.x = {0.0F, 0.0F, 1.0F}, .y = {1.0F, 0.0F, 0.0F}, .before = 0.0F, .shake = 0.006F, .arc_seconds = 0.0F},
+    ComboLook{.x = {0.0F, 0.0F, 1.0F}, .y = {1.0F, 0.0F, 0.0F}, .before = 0.0F, .shake = 0.008F, .arc_seconds = 0.0F},
+    ComboLook{.x = {0.0F, 0.0F, 1.0F}, .y = {1.0F, 0.0F, 0.0F}, .before = 0.0F, .shake = 0.03F, .arc_seconds = 0.0F}};
 const ComboLook& look_of(gameplay::SkillId skill, int step) {
     const auto index = static_cast<std::size_t>(std::clamp(step, 0, 2));
+    if (skill == gameplay::SkillId::DaggerCombo) {
+        return dagger_looks.at(index);
+    }
     return skill == gameplay::SkillId::AxeCombo ? axe_looks.at(index) : combo_looks.at(index);
 }
+constexpr MeleeBlow dagger_blow{.reach = 1.2F, .radius = 1.35F}; // short: what is on top of her
 constexpr MeleeBlow flame_blow{.reach = 1.4F, .radius = 1.9F};
 constexpr MeleeBlow frost_blow{.reach = 1.3F, .radius = 2.3F};
 constexpr MeleeBlow thunder_blow{.reach = 1.5F, .radius = 2.6F};
@@ -373,13 +401,16 @@ const MeleeBlow& blow_of(gameplay::SkillId skill) {
         return leap_blow;
     case gameplay::SkillId::Battlecry:
         return battlecry_blow;
+    case gameplay::SkillId::DaggerCombo:
+        return dagger_blow;
     default:
         return plain_blow;
     }
 }
 
 bool is_combo(gameplay::SkillId skill) {
-    return skill == gameplay::SkillId::Slash || skill == gameplay::SkillId::AxeCombo;
+    return skill == gameplay::SkillId::Slash || skill == gameplay::SkillId::AxeCombo ||
+           skill == gameplay::SkillId::DaggerCombo;
 }
 
 bool is_melee(gameplay::SkillId skill) {
@@ -390,6 +421,7 @@ bool is_melee(gameplay::SkillId skill) {
     case gameplay::SkillId::ThunderCleave:
     case gameplay::SkillId::StarWhirl:
     case gameplay::SkillId::AxeCombo:
+    case gameplay::SkillId::DaggerCombo:
     case gameplay::SkillId::Whirlwind:
     case gameplay::SkillId::Earthbreaker:
     case gameplay::SkillId::LeapStrike:
@@ -566,6 +598,24 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_dodge_distance"), &E5PlayerController::get_dodge_distance);
     ClassDB::bind_method(D_METHOD("is_dodging"), &E5PlayerController::is_dodging);
     ClassDB::bind_method(D_METHOD("is_emoting"), &E5PlayerController::is_emoting);
+    ClassDB::bind_method(D_METHOD("is_mounted"), &E5PlayerController::is_mounted);
+    ClassDB::bind_method(D_METHOD("set_mounted", "mounted"), &E5PlayerController::set_mounted);
+    ClassDB::bind_method(D_METHOD("try_set_mounted", "mounted"), &E5PlayerController::try_set_mounted);
+    ClassDB::bind_method(D_METHOD("set_mount_speed", "speed"), &E5PlayerController::set_mount_speed);
+    ClassDB::bind_method(D_METHOD("get_mount_speed"), &E5PlayerController::get_mount_speed);
+    ClassDB::bind_method(D_METHOD("set_mount_sprint_speed", "speed"), &E5PlayerController::set_mount_sprint_speed);
+    ClassDB::bind_method(D_METHOD("get_mount_sprint_speed"), &E5PlayerController::get_mount_sprint_speed);
+    ClassDB::bind_method(D_METHOD("set_mount_walk_speed", "speed"), &E5PlayerController::set_mount_walk_speed);
+    ClassDB::bind_method(D_METHOD("get_mount_walk_speed"), &E5PlayerController::get_mount_walk_speed);
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "mount_speed", godot::PROPERTY_HINT_RANGE, "0,30,0.1,suffix:m/s"),
+                 "set_mount_speed", "get_mount_speed");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "mount_sprint_speed", godot::PROPERTY_HINT_RANGE, "0,30,0.1,suffix:m/s"),
+        "set_mount_sprint_speed", "get_mount_sprint_speed");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "mount_walk_speed", godot::PROPERTY_HINT_RANGE, "0,30,0.1,suffix:m/s"),
+        "set_mount_walk_speed", "get_mount_walk_speed");
+    ClassDB::bind_method(D_METHOD("get_action_skill_name"), &E5PlayerController::get_action_skill_name);
     ClassDB::bind_method(D_METHOD("set_charge_always_full", "full"), &E5PlayerController::set_charge_always_full);
     ClassDB::bind_method(D_METHOD("get_charge_always_full"), &E5PlayerController::get_charge_always_full);
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "charge_always_full"), "set_charge_always_full",
@@ -645,6 +695,7 @@ void E5PlayerController::_ready() {
     clip_thunder_ = godot::StringName("thunder_cleave");
     clip_star_ = godot::StringName("star_whirl");
     clip_axe_combo_ = {godot::StringName("axe_1"), godot::StringName("axe_2"), godot::StringName("axe_3")};
+    clip_dagger_combo_ = {godot::StringName("dagger_1"), godot::StringName("dagger_2"), godot::StringName("dagger_3")};
     clip_whirlwind_ = godot::StringName("spin_high");
     clip_earthbreaker_ = godot::StringName("downward");
     clip_leap_ = godot::StringName("leap");
@@ -664,6 +715,7 @@ void E5PlayerController::_ready() {
     clip_dodge_ = godot::StringName("dodge");
     clip_dodge_alt_ = godot::StringName("dodge_alt");
     clip_emote_ = godot::StringName("emote");
+    clip_ride_ = godot::StringName("ride");
     dodge_clip_ = clip_dodge_;
     spawn_transform_ = get_global_transform();
     vitals_ = gameplay::full_vitals(vitals_params_);
@@ -672,6 +724,16 @@ void E5PlayerController::_ready() {
     add_child(inventory_);
     // Nobody sets out with empty pockets.
     inventory_->give(gameplay::ItemId::HealthPotion, starting_potions);
+    if (skill_set_ == static_cast<int>(gameplay::SkillSet::Archer)) {
+        // Her oath-bow in hand; and, while the bows are being tried out, every other in her bag.
+        inventory_->arm(gameplay::ItemId::BowWarden);
+        for (const gameplay::ItemId bow :
+             {gameplay::ItemId::BowHunter, gameplay::ItemId::BowIronbound, gameplay::ItemId::BowLeafwood,
+              gameplay::ItemId::BowMoonglass, gameplay::ItemId::BowBriarbloom, gameplay::ItemId::BowStormfeather,
+              gameplay::ItemId::BowNightthorn, gameplay::ItemId::BowDragonfire}) {
+            inventory_->give(bow, 1);
+        }
+    }
 
     const std::string name = godot::String(get_name()).utf8().get_data();
     camera_pivot_ = get_node<godot::Node3D>(godot::NodePath("CameraPivot"));
@@ -880,7 +942,17 @@ void E5PlayerController::_physics_process(double delta) {
     const bool standard_pressed = attack_held();
     const bool selected_pressed = aim_held();
     if (quick_key_slot_ >= 0 && !selected_pressed) {
+        if (skills_.slot(static_cast<std::size_t>(quick_key_slot_)) == gameplay::SkillId::DaggerCombo) {
+            dagger_return_pending_ = true;
+        }
         quick_key_slot_ = -1; // the key was let go: it is the right button no longer
+    }
+    if (dagger_return_pending_ && !is_busy() && !selected_pressed) {
+        // The dagger is done: the bar goes back to the skill that was chosen before it.
+        dagger_return_pending_ = false;
+        if (dagger_return_slot_ >= 0 && skills_.selected() == gameplay::SkillId::DaggerCombo) {
+            select_skill(dagger_return_slot_);
+        }
     }
     const bool held =
         use_button_ == UseButton::Standard ? standard_pressed : use_button_ == UseButton::Selected && selected_pressed;
@@ -924,7 +996,7 @@ void E5PlayerController::_physics_process(double delta) {
             !input_blocked_ && animator_.has_clip(clip_dodge_alt_) && input->is_action_pressed(actions::dodge_alt);
         const bool dodge_key = alt_key || (!input_blocked_ && input->is_action_pressed(actions::block));
         if (dodge_key && !dodge_key_was_down_ && dodge_cooldown_left_ <= 0.0F && !is_busy() && is_on_floor() &&
-            !vitals_.dead) {
+            !vitals_.dead && !mounted_) {
             // The way she is steered (seen from the camera), or else the way she faces.
             const float right = input->get_axis(action_left_, action_right_);
             const float forward = input->get_axis(action_back_, action_forward_);
@@ -958,7 +1030,7 @@ void E5PlayerController::_physics_process(double delta) {
             if (pressed || steered || is_busy() || !is_on_floor() || vitals_.dead) {
                 emote_left_ = 0.0F;
             }
-        } else if (pressed && !steered && !is_busy() && is_on_floor() && !vitals_.dead) {
+        } else if (pressed && !steered && !is_busy() && is_on_floor() && !vitals_.dead && !mounted_) {
             emote_left_ = animator_.clip_length(clip_emote_);
         }
     }
@@ -1025,7 +1097,8 @@ void E5PlayerController::_physics_process(double delta) {
             .cancel_pressed = cancel,
             .build_charge = gameplay::skill_info(skills_.selected()).charges,
         };
-        const gameplay::BowStep bow_step = gameplay::step_bow(bow_, bow_input, bow_timings_, static_cast<float>(delta));
+        const gameplay::BowStep bow_step =
+            gameplay::step_bow(bow_, bow_input, bow_timings(), static_cast<float>(delta));
         bow_ = bow_step.state;
         update_bow_string(bow_step.string_draw);
         update_nocked_arrow(bow_step.string_draw);
@@ -1047,7 +1120,7 @@ void E5PlayerController::_physics_process(double delta) {
         .move_right = rooted ? 0.0F : input->get_axis(action_left_, action_right_),
         .move_forward = rooted ? 0.0F : input->get_axis(action_back_, action_forward_),
         .sprint = input->is_action_pressed(action_sprint_),
-        .jump = !input_blocked_ && input->is_action_pressed(action_jump_) && !is_busy(),
+        .jump = !input_blocked_ && input->is_action_pressed(action_jump_) && !is_busy() && !mounted_,
     };
 
     // Without the combo's push of the last frame: that is added on top of what the motor
@@ -1068,9 +1141,14 @@ void E5PlayerController::_physics_process(double delta) {
     if (action_.active && is_combo(action_skill_) && combo_step_ >= 0 && is_on_floor()) {
         // In the clip's time: it may be played slower or faster than it was made.
         const bool axe = action_skill_ == gameplay::SkillId::AxeCombo;
-        const float forward =
-            gameplay::combo_advance_speed(combo_step_, action_.elapsed * action_playback_scale_, axe) *
-            action_playback_scale_ * (axe ? axe_advance_share : 1.0F);
+        float forward = gameplay::combo_advance_speed(combo_step_, action_.elapsed * action_playback_scale_, axe) *
+                        action_playback_scale_ * (axe ? axe_advance_share : 1.0F);
+        if (action_skill_ == gameplay::SkillId::DaggerCombo) {
+            // Her own steps: each distance as a smooth step, like the others'.
+            const DaggerStep& step = dagger_steps.at(static_cast<std::size_t>(std::clamp(combo_step_, 0, 2)));
+            const float u = (action_.elapsed - step.from) / (step.to - step.from);
+            forward = u > 0.0F && u < 1.0F ? step.metres * 6.0F * u * (1.0F - u) / (step.to - step.from) : 0.0F;
+        }
         combo_push_ = godot::Vector3(std::sin(model_yaw_) * forward, 0.0F, std::cos(model_yaw_) * forward);
         next.x += static_cast<float>(combo_push_.x);
         next.z += static_cast<float>(combo_push_.z);
@@ -1266,7 +1344,7 @@ float E5PlayerController::get_cast_progress() const {
 
 float E5PlayerController::get_cast_seconds() const {
     if (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming) {
-        return bow_timings_.draw_seconds;
+        return bow_timings().draw_seconds;
     }
     if (action_.active && !is_combo(action_skill_) && action_.elapsed < action_timings_.strike_at_seconds) {
         return action_timings_.strike_at_seconds;
@@ -1379,8 +1457,27 @@ void E5PlayerController::set_use_button(UseButton next) {
     use_button_ = next;
 }
 
+bool E5PlayerController::try_set_mounted(bool mounted) {
+    if (remote_ || input_blocked_ || is_busy() || !is_on_floor() || vitals_.dead) {
+        return false;
+    }
+    set_mounted(mounted);
+    return mounted_ == mounted;
+}
+
+void E5PlayerController::set_mounted(bool mounted) {
+    mounted_ = mounted && !vitals_.dead && animator_.is_ready() && animator_.has_clip(clip_ride_);
+    if (mounted_) {
+        emote_left_ = 0.0F;
+    }
+}
+
 gameplay::MotorParams E5PlayerController::motor_params() const {
     gameplay::MotorParams params = params_;
+    if (mounted_) {
+        params.walk_speed = mount_speed_;
+        params.sprint_speed = mount_sprint_speed_;
+    }
     if (inventory_ != nullptr) {
         const float faster = 1.0F + inventory_->bonuses().speed;
         params.walk_speed *= faster;
@@ -1388,8 +1485,8 @@ gameplay::MotorParams E5PlayerController::motor_params() const {
     }
     // Held to a walk: the pace her walking clip is made for, whatever else is pressed.
     if (!input_blocked_ && !remote_ && godot::Input::get_singleton()->is_action_pressed(actions::walk)) {
-        params.walk_speed = walk_clip_speed;
-        params.sprint_speed = walk_clip_speed;
+        params.walk_speed = mounted_ ? mount_walk_speed_ : walk_clip_speed;
+        params.sprint_speed = params.walk_speed;
     }
     // While aiming she moves slowly and cannot sprint or jump.
     if (is_aiming()) {
@@ -1407,6 +1504,25 @@ gameplay::VitalsParams E5PlayerController::effective_vitals() const {
         params.regen_per_second += worn.regen;
     }
     return params;
+}
+
+float E5PlayerController::dealt(gameplay::SkillId skill, float power) const {
+    if (remote_) {
+        return 0.0F; // shown here for another player: her own machine counts what she does
+    }
+    const float damage = gameplay::skill_damage(skill, power);
+    if (inventory_ == nullptr || gameplay::skill_info(skill).kind != gameplay::SkillKind::Bow) {
+        return damage;
+    }
+    return gameplay::weapon_hit(damage, inventory_->bonuses(), static_cast<float>(godot::UtilityFunctions::randf()));
+}
+
+gameplay::BowTimings E5PlayerController::bow_timings() const {
+    gameplay::BowTimings timings = bow_timings_;
+    if (inventory_ != nullptr) {
+        timings.draw_seconds /= 1.0F + inventory_->bonuses().draw_speed;
+    }
+    return timings;
 }
 
 float E5PlayerController::get_effective_max_health() const {
@@ -1518,6 +1634,21 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
     if (emote_left_ > 0.0F) {
         animator_.set_upper(godot::StringName());
         animator_.set_base(clip_emote_, 1.0F);
+        return;
+    }
+    if (mounted_) {
+        // She sits; the bow is drawn and shot from the saddle with the upper body alone.
+        animator_.set_base(clip_ride_, 1.0F);
+        if (!is_aiming()) {
+            animator_.set_upper(godot::StringName());
+        } else if (bow_.phase == gameplay::BowPhase::Drawing) {
+            animator_.set_upper(clip_bow_draw_);
+        } else if (bow_.phase == gameplay::BowPhase::Releasing) {
+            animator_.set_upper(clip_bow_recoil_);
+        } else {
+            animator_.set_upper(clip_bow_aim_);
+        }
+        animator_.update(delta);
         return;
     }
     if (block_.raised) {
@@ -1788,7 +1919,11 @@ void E5PlayerController::update_aim_camera(float delta) {
     aim_camera_blend_ +=
         std::clamp(target - aim_camera_blend_, -aim_camera_blend_rate * delta, aim_camera_blend_rate * delta);
     camera_arm_->set_position(godot::Vector3(aim_shoulder_offset * aim_camera_blend_, 0.0F, 0.0F));
-    camera_arm_->set_length(std::lerp(camera_rest_distance_, aim_camera_distance, aim_camera_blend_));
+    // On the horse the camera stands further back: a horse is long, and its croup filled the picture.
+    const float mount_step = mount_camera_rate * delta;
+    mount_camera_blend_ += std::clamp((mounted_ ? 1.0F : 0.0F) - mount_camera_blend_, -mount_step, mount_step);
+    const float rest_distance = camera_rest_distance_ + mount_camera_back * mount_camera_blend_;
+    camera_arm_->set_length(std::lerp(rest_distance, aim_camera_distance, aim_camera_blend_));
 }
 
 void E5PlayerController::setup_charge_effect() {
@@ -2090,6 +2225,8 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
         clip = &clip_star_;
     } else if (skill == gameplay::SkillId::AxeCombo) {
         clip = &clip_axe_combo_.at(static_cast<std::size_t>(std::clamp(combo_step_, 0, gameplay::combo_length - 1)));
+    } else if (skill == gameplay::SkillId::DaggerCombo) {
+        clip = &clip_dagger_combo_.at(static_cast<std::size_t>(std::clamp(combo_step_, 0, gameplay::combo_length - 1)));
     } else if (skill == gameplay::SkillId::Whirlwind) {
         clip = &clip_whirlwind_;
     } else if (skill == gameplay::SkillId::Earthbreaker) {
@@ -2103,7 +2240,8 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
 }
 
 bool E5PlayerController::can_start_instant_skill(gameplay::SkillId skill) const {
-    if (!is_on_floor() || instant_clip(skill) == nullptr || !skill_ready(skill)) {
+    // Nothing that takes the whole body from the saddle (a kick, the dagger, a cast).
+    if (mounted_ || !is_on_floor() || instant_clip(skill) == nullptr || !skill_ready(skill)) {
         return false;
     }
     // One flock at a time: no new birds while the last ones are still flying. One black hole at a time.
@@ -2131,7 +2269,18 @@ const SpellTiming* E5PlayerController::advance_combo(gameplay::SkillId skill) {
     // The clip was chosen before the step was known.
     action_timings_.duration_seconds = animator_.clip_length(*instant_clip(skill));
     const auto step = static_cast<std::size_t>(combo_step_);
+    if (skill == gameplay::SkillId::DaggerCombo) {
+        return &dagger_combo_timings.at(step);
+    }
     return skill == gameplay::SkillId::AxeCombo ? &axe_combo_timings.at(step) : &combo_timings.at(step);
+}
+
+godot::String E5PlayerController::get_action_skill_name() const {
+    if (!action_.active) {
+        return {};
+    }
+    const std::string_view name = gameplay::skill_info(action_skill_).name;
+    return godot::String::utf8(name.data(), static_cast<std::int64_t>(name.size()));
 }
 
 void E5PlayerController::start_blade_effect(gameplay::SkillId skill) {
@@ -2372,6 +2521,9 @@ void E5PlayerController::show_slash_arc() {
         return;
     }
     const ComboLook& look = look_of(action_skill_, combo_step_);
+    if (look.arc_seconds <= 0.0F) {
+        return; // a thrust: nothing sweeps
+    }
     // Hung on her, so that it goes along with her step.
     godot::Node3D* const arc =
         E5Effect::spawn(slash_arc_, this, get_global_position() + godot::Vector3(0.0F, 1.2F, 0.0F));
@@ -2406,7 +2558,8 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
     if (is_combo(skill) && combo_step_ >= 0) {
         shake_ = std::max(shake_, look_of(skill, combo_step_).shake);
         // The finisher comes down out of the air: the ground answers.
-        if (combo_step_ == gameplay::combo_length - 1 && landing_dust_.is_valid()) {
+        if (combo_step_ == gameplay::combo_length - 1 && landing_dust_.is_valid() &&
+            skill != gameplay::SkillId::DaggerCombo) {
             E5Effect::spawn(landing_dust_, get_parent(),
                             get_global_position() + forward * 0.9F + godot::Vector3(0.0F, 0.06F, 0.0F));
         }
@@ -2624,6 +2777,7 @@ void E5PlayerController::fire_rain() {
     auto* const rain = memnew(E5ArrowRain);
     rain->configure(get_rid(), rain_marker_effect_, rain_impact_effect_);
     rain->set_harmless(remote_);
+    rain->set_damage(dealt(gameplay::SkillId::ArrowRain));
     get_parent()->add_child(rain);
     rain->set_global_position(rain_target_);
 }
@@ -2684,9 +2838,16 @@ void E5PlayerController::_unhandled_input(const godot::Ref<godot::InputEvent>& e
     if ((archery_enabled_ || spells_enabled_) && event->is_pressed() && !event->is_echo()) {
         for (int slot = 0; slot < actions::skill_slot_count; ++slot) {
             if (event->is_action(skill_actions_.at(static_cast<std::size_t>(slot)))) {
+                // The dagger is used from its key, whatever the setting, and the bar remembers
+                // what was chosen before it.
+                const bool dagger = skills_.slot(static_cast<std::size_t>(slot)) == gameplay::SkillId::DaggerCombo;
+                if (dagger && skills_.selected() != gameplay::SkillId::DaggerCombo) {
+                    dagger_return_slot_ = static_cast<int>(skills_.selected_index());
+                }
                 select_skill(slot);
                 // Quick cast: if the skill was taken, the key now counts as the right button.
-                if (quick_cast_ && skills_.selected_index() == static_cast<std::size_t>(slot) && !is_busy()) {
+                if ((quick_cast_ || dagger) && skills_.selected_index() == static_cast<std::size_t>(slot) &&
+                    !is_busy()) {
                     quick_key_slot_ = slot;
                 }
                 return;

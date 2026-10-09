@@ -93,7 +93,23 @@ public:
     // The dance (a key of its own, for a hero whose library has the clip `emote`): she dances it
     // through unless she is steered, attacks or is made to stop. Only for show; what is heard
     // with it is game/characters/emote.gd. True also for another player's hero seen dancing.
+    // The name of the instant skill she is in the middle of (a kick, a blow of a combo), or empty:
+    // for what is shown and heard with it (game/characters/dagger_carry.gd).
+    [[nodiscard]] godot::String get_action_skill_name() const;
     [[nodiscard]] bool is_emoting() const { return remote_ ? net_clip_ == clip_emote_ : emote_left_ > 0.0F; }
+    // On a horse (game/characters/mount.gd decides when: the E key at a horse, and shows it under
+    // her). Only a hero whose library has the clip `ride` can. Another player's hero rides when
+    // that is the clip she plays. `try_set_mounted` is the player's wish: refused while she is
+    // busy, in the air or dead; it returns whether she now is as asked.
+    [[nodiscard]] bool is_mounted() const { return remote_ ? net_clip_ == clip_ride_ : mounted_; }
+    void set_mounted(bool mounted);
+    bool try_set_mounted(bool mounted);
+    void set_mount_speed(float speed) { mount_speed_ = speed; }
+    [[nodiscard]] float get_mount_speed() const { return mount_speed_; }
+    void set_mount_sprint_speed(float speed) { mount_sprint_speed_ = speed; }
+    [[nodiscard]] float get_mount_sprint_speed() const { return mount_sprint_speed_; }
+    void set_mount_walk_speed(float speed) { mount_walk_speed_ = speed; }
+    [[nodiscard]] float get_mount_walk_speed() const { return mount_walk_speed_; }
     // Quick cast (a setting): a number key chooses its skill and uses it at once, the key
     // doing what the right mouse button does: held it draws the bow, let go it shoots.
     void set_quick_cast(bool enabled) { quick_cast_ = enabled; }
@@ -390,9 +406,10 @@ private:
     int pending_combo_step_ = -1;
     float outgoing_damage_ = 0.0F;
     // What a skill of this hero does: nothing if she is remote (see apply_net_event).
-    [[nodiscard]] float dealt(gameplay::SkillId skill, float power = 0.0F) const {
-        return remote_ ? 0.0F : gameplay::skill_damage(skill, power);
-    }
+    // What is shot from the bow is raised by the bow in hand, and now and then strikes true.
+    [[nodiscard]] float dealt(gameplay::SkillId skill, float power = 0.0F) const;
+    // The bow's timings with the bow in hand: a quicker bow is drawn sooner.
+    [[nodiscard]] gameplay::BowTimings bow_timings() const;
     void note_net_event(int kind, float power);
     void update_remote(float delta);
     godot::Ref<godot::AnimationLibrary> animation_library_;
@@ -436,6 +453,11 @@ private:
     godot::StringName clip_emote_;
     float emote_left_ = 0.0F; // seconds of the dance still to come
     bool emote_key_was_down_ = false;
+    godot::StringName clip_ride_;
+    bool mounted_ = false;
+    float mount_speed_ = 7.5F;         // m/s on the horse
+    float mount_sprint_speed_ = 11.0F; // with the sprint key
+    float mount_walk_speed_ = 1.3F;    // with the walk key: the pace the horse's walk is made for
     godot::StringName clip_dodge_alt_; // a second dodge to compare with the first, on its own key
     godot::StringName dodge_clip_;     // the one under way
     bool dodge_enabled_ = false;
@@ -485,9 +507,10 @@ private:
     bool spells_enabled_ = false;
     // How fast the clip of the instant skill in progress is played.
     float action_playback_scale_ = 1.0F;
-    float aim_move_speed_ = 1.6F;   // m/s while the bow is raised
-    float arrow_speed_ = 70.0F;     // m/s at release
-    float aim_camera_blend_ = 0.0F; // 0 = normal camera, 1 = over the shoulder
+    float aim_move_speed_ = 1.6F;     // m/s while the bow is raised
+    float arrow_speed_ = 70.0F;       // m/s at release
+    float aim_camera_blend_ = 0.0F;   // 0 = normal camera, 1 = over the shoulder
+    float mount_camera_blend_ = 0.0F; // 0 = on foot, 1 = the camera where it stands for a rider
     float camera_rest_distance_ = 0.0F;
     bool archery_enabled_ = false;
     gameplay::BowState bow_;
@@ -582,6 +605,10 @@ private:
     godot::StringName clip_black_hole_;
     std::array<godot::StringName, 3> clip_combo_;
     std::array<godot::StringName, 3> clip_axe_combo_;
+    std::array<godot::StringName, 3> clip_dagger_combo_;
+    // The dagger is used from its key and the bar goes back to what was chosen before.
+    int dagger_return_slot_ = -1;
+    bool dagger_return_pending_ = false;
     godot::StringName clip_whirlwind_;
     godot::StringName clip_earthbreaker_;
     godot::StringName clip_leap_;

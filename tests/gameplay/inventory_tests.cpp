@@ -1,9 +1,13 @@
 #include "e5/gameplay/inventory.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
+using Catch::Approx;
 using namespace e5::gameplay;
 
 TEST_CASE("every item is described", "[inventory]") {
@@ -181,4 +185,66 @@ TEST_CASE("loot is repeatable, always has gold, and everything turns up", "[inve
     CHECK(potions < kills * 38 / 100);
     CHECK(caps > kills * 62 / 100);
     CHECK(caps < kills * 78 / 100);
+}
+
+TEST_CASE("a weapon goes into the weapon slot and is only ever changed for another", "[inventory][weapon]") {
+    Inventory inventory;
+    inventory.slots.at(static_cast<std::size_t>(weapon_slot)) = {.item = ItemId::BowWarden, .count = 1};
+    REQUIRE(add_item(inventory, ItemId::BowDragonfire, 1) == 0);
+    REQUIRE(add_item(inventory, ItemId::HealthPotion, 2) == 0);
+
+    // From the bag into her hand: the two change places.
+    CHECK(equip_destination(inventory, 0) == weapon_slot);
+    CHECK(move_stack(inventory, 0, weapon_slot));
+    CHECK(stack_at(inventory, weapon_slot).item == ItemId::BowDragonfire);
+    CHECK(stack_at(inventory, 0).item == ItemId::BowWarden);
+
+    // Nothing but a weapon goes there, and the one in hand is not put away.
+    CHECK_FALSE(move_stack(inventory, 1, weapon_slot));
+    CHECK(equip_destination(inventory, weapon_slot) == -1);
+    CHECK_FALSE(move_stack(inventory, weapon_slot, 5));
+    CHECK_FALSE(move_stack(inventory, weapon_slot, 1));
+    CHECK(stack_at(inventory, weapon_slot).item == ItemId::BowDragonfire);
+    // A weapon is not a charm.
+    CHECK_FALSE(move_stack(inventory, 0, bag_slots));
+}
+
+TEST_CASE("the bow in hand raises what an arrow does", "[inventory][weapon]") {
+    Inventory inventory;
+    CHECK(worn_bonuses(inventory).damage == Approx(0.0F));
+    CHECK(weapon_hit(100.0F, worn_bonuses(inventory), 0.5F) == Approx(100.0F));
+    // One arrow in twenty strikes true without any bow's help, for half as much again.
+    CHECK(weapon_hit(100.0F, worn_bonuses(inventory), 0.04F) == Approx(150.0F));
+
+    inventory.slots.at(static_cast<std::size_t>(weapon_slot)) = {.item = ItemId::BowDragonfire, .count = 1};
+    const Bonuses held = worn_bonuses(inventory);
+    CHECK(held.damage == Approx(0.42F));
+    CHECK(held.health == Approx(25.0F));
+    CHECK(weapon_hit(100.0F, held, 0.5F) == Approx(142.0F));
+    CHECK(is_critical(held, 0.14F));
+    CHECK_FALSE(is_critical(held, 0.16F));
+    CHECK(weapon_hit(100.0F, held, 0.1F) == Approx(142.0F * 2.0F));
+    // A bow in the bag gives nothing.
+    Inventory carried;
+    REQUIRE(add_item(carried, ItemId::BowDragonfire, 1) == 0);
+    CHECK(worn_bonuses(carried).damage == Approx(0.0F));
+}
+
+TEST_CASE("the bows get better with their level, and rarer", "[inventory][weapon]") {
+    const std::array bows{ItemId::BowWarden,       ItemId::BowHunter,     ItemId::BowIronbound,
+                          ItemId::BowLeafwood,     ItemId::BowMoonglass,  ItemId::BowBriarbloom,
+                          ItemId::BowStormfeather, ItemId::BowNightthorn, ItemId::BowDragonfire};
+    int level = 0;
+    Rarity rarity = Rarity::Common;
+    for (const ItemId bow : bows) {
+        const ItemInfo& info = item_info(bow);
+        CHECK(info.kind == ItemKind::Weapon);
+        CHECK(info.max_stack == 1);
+        CHECK(info.level > level);
+        CHECK(info.rarity >= rarity);
+        CHECK_FALSE(info.key.empty());
+        level = info.level;
+        rarity = info.rarity;
+    }
+    CHECK(item_info(ItemId::BowDragonfire).rarity == Rarity::Legendary);
 }

@@ -28,6 +28,7 @@ void ensure_default_input_actions() {
         Binding{.action = actions::walk, .key = godot::KEY_CTRL},
         Binding{.action = actions::dodge_alt, .key = godot::KEY_T},
         Binding{.action = actions::emote, .key = godot::KEY_N},
+        Binding{.action = actions::interact, .key = godot::KEY_E},
         Binding{.action = actions::use_potion, .key = godot::KEY_Q},
         Binding{.action = actions::block, .key = godot::KEY_R},
         Binding{.action = actions::inventory, .key = godot::KEY_TAB},
@@ -56,9 +57,9 @@ void ensure_default_input_actions() {
         input_map->action_add_event(action, event);
     }
     // Slots 1..9 sit on the number keys in order; the tenth is 0, as on the keyboard row.
-    constexpr std::array slot_keys{godot::KEY_1, godot::KEY_2, godot::KEY_3,     godot::KEY_4,
-                                   godot::KEY_5, godot::KEY_6, godot::KEY_7,     godot::KEY_8,
-                                   godot::KEY_9, godot::KEY_0, godot::KEY_MINUS, godot::KEY_EQUAL};
+    constexpr std::array slot_keys{godot::KEY_1,     godot::KEY_2, godot::KEY_3, godot::KEY_4, godot::KEY_5,
+                                   godot::KEY_6,     godot::KEY_7, godot::KEY_8, godot::KEY_9, godot::KEY_0,
+                                   godot::KEY_MINUS, godot::KEY_F}; // F: the archer's dagger is on the twelfth
     for (int slot = 0; slot < actions::skill_slot_count; ++slot) {
         const godot::StringName action(godot::String(actions::skill_prefix) + godot::String::num_int64(slot + 1));
         if (input_map->has_action(action)) {

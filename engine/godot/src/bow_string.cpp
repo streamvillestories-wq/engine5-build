@@ -58,6 +58,11 @@ void E5BowString::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_brace_height", "height"), &E5BowString::set_brace_height);
     ClassDB::bind_method(D_METHOD("get_brace_height"), &E5BowString::get_brace_height);
     ClassDB::bind_method(D_METHOD("get_nock_position"), &E5BowString::get_nock_position);
+    ClassDB::bind_method(D_METHOD("set_colour", "colour"), &E5BowString::set_colour);
+    ClassDB::bind_method(D_METHOD("get_colour"), &E5BowString::get_colour);
+    ClassDB::bind_method(D_METHOD("set_glow", "glow"), &E5BowString::set_glow);
+    ClassDB::bind_method(D_METHOD("get_glow"), &E5BowString::get_glow);
+    ClassDB::bind_method(D_METHOD("refresh"), &E5BowString::refresh);
 
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "draw", godot::PROPERTY_HINT_RANGE, "0,1,0.01"), "set_draw",
                  "get_draw");
@@ -68,9 +73,18 @@ void E5BowString::_bind_methods() {
     ADD_PROPERTY(
         PropertyInfo(godot::Variant::FLOAT, "thickness", godot::PROPERTY_HINT_RANGE, "0.001,0.05,0.001,suffix:m"),
         "set_thickness", "get_thickness");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::COLOR, "colour"), "set_colour", "get_colour");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "glow", godot::PROPERTY_HINT_RANGE, "0,8,0.1"), "set_glow",
+                 "get_glow");
 }
 
 void E5BowString::_ready() {
+    refresh();
+}
+
+void E5BowString::refresh() {
+    anchors_found_ = false;
+    ornament_ = 0;
     const godot::Node* const bow = get_parent();
     const auto* const top =
         bow != nullptr ? godot::Object::cast_to<godot::Node3D>(bow->find_child("string_anchor_top", true, false))
@@ -88,10 +102,22 @@ void E5BowString::_ready() {
     bottom_ = to_local(bottom->get_global_position());
     anchors_found_ = true;
 
+    // What is modelled on the string goes where the nock goes.
+    if (auto* const ornament =
+            godot::Object::cast_to<godot::Node3D>(bow->find_child("string_ornament*", true, false))) {
+        ornament_ = ornament->get_instance_id();
+        ornament_offset_ = to_local(ornament->get_global_position()) - (top_ + bottom_) * 0.5F;
+    }
+
     godot::Ref<godot::StandardMaterial3D> material;
     material.instantiate();
-    material->set_albedo(godot::Color(0.82F, 0.8F, 0.74F));
+    material->set_albedo(colour_);
     material->set_roughness(0.9F);
+    if (glow_ > 0.0F) {
+        material->set_feature(godot::BaseMaterial3D::FEATURE_EMISSION, true);
+        material->set_emission(colour_);
+        material->set_emission_energy_multiplier(glow_);
+    }
 
     // One unit-height mesh shared by both segments; each is stretched by its transform.
     godot::Ref<godot::CylinderMesh> mesh;
@@ -103,12 +129,14 @@ void E5BowString::_ready() {
     mesh->set_rings(0);
     mesh->set_material(material);
 
-    upper_segment_ = memnew(godot::MeshInstance3D);
+    if (upper_segment_ == nullptr) {
+        upper_segment_ = memnew(godot::MeshInstance3D);
+        add_child(upper_segment_);
+        lower_segment_ = memnew(godot::MeshInstance3D);
+        add_child(lower_segment_);
+    }
     upper_segment_->set_mesh(mesh);
-    add_child(upper_segment_);
-    lower_segment_ = memnew(godot::MeshInstance3D);
     lower_segment_->set_mesh(mesh);
-    add_child(lower_segment_);
 
     update_segments();
 }
@@ -148,6 +176,11 @@ void E5BowString::update_segments() {
     nock_ = to_godot(shape.nock).lerp(nock_target_, nock_target_weight_);
     span_segment(upper_segment_, top_, nock_);
     span_segment(lower_segment_, nock_, bottom_);
+    if (ornament_ != 0) {
+        if (auto* const ornament = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(ornament_))) {
+            ornament->set_global_position(to_global(nock_ + ornament_offset_));
+        }
+    }
 }
 
 } // namespace e5::bridge

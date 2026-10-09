@@ -27,12 +27,15 @@ public:
     [[nodiscard]] float get_radius() const { return radius_; }
     // Harmless: for show, the copy of another player's rain.
     void set_harmless(bool harmless) { harmless_ = harmless; }
+    // What each arrow does (the archer's bow raises it). Without it: the skill's own.
+    void set_damage(float damage) { damage_ = damage; }
 
 protected:
     static void _bind_methods() {}
 
 private:
     bool harmless_ = false;
+    float damage_ = -1.0F;
     void drop_arrow(int index);
 
     godot::RID shooter_;
