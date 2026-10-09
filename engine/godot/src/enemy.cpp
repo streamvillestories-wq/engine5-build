@@ -765,6 +765,14 @@ void E5Enemy::die() {
     play_phase_animation(false);
     logger().info("enemy '{}' died", godot::String(get_name()).utf8().get_data());
     E5Effect::set_active(trail_, false);
+    // The arrows in it go: they hang on the body's node, which stays upright where it stood
+    // while the body falls, and were left standing in the air over the corpse (bug report 17).
+    const godot::TypedArray<godot::Node> arrows = find_children("*", "E5Arrow", true, false);
+    for (const godot::Variant& node : arrows) {
+        if (auto* const arrow = godot::Object::cast_to<godot::Node>(node)) {
+            arrow->queue_free();
+        }
+    }
     drop_loot();
 }
 
