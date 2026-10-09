@@ -90,6 +90,10 @@ public:
     void set_dodge_distance(float metres) { dodge_distance_ = metres; }
     [[nodiscard]] float get_dodge_distance() const { return dodge_distance_; }
     [[nodiscard]] bool is_dodging() const { return dodge_left_ > 0.0F; }
+    // The dance (a key of its own, for a hero whose library has the clip `emote`): she dances it
+    // through unless she is steered, attacks or is made to stop. Only for show; what is heard
+    // with it is game/characters/emote.gd. True also for another player's hero seen dancing.
+    [[nodiscard]] bool is_emoting() const { return remote_ ? net_clip_ == clip_emote_ : emote_left_ > 0.0F; }
     // Quick cast (a setting): a number key chooses its skill and uses it at once, the key
     // doing what the right mouse button does: held it draws the bow, let go it shoots.
     void set_quick_cast(bool enabled) { quick_cast_ = enabled; }
@@ -425,6 +429,9 @@ private:
     bool block_enabled_ = false;
     bool block_key_was_down_ = false;
     godot::StringName clip_dodge_;
+    godot::StringName clip_emote_;
+    float emote_left_ = 0.0F; // seconds of the dance still to come
+    bool emote_key_was_down_ = false;
     godot::StringName clip_dodge_alt_; // a second dodge to compare with the first, on its own key
     godot::StringName dodge_clip_;     // the one under way
     bool dodge_enabled_ = false;

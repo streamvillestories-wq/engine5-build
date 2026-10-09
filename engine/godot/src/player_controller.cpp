@@ -562,6 +562,7 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_dodge_distance", "metres"), &E5PlayerController::set_dodge_distance);
     ClassDB::bind_method(D_METHOD("get_dodge_distance"), &E5PlayerController::get_dodge_distance);
     ClassDB::bind_method(D_METHOD("is_dodging"), &E5PlayerController::is_dodging);
+    ClassDB::bind_method(D_METHOD("is_emoting"), &E5PlayerController::is_emoting);
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "dodge_distance", godot::PROPERTY_HINT_RANGE, "0,10,0.1,suffix:m"),
                  "set_dodge_distance", "get_dodge_distance");
     ClassDB::bind_method(D_METHOD("set_quick_cast", "enabled"), &E5PlayerController::set_quick_cast);
@@ -655,6 +656,7 @@ void E5PlayerController::_ready() {
     clip_block_ = godot::StringName(block_clip);
     clip_dodge_ = godot::StringName("dodge");
     clip_dodge_alt_ = godot::StringName("dodge_alt");
+    clip_emote_ = godot::StringName("emote");
     dodge_clip_ = clip_dodge_;
     spawn_transform_ = get_global_transform();
     vitals_ = gameplay::full_vitals(vitals_params_);
@@ -935,6 +937,23 @@ void E5PlayerController::_physics_process(double delta) {
             }
         }
         dodge_key_was_down_ = dodge_key;
+    }
+    if (animator_.is_ready() && animator_.has_clip(clip_emote_)) {
+        const bool emote_key = !input_blocked_ && input->is_action_pressed(actions::emote);
+        const bool pressed = emote_key && !emote_key_was_down_;
+        emote_key_was_down_ = emote_key;
+        const bool steered = !input_blocked_ && (std::abs(input->get_axis(action_left_, action_right_)) > 0.2F ||
+                                                 std::abs(input->get_axis(action_back_, action_forward_)) > 0.2F ||
+                                                 input->is_action_pressed(action_jump_));
+        if (emote_left_ > 0.0F) {
+            emote_left_ -= static_cast<float>(delta);
+            // Anything else she is asked to do ends it; so does the key again.
+            if (pressed || steered || is_busy() || !is_on_floor() || vitals_.dead) {
+                emote_left_ = 0.0F;
+            }
+        } else if (pressed && !steered && !is_busy() && is_on_floor() && !vitals_.dead) {
+            emote_left_ = animator_.clip_length(clip_emote_);
+        }
     }
 
     // Instant skills start on the press and play through; the bow stays down meanwhile.
@@ -1487,6 +1506,11 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
     if (dodge_left_ > 0.0F) {
         animator_.set_upper(godot::StringName());
         animator_.set_base(dodge_clip_, 1.0F);
+        return;
+    }
+    if (emote_left_ > 0.0F) {
+        animator_.set_upper(godot::StringName());
+        animator_.set_base(clip_emote_, 1.0F);
         return;
     }
     if (block_.raised) {

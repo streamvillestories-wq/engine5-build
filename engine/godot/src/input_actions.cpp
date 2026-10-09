@@ -27,6 +27,7 @@ void ensure_default_input_actions() {
         Binding{.action = actions::sprint, .key = godot::KEY_SHIFT},
         Binding{.action = actions::walk, .key = godot::KEY_CTRL},
         Binding{.action = actions::dodge_alt, .key = godot::KEY_T},
+        Binding{.action = actions::emote, .key = godot::KEY_N},
         Binding{.action = actions::use_potion, .key = godot::KEY_Q},
         Binding{.action = actions::block, .key = godot::KEY_R},
         Binding{.action = actions::inventory, .key = godot::KEY_TAB},
