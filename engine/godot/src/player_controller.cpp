@@ -79,8 +79,11 @@ constexpr float aim_camera_distance = 1.7F;   // metres behind
 constexpr float aim_camera_blend_rate = 8.0F; // 1/s
 constexpr float aim_ray_length = 200.0F;      // metres
 constexpr float dodge_hand_over_seconds = 0.18F;
-constexpr float usual_fade_seconds = 0.2F;     // from one whole-body clip to the next
-constexpr float landing_fade_seconds = 0.38F;  // out of the jump clip
+constexpr float usual_fade_seconds = 0.2F;   // from one whole-body clip to the next
+constexpr float landing_fade_seconds = 0.3F; // out of the jump clip, coming down on the spot
+// ... and coming down on the move. Short: while the flight pose is still mixed in her legs do not
+// step, and for as long as that lasted (0.38 s at first) she glided over the ground.
+constexpr float landing_moving_fade_seconds = 0.12F;
 constexpr float dodge_cooldown_seconds = 0.8F; // from the end of one dodge to the start of the next
 // Whoever stands this close ahead of her chest is what she shoots at, whatever the crosshair covers.
 constexpr float point_blank_reach = 2.6F;  // metres
@@ -1540,16 +1543,18 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
     } else {
         animator_.set_upper(godot::StringName());
         // Coming down from a jump she settles into standing or running over a longer stretch.
-        const float fade = animator_.base_clip() == clip_jump_ ? landing_fade_seconds : usual_fade_seconds;
+        const bool landing = animator_.base_clip() == clip_jump_;
+        const float fade = landing ? landing_fade_seconds : usual_fade_seconds;
+        const float moving_fade = landing ? landing_moving_fade_seconds : usual_fade_seconds;
         switch (gameplay::select_locomotion_state(speed, is_on_floor())) {
         case gameplay::LocomotionState::Idle:
             animator_.set_base(clip_idle_, 1.0F, fade);
             break;
         case gameplay::LocomotionState::Walk:
-            animator_.set_base(clip_walk_, speed / walk_clip_speed, fade);
+            animator_.set_base(clip_walk_, speed / walk_clip_speed, moving_fade);
             break;
         case gameplay::LocomotionState::Run:
-            animator_.set_base(clip_run_, speed / run_clip_speed, fade);
+            animator_.set_base(clip_run_, speed / run_clip_speed, moving_fade);
             break;
         case gameplay::LocomotionState::Airborne:
             animator_.set_base(clip_jump_, 1.0F);

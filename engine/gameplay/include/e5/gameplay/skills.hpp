@@ -72,7 +72,7 @@ inline constexpr int storm_jumps = 4;               // enemies the lightning lea
 inline constexpr float storm_jump_reach = 9.0F;     // metres from one to the next
 inline constexpr float storm_jump_share = 0.7F;     // of the arrow's damage, for each of them
 inline constexpr float bramble_radius = 4.0F;       // metres
-inline constexpr float bramble_root_seconds = 3.5F; // how long what it caught cannot move
+inline constexpr float bramble_root_seconds = 5.0F; // how long what it caught cannot move
 
 [[nodiscard]] SkillInfo skill_info(SkillId skill) noexcept;
 

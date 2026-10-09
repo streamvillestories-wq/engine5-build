@@ -4,18 +4,34 @@
 #include "effect.hpp"
 #include "enemy.hpp"
 
+#include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/core/object.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace e5::bridge {
 namespace {
 
-constexpr float fade_seconds = 1.4F; // its last wisps, after it has stopped working
-constexpr float cage_grow_seconds = 0.22F;
+constexpr float fade_seconds = 1.4F;       // its last wisps, after it has stopped working
+constexpr float cage_grow_seconds = 0.5F;  // the roots come out of the ground
+constexpr float cage_sink_seconds = 0.35F; // and go back into it
+// What the cage is modelled for (tools/blender/root_cage.py): it is fitted to the enemy it holds.
+constexpr float cage_body_radius = 0.45F;
+constexpr float cage_body_height = 1.4F;
+
+// How far the roots of a cage have grown, 0 to 1 (game/shaders/root_grow.gdshader).
+void set_growth(godot::Node3D* cage, float grown) {
+    const godot::TypedArray<godot::Node> parts = cage->find_children("*", "GeometryInstance3D", true, false);
+    for (const godot::Variant& node : parts) {
+        if (auto* const part = godot::Object::cast_to<godot::GeometryInstance3D>(node)) {
+            part->set_instance_shader_parameter("grow", grown);
+        }
+    }
+}
 
 } // namespace
 
@@ -50,7 +66,13 @@ E5Lingering* E5Lingering::spawn(godot::Node* parent, const godot::Vector3& posit
             if (auto* const cage = godot::Object::cast_to<godot::Node3D>(setup.cage->instantiate())) {
                 zone->add_child(cage);
                 cage->set_global_position(enemy->get_global_position());
-                cage->set_scale(godot::Vector3(1.0F, 0.05F, 1.0F));
+                // No two alike: each turned its own way, and as wide and tall as what it holds.
+                const float wide = std::clamp(enemy->get_body_radius() / cage_body_radius, 0.7F, 3.0F);
+                const float tall = std::clamp(enemy->get_body_height() / cage_body_height, 0.7F, 3.0F);
+                cage->set_rotation(godot::Vector3(
+                    0.0F, std::fmod(static_cast<float>(enemy->get_instance_id() % 1000U) * 2.399F, 6.2832F), 0.0F));
+                cage->set_scale(godot::Vector3(wide, tall, wide));
+                set_growth(cage, 0.0F);
                 zone->cages_.push_back(cage);
             }
         }
@@ -73,9 +95,9 @@ void E5Lingering::_physics_process(double delta) {
 
     // The brambles shoot up out of the ground, and sink back at the end.
     const float held_for = std::max(setup_.root_seconds, 0.01F);
-    const float up = std::clamp(std::min(age_ / cage_grow_seconds, (held_for - age_) / cage_grow_seconds), 0.05F, 1.0F);
+    const float up = std::clamp(std::min(age_ / cage_grow_seconds, (held_for - age_) / cage_sink_seconds), 0.0F, 1.0F);
     for (godot::Node3D* const cage : cages_) {
-        cage->set_scale(godot::Vector3(1.0F, up, 1.0F));
+        set_growth(cage, up * up * (3.0F - 2.0F * up));
     }
 
     if (age_ < setup_.seconds) {
