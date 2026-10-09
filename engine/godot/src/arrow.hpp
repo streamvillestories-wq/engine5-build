@@ -50,8 +50,10 @@ public:
         Gale,    // goes through enemies, throwing each back, and only sticks in the world
         Storm,   // lightning leaps on to the enemies nearby
         Bramble, // brambles hold every enemy around the place
+        Burn,    // every enemy its blast caught goes on burning
     };
-    // `damage`: of the cloud's ticks, or of each leap of the lightning. `first`: the cloud, the
+    // `damage`: of the cloud's or the fire's ticks, or of each leap of the lightning. `first`: the cloud, the
+    // flames on a burning enemy, the
     // strike at each enemy the lightning reaches, the burst of leaves. `second`: the cage of
     // brambles round each enemy held. Call before launch.
     void set_special(Special special, float damage, const godot::Ref<godot::PackedScene>& first,

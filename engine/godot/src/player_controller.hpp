@@ -193,7 +193,11 @@ public:
     // for a few seconds, and comes back where she started.
     void take_damage(float amount);
     // Cooldowns and the charge (e5/gameplay/skills.hpp). The skill bar reads these.
-    [[nodiscard]] float get_charge() const { return charge_; }
+    [[nodiscard]] float get_charge() const { return charge_always_full_ ? 1.0F : charge_; }
+    // For a place to try things out (the test arena): the skill that takes a full charge is
+    // always ready, and using it costs nothing.
+    void set_charge_always_full(bool full) { charge_always_full_ = full; }
+    [[nodiscard]] bool get_charge_always_full() const { return charge_always_full_; }
     [[nodiscard]] float get_skill_cooldown(int slot) const;         // seconds left
     [[nodiscard]] float get_skill_cooldown_seconds(int slot) const; // of how many
     [[nodiscard]] bool skill_takes_charge(int slot) const;
@@ -449,6 +453,7 @@ private:
     // Seconds until each skill can be used again, by its number; and the charge, 0 to 1.
     std::array<float, 32> cooldown_left_{};
     float charge_ = 0.0F;
+    bool charge_always_full_ = false;
     bool cooldowns_enabled_ = true;
     [[nodiscard]] bool skill_ready(gameplay::SkillId skill) const;
     void spend(gameplay::SkillId skill);

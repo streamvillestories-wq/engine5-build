@@ -304,10 +304,13 @@ constexpr float fireball_trail_scale = 1.8F;
 constexpr float nova_radius = 5.5F; // metres around him
 constexpr float nova_height = 0.9F;
 constexpr float summon_release_seconds = 1.6F; // into the clip: the bird on her hand takes off
-constexpr float perch_appears_at = 0.3F;       // seconds into the clip: her hand is up
-constexpr float perch_spreads_from = 0.7F;     // the bird opens its wings between these two moments
+// The summon's clip is played this much slower, so that the bird sits on her hand long enough to
+// be looked at: 2.3 s from the start to the release instead of 1.6.
+constexpr float summon_playback_scale = 0.7F;
+constexpr float perch_appears_at = 0.3F;   // seconds into the clip: her hand is up
+constexpr float perch_spreads_from = 0.7F; // the bird opens its wings between these two moments
 constexpr float perch_spreads_until = 1.35F;
-constexpr float perch_height = 0.2F;            // metres from her palm to the middle of the bird
+constexpr float perch_height = 0.26F;           // metres from her palm to the middle of the bird
 constexpr float perch_lean_back = 0.5236F;      // radians; undoes the forward tilt of the flying model
 constexpr float flock_interval_seconds = 0.16F; // between the birds that follow the first
 constexpr int summoned_bird_count = 4;
@@ -563,6 +566,10 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_dodge_distance"), &E5PlayerController::get_dodge_distance);
     ClassDB::bind_method(D_METHOD("is_dodging"), &E5PlayerController::is_dodging);
     ClassDB::bind_method(D_METHOD("is_emoting"), &E5PlayerController::is_emoting);
+    ClassDB::bind_method(D_METHOD("set_charge_always_full", "full"), &E5PlayerController::set_charge_always_full);
+    ClassDB::bind_method(D_METHOD("get_charge_always_full"), &E5PlayerController::get_charge_always_full);
+    ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "charge_always_full"), "set_charge_always_full",
+                 "get_charge_always_full");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "dodge_distance", godot::PROPERTY_HINT_RANGE, "0,10,0.1,suffix:m"),
                  "set_dodge_distance", "get_dodge_distance");
     ClassDB::bind_method(D_METHOD("set_quick_cast", "enabled"), &E5PlayerController::set_quick_cast);
@@ -1223,7 +1230,7 @@ bool E5PlayerController::skill_ready(gameplay::SkillId skill) const {
         return true; // a remote hero replays what her own machine has decided
     }
     if (gameplay::skill_needs_charge(skill)) {
-        return charge_ >= 1.0F;
+        return charge_always_full_ || charge_ >= 1.0F;
     }
     return cooldown_left_.at(static_cast<std::size_t>(skill)) <= 0.0F;
 }
@@ -1233,7 +1240,7 @@ void E5PlayerController::spend(gameplay::SkillId skill) {
         return;
     }
     if (gameplay::skill_needs_charge(skill)) {
-        charge_ = 0.0F;
+        charge_ = charge_always_full_ ? 1.0F : 0.0F;
     } else {
         cooldown_left_.at(static_cast<std::size_t>(skill)) = gameplay::skill_cooldown_seconds(skill);
     }
@@ -2017,6 +2024,10 @@ void E5PlayerController::fire_blast_arrow() {
     arrow->set_trail_effect(fire_trail_effect_);
     arrow->set_impact_effect(fire_impact_effect_);
     arrow->set_blast_radius(fire_blast_radius);
+    // What it catches burns on. (Not for a hero shown here for another player: hers does no damage.)
+    arrow->set_special(E5Arrow::Special::Burn,
+                       dealt(gameplay::SkillId::FireArrow) > 0.0F ? gameplay::burn_tick_damage : 0.0F,
+                       effect_scene("res://effects/burning.tscn"));
     arrow->launch(direction * arrow_speed_, get_rid());
 }
 
@@ -2170,7 +2181,9 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
     } else if (skill == gameplay::SkillId::ThunderKick) {
         action_timings_.strike_at_seconds = action_timings_.duration_seconds * kick_strike_fraction;
     } else {
-        action_timings_.strike_at_seconds = summon_release_seconds;
+        action_playback_scale_ = summon_playback_scale;
+        action_timings_.duration_seconds /= summon_playback_scale;
+        action_timings_.strike_at_seconds = summon_release_seconds / summon_playback_scale;
         // Energy gathers in the raised hand until the birds are released; the effect rides on the hand.
         if (right_hand_ != nullptr) {
             E5Effect::spawn(summon_cast_effect_, right_hand_, raised_hand_position());
@@ -2481,7 +2494,7 @@ godot::Vector3 E5PlayerController::raised_hand_position() const {
 void E5PlayerController::update_summon(float delta) {
     // The bird on her hand: it appears, sits upright facing where she looks, and opens its wings.
     if (auto* const bird = godot::Object::cast_to<E5Bird>(godot::ObjectDB::get_instance(perched_bird_id_))) {
-        const float t = action_.elapsed;
+        const float t = action_.elapsed * summon_playback_scale; // seconds into the clip
         const auto ramp = [t](float from, float to) {
             const float x = std::clamp((t - from) / (to - from), 0.0F, 1.0F);
             return x * x * (3.0F - 2.0F * x);
