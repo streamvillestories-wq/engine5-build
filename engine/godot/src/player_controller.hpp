@@ -358,6 +358,8 @@ private:
     void prewarm_effects();
     void setup_charge_effect();
     [[nodiscard]] bool is_aiming() const { return bow_.phase != gameplay::BowPhase::Lowered; }
+    // 0 lowered, 1 drawing, 2 held at full draw, 3 just let go: for what is heard (game/characters/bow_sound.gd).
+    [[nodiscard]] int get_bow_phase() const { return static_cast<int>(bow_.phase); }
     // In the middle of using a skill: the selection must not change now.
     [[nodiscard]] bool is_busy() const { return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F; }
 

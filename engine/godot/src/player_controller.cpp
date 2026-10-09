@@ -512,6 +512,7 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("select_skill", "slot"), &E5PlayerController::select_skill);
     ClassDB::bind_method(D_METHOD("get_selected_skill"), &E5PlayerController::get_selected_skill);
     ClassDB::bind_method(D_METHOD("get_charge"), &E5PlayerController::get_charge);
+    ClassDB::bind_method(D_METHOD("get_bow_phase"), &E5PlayerController::get_bow_phase);
     ClassDB::bind_method(D_METHOD("get_cast_progress"), &E5PlayerController::get_cast_progress);
     ClassDB::bind_method(D_METHOD("get_cast_seconds"), &E5PlayerController::get_cast_seconds);
     ClassDB::bind_method(D_METHOD("get_cast_power"), &E5PlayerController::get_cast_power);
