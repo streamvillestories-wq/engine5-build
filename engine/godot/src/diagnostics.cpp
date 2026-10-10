@@ -244,8 +244,10 @@ void E5Diagnostics::drive_automated_input(double frame_ms) {
         godot::Input* const input = godot::Input::get_singleton();
         if (auto_block_elapsed_ms_ >= auto_block_pause_ms) {
             input->action_press(actions::block);
+            input->action_press(actions::dodge); // the same test key for heroes who roll instead
         } else {
             input->action_release(actions::block);
+            input->action_release(actions::dodge);
         }
     }
     if (config_.auto_fire || config_.auto_charge || config_.auto_attack) {

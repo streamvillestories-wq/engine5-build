@@ -29,6 +29,7 @@
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/omni_light3d.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/physics_direct_space_state3d.hpp>
 #include <godot_cpp/classes/physics_ray_query_parameters3d.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
@@ -433,6 +434,12 @@ bool is_melee(gameplay::SkillId skill) {
 }
 
 gameplay::SkillSet skill_set_from(int value) {
+    if (value == 5) {
+        return gameplay::SkillSet::ArcherFull;
+    }
+    if (value == 4) {
+        return gameplay::SkillSet::Blade;
+    }
     if (value == 3) {
         return gameplay::SkillSet::Dwarf;
     }
@@ -569,6 +576,7 @@ void E5PlayerController::_bind_methods() {
                          &E5PlayerController::apply_net_event);
     ClassDB::bind_method(D_METHOD("take_outgoing_damage"), &E5PlayerController::take_outgoing_damage);
     ClassDB::bind_method(D_METHOD("get_skill_name", "slot"), &E5PlayerController::get_skill_name);
+    ClassDB::bind_method(D_METHOD("get_open_slot_count"), &E5PlayerController::get_open_slot_count);
     ClassDB::bind_method(D_METHOD("get_last_skill"), &E5PlayerController::get_last_skill);
     ClassDB::bind_method(D_METHOD("get_skills_used"), &E5PlayerController::get_skills_used);
     ClassDB::bind_method(D_METHOD("is_standard_attack_in_use"), &E5PlayerController::is_standard_attack_in_use);
@@ -637,9 +645,9 @@ void E5PlayerController::_bind_methods() {
                  "set_animation_library", "get_animation_library");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "max_health", godot::PROPERTY_HINT_RANGE, "1,1000,1"),
                  "set_max_health", "get_max_health");
-    ADD_PROPERTY(
-        PropertyInfo(godot::Variant::INT, "skill_set", godot::PROPERTY_HINT_ENUM, "Archer,Wizard,Warrior,Dwarf"),
-        "set_skill_set", "get_skill_set");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "skill_set", godot::PROPERTY_HINT_ENUM,
+                              "Archer,Wizard,Warrior,Dwarf,Blade,ArcherFull"),
+                 "set_skill_set", "get_skill_set");
     for (const char* const effect :
          {"charge_effect",           "charge_full_effect",  "trail_effect",       "impact_effect",
           "rain_marker_effect",      "rain_impact_effect",  "frost_trail_effect", "frost_impact_effect",
@@ -700,7 +708,7 @@ void E5PlayerController::_ready() {
     clip_earthbreaker_ = godot::StringName("downward");
     clip_leap_ = godot::StringName("leap");
     clip_battlecry_ = godot::StringName("battlecry");
-    skills_ = gameplay::SkillBar(skill_set_from(skill_set_));
+    skills_ = gameplay::SkillBar(skill_bar_set());
     // The first slot is on the left mouse button anyway: the right one starts on the second.
     skills_.select(1);
 
@@ -724,7 +732,8 @@ void E5PlayerController::_ready() {
     add_child(inventory_);
     // Nobody sets out with empty pockets.
     inventory_->give(gameplay::ItemId::HealthPotion, starting_potions);
-    if (skill_set_ == static_cast<int>(gameplay::SkillSet::Archer)) {
+    if (skill_set_ == static_cast<int>(gameplay::SkillSet::Archer) ||
+        skill_set_ == static_cast<int>(gameplay::SkillSet::ArcherFull)) {
         // Her oath-bow in hand; and, while the bows are being tried out, every other in her bag.
         inventory_->arm(gameplay::ItemId::BowWarden);
         for (const gameplay::ItemId bow :
@@ -732,6 +741,15 @@ void E5PlayerController::_ready() {
               gameplay::ItemId::BowMoonglass, gameplay::ItemId::BowBriarbloom, gameplay::ItemId::BowStormfeather,
               gameplay::ItemId::BowNightthorn, gameplay::ItemId::BowDragonfire}) {
             inventory_->give(bow, 1);
+        }
+    } else if (fights_with_sword()) {
+        // A soldier's sword in hand; and, while the swords are being tried out, every other in her bag.
+        inventory_->arm(gameplay::ItemId::SwordSoldier);
+        for (const gameplay::ItemId sword :
+             {gameplay::ItemId::SwordKnight, gameplay::ItemId::SwordSapphire, gameplay::ItemId::SwordGilded,
+              gameplay::ItemId::SwordDuskfang, gameplay::ItemId::SwordEmberbrand, gameplay::ItemId::SwordDawnbreaker,
+              gameplay::ItemId::SwordStarweaver}) {
+            inventory_->give(sword, 1);
         }
     }
 
@@ -994,7 +1012,7 @@ void E5PlayerController::_physics_process(double delta) {
         dodge_cooldown_left_ = std::max(dodge_cooldown_left_ - static_cast<float>(delta), 0.0F);
         const bool alt_key =
             !input_blocked_ && animator_.has_clip(clip_dodge_alt_) && input->is_action_pressed(actions::dodge_alt);
-        const bool dodge_key = alt_key || (!input_blocked_ && input->is_action_pressed(actions::block));
+        const bool dodge_key = alt_key || (!input_blocked_ && input->is_action_pressed(actions::dodge));
         if (dodge_key && !dodge_key_was_down_ && dodge_cooldown_left_ <= 0.0F && !is_busy() && is_on_floor() &&
             !vitals_.dead && !mounted_) {
             // The way she is steered (seen from the camera), or else the way she faces.
@@ -1423,6 +1441,28 @@ godot::String E5PlayerController::get_last_skill() const {
                : godot::String::utf8(name.data(), static_cast<std::int64_t>(name.size()));
 }
 
+bool E5PlayerController::fights_with_sword() const {
+    return skill_set_ == static_cast<int>(gameplay::SkillSet::Warrior) ||
+           skill_set_ == static_cast<int>(gameplay::SkillSet::Blade);
+}
+
+int E5PlayerController::get_open_slot_count() const {
+    return gameplay::open_slot_count(skill_bar_set());
+}
+
+// Which bar she has. The Archer's own is her standard shot alone; the skills she had are used
+// where they must go on being tested and looked at: in test runs (`--benchmark`), unless
+// `--menu-wished-skills` asks for the bar the players see, and with `--menu-archer-full`.
+gameplay::SkillSet E5PlayerController::skill_bar_set() const {
+    const gameplay::SkillSet set = skill_set_from(skill_set_);
+    if (set != gameplay::SkillSet::Archer) {
+        return set;
+    }
+    const godot::PackedStringArray args = godot::OS::get_singleton()->get_cmdline_user_args();
+    const bool full = args.has("--menu-archer-full") || (args.has("--benchmark") && !args.has("--menu-wished-skills"));
+    return full ? gameplay::SkillSet::ArcherFull : set;
+}
+
 godot::String E5PlayerController::get_skill_name(int slot) const {
     if (slot < 0 || static_cast<std::size_t>(slot) >= gameplay::SkillBar::slot_count) {
         return {};
@@ -1511,7 +1551,16 @@ float E5PlayerController::dealt(gameplay::SkillId skill, float power) const {
         return 0.0F; // shown here for another player: her own machine counts what she does
     }
     const float damage = gameplay::skill_damage(skill, power);
-    if (inventory_ == nullptr || gameplay::skill_info(skill).kind != gameplay::SkillKind::Bow) {
+    if (inventory_ == nullptr) {
+        return damage;
+    }
+    // A weapon counts for what is done with it: a bow for what is shot, a sword for every blow of
+    // a hero who fights with one (the warrior's skills are all her sword's).
+    const gameplay::WeaponClass held = inventory_->weapon_class();
+    const bool shot =
+        held == gameplay::WeaponClass::Bow && gameplay::skill_info(skill).kind == gameplay::SkillKind::Bow;
+    const bool struck = held == gameplay::WeaponClass::Sword && fights_with_sword();
+    if (!shot && !struck) {
         return damage;
     }
     return gameplay::weapon_hit(damage, inventory_->bonuses(), static_cast<float>(godot::UtilityFunctions::randf()));

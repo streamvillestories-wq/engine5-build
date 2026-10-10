@@ -45,6 +45,9 @@ public:
     void arm(gameplay::ItemId weapon);
     // The key of the weapon in hand ("bow_hunter"), or empty: the game shows that model.
     [[nodiscard]] godot::String get_weapon_key() const;
+    // What kind of weapon is in hand ("Bow", "Sword", or "" for none).
+    [[nodiscard]] godot::String get_weapon_class() const;
+    [[nodiscard]] gameplay::WeaponClass weapon_class() const;
     void add_gold(int amount);
     [[nodiscard]] int get_gold() const { return inventory_.gold; }
     [[nodiscard]] bool has_room_for(int item) const;

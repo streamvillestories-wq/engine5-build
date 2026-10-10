@@ -50,7 +50,20 @@ enum class SkillId : unsigned char {
 };
 
 // Which skills a character has on the bar.
-enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf };
+// `Blade` is the new warrior (2026-10-10): her sword's combo and nothing else yet. Her other
+// slots are empty until skills are made for her, one by one, from the players' skill wishes.
+// `Archer` is, since 2026-10-10, her standard shot and nothing else: her slots are to be filled
+// from the players' skill wishes too. The eleven skills she had are kept as `ArcherFull` ("in the
+// back", the keeper's word): nothing of them is removed, test runs use them, and they can be put
+// back by making `Archer` build that bar again.
+// The numbers are sent between machines as which hero a player is (game/net/net.gd): add at the end.
+enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull };
+
+// How many of a hero's quick slots are hers to fill: shown on the bar also while they are empty.
+inline constexpr int open_slots = 9;
+[[nodiscard]] constexpr int open_slot_count(SkillSet set) noexcept {
+    return set == SkillSet::Blade || set == SkillSet::Archer ? open_slots : 0;
+}
 
 // How a skill is used.
 enum class SkillKind : unsigned char {

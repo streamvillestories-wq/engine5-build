@@ -96,6 +96,11 @@ public:
     // The name of the instant skill she is in the middle of (a kick, a blow of a combo), or empty:
     // for what is shown and heard with it (game/characters/dagger_carry.gd).
     [[nodiscard]] godot::String get_action_skill_name() const;
+    // The slots after the standard attack that are this hero's to fill, shown also while empty.
+    [[nodiscard]] int get_open_slot_count() const;
+    [[nodiscard]] gameplay::SkillSet skill_bar_set() const;
+    // A hero whose blows are her sword's (the first warrior and the new one).
+    [[nodiscard]] bool fights_with_sword() const;
     [[nodiscard]] bool is_emoting() const { return remote_ ? net_clip_ == clip_emote_ : emote_left_ > 0.0F; }
     // On a horse (game/characters/mount.gd decides when: the E key at a horse, and shows it under
     // her). Only a hero whose library has the clip `ride` can. Another player's hero rides when

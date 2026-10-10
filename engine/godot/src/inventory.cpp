@@ -49,6 +49,20 @@ godot::Color rarity_color(gameplay::Rarity rarity) {
     return {0.82F, 0.82F, 0.8F};
 }
 
+namespace {
+godot::String weapon_class_name(gameplay::WeaponClass weapon) {
+    switch (weapon) {
+    case gameplay::WeaponClass::Bow:
+        return "Bow";
+    case gameplay::WeaponClass::Sword:
+        return "Sword";
+    case gameplay::WeaponClass::None:
+        break;
+    }
+    return {};
+}
+} // namespace
+
 void E5Inventory::_bind_methods() {
     using godot::ClassDB;
     using godot::D_METHOD;
@@ -57,6 +71,7 @@ void E5Inventory::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_bag_slot_count"), &E5Inventory::get_bag_slot_count);
     ClassDB::bind_method(D_METHOD("get_weapon_slot"), &E5Inventory::get_weapon_slot);
     ClassDB::bind_method(D_METHOD("get_weapon_key"), &E5Inventory::get_weapon_key);
+    ClassDB::bind_method(D_METHOD("get_weapon_class"), &E5Inventory::get_weapon_class);
     ClassDB::bind_method(D_METHOD("get_slot", "slot"), &E5Inventory::get_slot);
     ClassDB::bind_method(D_METHOD("describe", "item"), &E5Inventory::describe);
     ClassDB::bind_method(D_METHOD("add", "item", "count"), &E5Inventory::add);
@@ -108,6 +123,7 @@ godot::Dictionary E5Inventory::describe(int item) const {
     result["bonus_health"] = info.bonus_health;
     result["bonus_regen"] = info.bonus_regen;
     result["bonus_speed"] = info.bonus_speed;
+    result["weapon"] = weapon_class_name(info.weapon);
     result["level"] = info.level;
     result["damage"] = info.damage;
     result["draw_speed"] = info.draw_speed;
@@ -139,6 +155,14 @@ void E5Inventory::arm(gameplay::ItemId weapon) {
         inventory_.slots.at(static_cast<std::size_t>(gameplay::weapon_slot)) = {.item = weapon, .count = 1};
         emit_signal("changed");
     }
+}
+
+gameplay::WeaponClass E5Inventory::weapon_class() const {
+    return gameplay::item_info(gameplay::stack_at(inventory_, gameplay::weapon_slot).item).weapon;
+}
+
+godot::String E5Inventory::get_weapon_class() const {
+    return weapon_class_name(weapon_class());
 }
 
 godot::String E5Inventory::get_weapon_key() const {

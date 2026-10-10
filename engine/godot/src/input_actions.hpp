@@ -14,6 +14,7 @@ inline constexpr const char* sprint = "e5_sprint";
 inline constexpr const char* emote = "e5_emote";         // a dance, for show
 inline constexpr const char* interact = "e5_interact";   // gets on the horse she stands at, or off it
 inline constexpr const char* dodge_alt = "e5_dodge_alt"; // the second dodge, while two are compared
+inline constexpr const char* dodge = "e5_dodge";         // the dive and roll (heroes without a shield)
 inline constexpr const char* walk = "e5_walk";           // held: she walks instead of running
 // Left mouse: the hero's standard attack (the first slot of the bar), whatever is selected.
 inline constexpr const char* attack = "e5_attack";

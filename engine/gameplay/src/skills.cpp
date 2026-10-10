@@ -289,6 +289,10 @@ SkillBar::SkillBar(SkillSet set) noexcept {
     if (set == SkillSet::Dwarf) {
         slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
                   SkillId::Battlecry};
+    } else if (set == SkillSet::Blade) {
+        slots_ = {SkillId::Slash};
+    } else if (set == SkillSet::Archer) {
+        slots_ = {SkillId::Shot};
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
     } else if (set == SkillSet::Wizard) {

@@ -9,8 +9,20 @@
 using Catch::Approx;
 using namespace e5::gameplay;
 
-TEST_CASE("the skill bar starts with the archer's skills in order", "[skills]") {
-    const SkillBar bar;
+TEST_CASE("the archer has her shot and nine slots to fill", "[skills]") {
+    SkillBar bar;
+    CHECK(bar.slot(0) == SkillId::Shot);
+    for (std::size_t slot = 1; slot < SkillBar::slot_count; ++slot) {
+        CHECK(bar.slot(slot) == SkillId::None);
+    }
+    CHECK_FALSE(bar.select(1));
+    CHECK(open_slot_count(SkillSet::Archer) == 9);
+    CHECK(open_slot_count(SkillSet::ArcherFull) == 0);
+    CHECK(open_slot_count(SkillSet::Wizard) == 0);
+}
+
+TEST_CASE("the skills the archer had are kept, in order", "[skills]") {
+    const SkillBar bar(SkillSet::ArcherFull);
     CHECK(bar.selected() == SkillId::Shot);
     CHECK(bar.slot(0) == SkillId::Shot);
     CHECK(bar.slot(1) == SkillId::PowerShot);
@@ -29,7 +41,7 @@ TEST_CASE("the skill bar starts with the archer's skills in order", "[skills]") 
 }
 
 TEST_CASE("selecting changes the active skill", "[skills]") {
-    SkillBar bar;
+    SkillBar bar(SkillSet::ArcherFull);
     CHECK(bar.select(2));
     CHECK(bar.selected() == SkillId::ArrowRain);
     CHECK(bar.selected_index() == 2);
@@ -37,8 +49,8 @@ TEST_CASE("selecting changes the active skill", "[skills]") {
 }
 
 TEST_CASE("empty and out-of-range slots cannot be selected", "[skills]") {
-    SkillBar bar;
-    // The archer's bar is full; the wizard's is not.
+    SkillBar bar(SkillSet::ArcherFull);
+    // The archer's old bar is full; the wizard's is not.
     CHECK_FALSE(SkillBar(SkillSet::Wizard).select(8));
     CHECK_FALSE(bar.select(12));
     CHECK(bar.selected() == SkillId::Shot);
@@ -191,6 +203,20 @@ TEST_CASE("the wizard has his own skills on the bar", "[skills]") {
     // The slow, big spell hits harder than the quick one.
     CHECK(e5::gameplay::skill_damage(e5::gameplay::SkillId::Fireball) >
           e5::gameplay::skill_damage(e5::gameplay::SkillId::ArcaneBolt));
+}
+
+TEST_CASE("the new warrior has her sword's combo and nine slots to fill", "[skills]") {
+    using e5::gameplay::SkillId;
+    e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Blade);
+
+    CHECK(bar.slot(0) == SkillId::Slash);
+    for (std::size_t slot = 1; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+        CHECK(bar.slot(slot) == SkillId::None);
+    }
+    // Nothing to choose yet: the selection stays on the combo.
+    CHECK_FALSE(bar.select(1));
+    CHECK(bar.selected() == SkillId::Slash);
+    CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
 }
 
 TEST_CASE("the warrior has her own skills on the bar", "[skills]") {

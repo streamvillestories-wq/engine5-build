@@ -32,6 +32,15 @@ enum class ItemId : std::uint8_t {
     BowStormfeather,
     BowNightthorn,
     BowDragonfire,
+    // The warrior's swords, from plain to precious.
+    SwordSoldier,
+    SwordKnight,
+    SwordSapphire,
+    SwordGilded,
+    SwordDuskfang,
+    SwordEmberbrand,
+    SwordDawnbreaker,
+    SwordStarweaver,
     Count,
 };
 
@@ -43,6 +52,10 @@ enum class ItemKind : std::uint8_t {
 };
 
 enum class Rarity : std::uint8_t { Common, Uncommon, Rare, Epic, Legendary };
+
+// What a weapon is: its `damage` counts for what is done with that kind of weapon only (a bow
+// for what is shot, a sword for the blows of a hero who fights with one).
+enum class WeaponClass : std::uint8_t { None, Bow, Sword };
 
 // What every archer has without any bow's help: one arrow in twenty strikes true, for half as
 // much again.
@@ -62,6 +75,7 @@ struct ItemInfo {
     float bonus_regen = 0.0F;  // added to health per second while worn
     float bonus_speed = 0.0F;  // share added to walking and running speed while worn
     // A weapon's own. All are shares: 0.18 = 18 %.
+    WeaponClass weapon = WeaponClass::None;
     int level = 0;            // item level: what the others are measured by
     float damage = 0.0F;      // added to the damage of everything shot with it
     float draw_speed = 0.0F;  // the bow is drawn that much faster
