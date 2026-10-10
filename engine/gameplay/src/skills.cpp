@@ -85,6 +85,10 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Sprintsz", .charges = false, .kind = SkillKind::Instant};
     case SkillId::CutInPieces:
         return {.name = "Cut in Pieces", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::GatlingGun:
+        return {.name = "Gatling Arrow Gun", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Disguise:
+        return {.name = "Disguise", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -170,11 +174,14 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 11.0F; // the first of its blows, half a sword blow; see combo_damage_factor and enrage_attack_speed
     case SkillId::NeverGiveUp:
     case SkillId::VineTower:
+    case SkillId::Disguise:
         return 0.0F; // they strike nobody
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
     case SkillId::CutInPieces:
         return 17.6F; // each of its twelve blows: eight tenths of a sword blow
+    case SkillId::GatlingGun:
+        return 8.0F; // each arrow, four a second: 32 a second while she stands at it and holds the button
     case SkillId::None:
         break;
     }
@@ -266,6 +273,8 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 12.0F;
     // Rarely.
     case SkillId::VineTower:
+    case SkillId::GatlingGun: // from when it stands: ready again as it falls apart
+    case SkillId::Disguise:   // from when it ends
         return 30.0F;
     case SkillId::Stampede:
     case SkillId::NeverGiveUp:
@@ -316,6 +325,20 @@ bool in_wedge(float dx, float dz, float ahead_x, float ahead_z, float length, fl
     // Its body may reach into the wedge from beside it.
     const float aside = std::sqrt(std::max(distance * distance - along * along, 0.0F));
     return along > 0.0F && aside - allowance <= along * std::tan(half_angle);
+}
+
+GatlingStep step_gatling(float until_next, bool held, float dt) noexcept {
+    GatlingStep step{.until_next = std::max(until_next, 0.0F) - std::max(dt, 0.0F)};
+    if (!held) {
+        step.until_next = std::max(step.until_next, 0.0F);
+        return step;
+    }
+    constexpr float between = 1.0F / gatling_arrows_per_second;
+    while (step.until_next <= 0.0F) {
+        ++step.arrows;
+        step.until_next += between;
+    }
+    return step;
 }
 
 float tower_height(float charged_seconds) noexcept {
@@ -407,11 +430,13 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
                   SkillId::Battlecry};
     } else if (set == SkillSet::Blade) {
-        slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,
-                  SkillId::SeismicSlash, SkillId::Enrage,       SkillId::NeverGiveUp, SkillId::Stampede,
-                  SkillId::CutInPieces};
+        slots_ = {SkillId::Slash,       SkillId::CounterAttack, SkillId::BladeWhirl,
+                  SkillId::JumpAttack,  SkillId::SeismicSlash,  SkillId::Enrage,
+                  SkillId::NeverGiveUp, SkillId::Stampede,      SkillId::CutInPieces};
     } else if (set == SkillSet::Archer) {
-        slots_ = {SkillId::Shot, SkillId::VineTower};
+        // (The Gatling Arrow Gun was wished for key 6: the slots before it are still to be filled.)
+        slots_ = {SkillId::Shot, SkillId::VineTower, SkillId::Disguise,
+                  SkillId::None, SkillId::None,      SkillId::GatlingGun};
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
     } else if (set == SkillSet::Wizard) {

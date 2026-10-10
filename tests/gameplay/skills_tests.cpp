@@ -13,10 +13,15 @@ TEST_CASE("the archer has her shot, the skills wished for her and slots to fill"
     SkillBar bar;
     CHECK(bar.slot(0) == SkillId::Shot);
     CHECK(bar.slot(1) == SkillId::VineTower);
-    for (std::size_t slot = 2; slot < SkillBar::slot_count; ++slot) {
-        CHECK(bar.slot(slot) == SkillId::None);
+    CHECK(bar.slot(2) == SkillId::Disguise);   // "the first free slot"
+    CHECK(bar.slot(5) == SkillId::GatlingGun); // wished for key 6
+    for (std::size_t slot = 3; slot < SkillBar::slot_count; ++slot) {
+        if (slot != 5) {
+            CHECK(bar.slot(slot) == SkillId::None);
+        }
     }
-    CHECK_FALSE(bar.select(2));
+    CHECK_FALSE(bar.select(3));
+    CHECK(bar.select(5));
     CHECK(open_slot_count(SkillSet::Archer) == 9);
     CHECK(open_slot_count(SkillSet::ArcherFull) == 0);
     CHECK(open_slot_count(SkillSet::Wizard) == 0);
@@ -351,7 +356,7 @@ TEST_CASE("the vine tower grows by how long it was charged", "[skills]") {
     CHECK(e5::gameplay::skill_info(SkillId::VineTower).kind == e5::gameplay::SkillKind::Instant);
     // The players' archer has it beside her shot; the bar kept for tests is as it was.
     CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(1) == SkillId::VineTower);
-    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(2) == SkillId::None);
+    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(3) == SkillId::None);
     CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::ArcherFull).slot(1) == SkillId::PowerShot);
     // "Rarely"; let go too soon, sooner.
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::VineTower) >= 20.0F);
@@ -363,6 +368,57 @@ TEST_CASE("the vine tower grows by how long it was charged", "[skills]") {
     CHECK(tower_height(3.0F) == Catch::Approx((e5::gameplay::tower_lowest + e5::gameplay::tower_tallest) * 0.5F));
     CHECK(tower_height(5.0F) == Catch::Approx(e5::gameplay::tower_tallest));
     CHECK(tower_height(60.0F) == Catch::Approx(e5::gameplay::tower_tallest));
+}
+
+TEST_CASE("the archer's disguise strikes nobody, ends by itself and is used rarely", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::Disguise).name == "Disguise");
+    CHECK(e5::gameplay::skill_info(SkillId::Disguise).kind == e5::gameplay::SkillKind::Instant);
+    CHECK(e5::gameplay::skill_damage(SkillId::Disguise) == 0.0F);
+    CHECK_FALSE(e5::gameplay::skill_needs_charge(SkillId::Disguise));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Disguise) == Catch::Approx(30.0F));
+    // She is unseen for less time than she then waits; and she must really stand in the bush.
+    CHECK(e5::gameplay::disguise_seconds > 0.0F);
+    CHECK(e5::gameplay::disguise_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::Disguise));
+    CHECK(e5::gameplay::disguise_reach <= 2.0F);
+}
+
+TEST_CASE("the gatling arrow gun shoots four arrows a second while the button is held", "[skills]") {
+    using e5::gameplay::SkillId;
+    using e5::gameplay::step_gatling;
+    CHECK(e5::gameplay::skill_info(SkillId::GatlingGun).name == "Gatling Arrow Gun");
+    CHECK(e5::gameplay::skill_info(SkillId::GatlingGun).kind == e5::gameplay::SkillKind::Instant);
+    // "Rarely"; let go while building, sooner. It stands no longer than its cooldown runs.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::GatlingGun) == Catch::Approx(30.0F));
+    CHECK(e5::gameplay::gatling_cancel_cooldown_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::GatlingGun));
+    CHECK(e5::gameplay::gatling_stand_seconds <= e5::gameplay::skill_cooldown_seconds(SkillId::GatlingGun));
+    // An arrow of it is far less than a shot of her bow, and a second of it about what her
+    // heavier skills do in one blow: within what she has.
+    CHECK(e5::gameplay::skill_damage(SkillId::GatlingGun) < e5::gameplay::skill_damage(SkillId::Shot) * 0.5F);
+    CHECK(e5::gameplay::skill_damage(SkillId::GatlingGun) * e5::gameplay::gatling_arrows_per_second <=
+          e5::gameplay::skill_damage(SkillId::FireArrow));
+
+    // The first arrow at once on the press, then one every quarter of a second.
+    e5::gameplay::GatlingStep step = step_gatling(0.0F, true, 1.0F / 60.0F);
+    CHECK(step.arrows == 1);
+    int arrows = step.arrows;
+    for (int frame = 1; frame < 120; ++frame) {
+        step = step_gatling(step.until_next, true, 1.0F / 60.0F);
+        arrows += step.arrows;
+    }
+    CHECK(arrows >= 8); // two seconds
+    CHECK(arrows <= 9);
+    // Not held: nothing, and what is left of the wait runs down, but not below nothing.
+    step = step_gatling(0.2F, false, 0.05F);
+    CHECK(step.arrows == 0);
+    CHECK(step.until_next == Catch::Approx(0.15F));
+    step = step_gatling(0.2F, false, 5.0F);
+    CHECK(step.arrows == 0);
+    CHECK(step.until_next == 0.0F);
+    // Tapping is no faster than holding: a press before the next arrow is due shoots nothing.
+    CHECK(step_gatling(0.2F, true, 0.05F).arrows == 0);
+    // A long step shoots what fell due in it.
+    CHECK(step_gatling(0.0F, true, 0.5F).arrows == 3);
 }
 
 TEST_CASE("the new warrior's sprintsz is a stance weaker than her whirlwind", "[skills]") {

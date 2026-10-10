@@ -9,6 +9,8 @@
 #include <godot_cpp/classes/animation_library.hpp>
 #include <godot_cpp/classes/character_body3d.hpp>
 #include <godot_cpp/classes/input_event.hpp>
+#include <godot_cpp/classes/material.hpp>
+#include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/string_name.hpp>
@@ -266,6 +268,26 @@ public:
     [[nodiscard]] int get_pieces_blows() const { return pieces_blows_; }
     // The Archer's Vine Tower: how many have grown under her (for tests).
     [[nodiscard]] int get_towers_grown() const { return towers_grown_; }
+    // The Archer's Gatling Arrow Gun: the turret she built or is building, if it is still there;
+    // whether she mans it; how many arrows have left it (for tests). `try_set_manning` is the
+    // player's wish (the E key: game/characters/gatling.gd): taking her place at it is refused
+    // while she is busy, in the air, riding or dead, and without a turret that stands.
+    [[nodiscard]] godot::Node3D* get_turret() const;
+    [[nodiscard]] bool is_manning() const { return manning_; }
+    bool try_set_manning(bool manning);
+    [[nodiscard]] int get_gatling_arrows() const { return gatling_arrows_; }
+    // The Archer's Disguise: whether she is a bush now (enemies ask: E5Enemy::nearest_player), how
+    // long still, and what the bush she took looks like, for game/characters/disguise.gd, which
+    // shows it in her place. `end_disguise` is also the E key's. `find_bush`: where the nearest
+    // bush within so many metres stands, or nothing (for tests).
+    [[nodiscard]] bool is_disguised() const { return disguised_; }
+    [[nodiscard]] float get_disguise_seconds() const { return disguise_left_; }
+    [[nodiscard]] godot::Ref<godot::Mesh> get_disguise_mesh() const { return disguise_mesh_; }
+    [[nodiscard]] godot::Ref<godot::Material> get_disguise_material() const { return disguise_material_; }
+    [[nodiscard]] godot::Basis get_disguise_basis() const { return disguise_basis_; }
+    [[nodiscard]] int get_disguises() const { return disguises_; }
+    void end_disguise();
+    [[nodiscard]] godot::Variant find_bush(float radius) const;
     [[nodiscard]] float get_resolve_spared() const { return resolve_spared_; }
     [[nodiscard]] float get_resolve_healed() const { return resolve_healed_; }
 
@@ -394,6 +416,25 @@ private:
     void update_tower_charge(bool held, float delta);
     void grow_tower(float power);
     [[nodiscard]] bool is_charging_tower() const { return tower_charging_; }
+    // The Gatling Arrow Gun is built the way the tower is charged (the same kneeling, the same
+    // count), and stands when the count is full: `place_turret` sets it down in front of her,
+    // `raise_gatling` is the moment it is done, `update_gatling` is all she does while she mans it.
+    godot::Node3D* place_turret(bool built);
+    void raise_gatling();
+    void update_gatling(float delta);
+    void leave_turret();
+    // Disguise: the bush nearest to her, in a forest or standing by itself in the scene.
+    struct Bush {
+        std::uint64_t forest = 0; // its forest, or
+        std::uint64_t node = 0;   // the bush itself: ids
+        int index = -1;
+        godot::Transform3D transform;
+        godot::Ref<godot::Mesh> mesh; // empty: no bush
+        godot::Ref<godot::Material> material;
+    };
+    [[nodiscard]] Bush nearest_bush(float radius) const;
+    void start_disguise();
+    void update_disguise(float delta);
     // Cut in Pieces: it begins if an enemy is near; while it lasts it is what moves her (from one
     // enemy to the next) and strikes, and update_pieces returns true: nothing else is asked.
     [[nodiscard]] E5Enemy* pieces_victim() const;
@@ -454,7 +495,7 @@ private:
     // In the middle of using a skill: the selection must not change now.
     [[nodiscard]] bool is_busy() const {
         return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling() || is_leaping() ||
-               enrage_driving_ || tower_charging_ || is_cutting();
+               enrage_driving_ || tower_charging_ || is_cutting() || manning_;
     }
 
     gameplay::MotorParams params_;
@@ -560,25 +601,36 @@ private:
         godot::Vector3 direction; // level, towards where she lands
     };
     Leap leap_;
-    float remote_leap_left_ = 0.0F; // another player's hero: seconds until her leap lands here
-    bool leap_aiming_ = false;      // the Jump Attack's button is held: its mark shows
+    float remote_leap_left_ = 0.0F;        // another player's hero: seconds until her leap lands here
+    bool leap_aiming_ = false;             // the Jump Attack's button is held: its mark shows
     godot::Node3D* leap_marker_ = nullptr; // non-owning child, made when first needed
-    bool tower_charging_ = false;   // the Vine Tower: she kneels and charges
+    bool tower_charging_ = false;          // the Vine Tower: she kneels and charges
     int towers_grown_ = 0;
-    float tower_charge_ = 0.0F;     // seconds charged
+    float tower_charge_ = 0.0F;             // seconds charged
     std::uint64_t tower_charge_effect_ = 0; // what shows round her meanwhile: an id, it may be gone
     godot::StringName clip_kneel_;
+    std::uint64_t turret_id_ = 0;     // her Gatling Arrow Gun, built or being built: an id, it may be gone
+    bool manning_ = false;            // she stands at it
+    float gatling_until_next_ = 0.0F; // seconds until its next arrow is due
+    int gatling_arrows_ = 0;
+    bool disguised_ = false;     // her Disguise: she is a bush
+    float disguise_left_ = 0.0F; // seconds
+    Bush disguise_bush_;         // the one she took: put back when it ends
+    godot::Ref<godot::Mesh> disguise_mesh_;
+    godot::Ref<godot::Material> disguise_material_;
+    godot::Basis disguise_basis_;
+    int disguises_ = 0;
     gameplay::BleedState stampede_; // her Sprintsz under way: the time it still has and until its next pounding
     int stampede_ticks_ = 0;
     gameplay::BleedState pieces_; // her Cut in Pieces under way: the time it still has and until its next blow
     int pieces_blows_ = 0;
-    float resolve_left_ = 0.0F;     // seconds her Never Give Up still lasts
-    float resolve_spared_ = 0.0F;   // damage it has kept from her
-    float resolve_healed_ = 0.0F;   // health it has given back
-    float enrage_left_ = 0.0F;      // seconds her frenzy still lasts
-    bool enrage_driving_ = false;   // it moved her in this step: the player did not
-    int enrage_blow_ = -1;          // the blow of the combo under way in it, or -1: she runs
-    int enrage_next_blow_ = 0;      // the one that comes after
+    float resolve_left_ = 0.0F;   // seconds her Never Give Up still lasts
+    float resolve_spared_ = 0.0F; // damage it has kept from her
+    float resolve_healed_ = 0.0F; // health it has given back
+    float enrage_left_ = 0.0F;    // seconds her frenzy still lasts
+    bool enrage_driving_ = false; // it moved her in this step: the player did not
+    int enrage_blow_ = -1;        // the blow of the combo under way in it, or -1: she runs
+    int enrage_next_blow_ = 0;    // the one that comes after
     float enrage_blow_elapsed_ = 0.0F;
     bool enrage_struck_ = false; // the blow under way has landed
     bool enrage_arc_shown_ = false;

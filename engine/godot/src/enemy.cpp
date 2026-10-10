@@ -467,6 +467,11 @@ godot::Node3D* E5Enemy::nearest_player() const {
             if (hero == nullptr) {
                 continue;
             }
+            // A bush is nobody (the Archer's Disguise).
+            if (const auto* const player = godot::Object::cast_to<E5PlayerController>(hero);
+                player != nullptr && player->is_disguised()) {
+                continue;
+            }
             const auto distance = static_cast<float>(here.distance_squared_to(hero->get_global_position()));
             if (nearest == nullptr || distance < nearest_distance) {
                 nearest = hero;

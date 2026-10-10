@@ -470,6 +470,10 @@ bool E5Diagnostics::write_report() {
         player_info["enrage_blows"] = player->get_enrage_blows();
         player_info["resolve_spared"] = player->get_resolve_spared();
         player_info["towers_grown"] = player->get_towers_grown();
+        player_info["manning"] = player->is_manning();
+        player_info["gatling_arrows"] = player->get_gatling_arrows();
+        player_info["disguised"] = player->is_disguised();
+        player_info["disguises"] = player->get_disguises();
         player_info["pieces_blows"] = player->get_pieces_blows();
         player_info["stampede_ticks"] = player->get_stampede_ticks();
         player_info["resolve_healed"] = player->get_resolve_healed();

@@ -10,6 +10,7 @@
 #include "e5/core/profiling.hpp"
 #include "effect.hpp"
 #include "enemy.hpp"
+#include "forest.hpp"
 #include "godot_log.hpp"
 #include "health_hud.hpp"
 #include "input_actions.hpp"
@@ -256,7 +257,7 @@ constexpr float whirl_pull_keep_off = 1.1F; // metres: nearer than this nothing 
 // The new warrior's Jump Attack (numbers in e5/gameplay/skills.hpp).
 constexpr const char* leap_impact_path = "res://effects/jump_attack_impact.tscn";
 constexpr const char* leap_marker_path = "res://effects/leap_marker.tscn"; // where she would land, while she aims
-constexpr float leap_shake = 0.09F;           // metres, as she lands
+constexpr float leap_shake = 0.09F;                                        // metres, as she lands
 constexpr float leap_strike_lead = 0.5F;      // seconds before she lands that the blow's clip begins
 constexpr float leap_min_air_seconds = 0.12F; // not "landed" while she is still leaving the ground
 constexpr float leap_longest_fall = 2.5F;     // seconds: a leap off a cliff ends at the latest then
@@ -277,21 +278,28 @@ constexpr const char* enrage_path = "res://effects/enrage.tscn";
 // charges, and the tower itself (effects/vine_tower.gd grows it, carries her and takes it away).
 constexpr const char* tower_charge_path = "res://effects/vine_tower_charge.tscn";
 constexpr const char* tower_path = "res://effects/vine_tower.tscn";
+// The archer's Gatling Arrow Gun (numbers in e5/gameplay/skills.hpp; effects/gatling_turret.gd is
+// the turret: it builds itself up, turns where it is aimed, and falls apart).
+constexpr const char* gatling_path = "res://effects/gatling_turret.tscn";
+constexpr float gatling_ahead = 1.25F;      // metres in front of her that it is built
+constexpr float gatling_stand_back = 0.75F; // metres behind its middle that she stands, manning it
+// The bar under the crosshair shows both counts with the same numbers.
+static_assert(gameplay::gatling_build_seconds == gameplay::tower_full_charge_seconds);
 // The new warrior's Sprintsz: its pounding, heard for as long as it lasts; the stone thrown up round
 // her with every step of it is the Seismic Slash's burst, small.
 constexpr const char* stampede_path = "res://effects/stampede.tscn";
-constexpr int stampede_bursts = 3;           // with every pounding
-constexpr float stampede_burst_size = 0.4F;  // of the burst as made
-constexpr float stampede_shake = 0.012F;     // metres
+constexpr int stampede_bursts = 3;          // with every pounding
+constexpr float stampede_burst_size = 0.4F; // of the burst as made
+constexpr float stampede_shake = 0.012F;    // metres
 // The new warrior's Cut in Pieces (numbers in e5/gameplay/skills.hpp).
-constexpr float pieces_stand_off = 1.0F;   // metres from an enemy's body to where she appears beside it
-constexpr float pieces_blow_pace = 2.2F;   // the combo's clips, so much faster than made
-constexpr float pieces_shake = 0.02F;      // metres, with every blow
+constexpr float pieces_stand_off = 1.0F; // metres from an enemy's body to where she appears beside it
+constexpr float pieces_blow_pace = 2.2F; // the combo's clips, so much faster than made
+constexpr float pieces_shake = 0.02F;    // metres, with every blow
 // The new warrior's Never Give Up: the cry and the blue round her.
 constexpr const char* resolve_path = "res://effects/never_give_up.tscn";
-constexpr float enrage_strike_gap = 0.5F;  // metres beyond her blow's middle at which she starts to strike
-constexpr float enrage_blow_fade = 0.06F;  // seconds from one blow's clip to the next: they are short
-constexpr float enrage_shake_share = 0.5F; // of the combo's jolts: there are three times as many
+constexpr float enrage_strike_gap = 0.5F;      // metres beyond her blow's middle at which she starts to strike
+constexpr float enrage_blow_fade = 0.06F;      // seconds from one blow's clip to the next: they are short
+constexpr float enrage_shake_share = 0.5F;     // of the combo's jolts: there are three times as many
 constexpr float counter_shake = 0.02F;         // metres: the jolt of an answered blow
 constexpr float counter_swing_seconds = 0.45F; // her arm strikes the first blow of the combo
 // A blow comes "from" where the one who struck stands: the enemy this near to that place is it.
@@ -610,6 +618,18 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_enrage_blows"), &E5PlayerController::get_enrage_blows);
     ClassDB::bind_method(D_METHOD("get_resolve_seconds"), &E5PlayerController::get_resolve_seconds);
     ClassDB::bind_method(D_METHOD("get_towers_grown"), &E5PlayerController::get_towers_grown);
+    ClassDB::bind_method(D_METHOD("get_turret"), &E5PlayerController::get_turret);
+    ClassDB::bind_method(D_METHOD("is_manning"), &E5PlayerController::is_manning);
+    ClassDB::bind_method(D_METHOD("try_set_manning", "manning"), &E5PlayerController::try_set_manning);
+    ClassDB::bind_method(D_METHOD("get_gatling_arrows"), &E5PlayerController::get_gatling_arrows);
+    ClassDB::bind_method(D_METHOD("is_disguised"), &E5PlayerController::is_disguised);
+    ClassDB::bind_method(D_METHOD("get_disguise_seconds"), &E5PlayerController::get_disguise_seconds);
+    ClassDB::bind_method(D_METHOD("get_disguise_mesh"), &E5PlayerController::get_disguise_mesh);
+    ClassDB::bind_method(D_METHOD("get_disguise_material"), &E5PlayerController::get_disguise_material);
+    ClassDB::bind_method(D_METHOD("get_disguise_basis"), &E5PlayerController::get_disguise_basis);
+    ClassDB::bind_method(D_METHOD("get_disguises"), &E5PlayerController::get_disguises);
+    ClassDB::bind_method(D_METHOD("end_disguise"), &E5PlayerController::end_disguise);
+    ClassDB::bind_method(D_METHOD("find_bush", "radius"), &E5PlayerController::find_bush);
     ClassDB::bind_method(D_METHOD("get_pieces_blows"), &E5PlayerController::get_pieces_blows);
     ClassDB::bind_method(D_METHOD("get_stampede_seconds"), &E5PlayerController::get_stampede_seconds);
     ClassDB::bind_method(D_METHOD("get_stampede_ticks"), &E5PlayerController::get_stampede_ticks);
@@ -1075,6 +1095,8 @@ void E5PlayerController::_physics_process(double delta) {
         return; // from one enemy to the next: nobody steers her
     }
     update_tower_charge(aim_pressed, static_cast<float>(delta));
+    update_gatling(static_cast<float>(delta));
+    update_disguise(static_cast<float>(delta));
     // The shield: up while the key is held, as long as it lasts.
     if (block_enabled_) {
         const bool block_key = !input_blocked_ && input->is_action_pressed(actions::block);
@@ -1150,10 +1172,18 @@ void E5PlayerController::_physics_process(double delta) {
             animator_.has_clip(clip_whirl_) && skill_ready(skills_.selected())) {
             start_channel(skills_.selected());
         }
-        // The Vine Tower is charged for as long as the button is held, from the next step on.
-        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::VineTower && !mounted_ && !is_busy() &&
-            is_on_floor() && animator_.has_clip(clip_kneel_) && skill_ready(skills_.selected())) {
+        // The Vine Tower is charged for as long as the button is held, from the next step on. The
+        // Gatling Arrow Gun is built the same way (one at a time).
+        const bool charged = skills_.selected() == gameplay::SkillId::VineTower ||
+                             (skills_.selected() == gameplay::SkillId::GatlingGun && get_turret() == nullptr);
+        if (aim_just_pressed && charged && !mounted_ && !is_busy() && is_on_floor() &&
+            animator_.has_clip(clip_kneel_) && skill_ready(skills_.selected())) {
             start_tower_charge(skills_.selected());
+        }
+        // The Disguise is on at once, if she stands in a bush.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Disguise && !mounted_ && !is_busy() &&
+            !disguised_ && skill_ready(skills_.selected())) {
+            start_disguise();
         }
         // Cut in Pieces takes her charge and begins, if there is anyone to cut.
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::CutInPieces && !mounted_ && !is_busy() &&
@@ -1225,7 +1255,7 @@ void E5PlayerController::_physics_process(double delta) {
             // A draw that has begun may be held; a new one needs the skill to be ready. (The
             // follow-through of a shot counted as "still aiming", so with the button held the
             // next draw began at once and the cooldown was never asked: bug report 13.)
-            .aim_held = aim_pressed && !aim_blocked_ && !instant && !action_.active && is_on_floor() &&
+            .aim_held = aim_pressed && !aim_blocked_ && !instant && !action_.active && is_on_floor() && !manning_ &&
                         (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming ||
                          skill_ready(skills_.selected())),
             .cancel_pressed = cancel,
@@ -1249,7 +1279,7 @@ void E5PlayerController::_physics_process(double delta) {
     const gameplay::MotorParams params = motor_params();
     // She stands still for the length of a kick.
     const bool dodging = dodge_left_ > 0.0F;
-    const bool rooted = action_.active || input_blocked_ || block_.raised || dodging || tower_charging_;
+    const bool rooted = action_.active || input_blocked_ || block_.raised || dodging || tower_charging_ || manning_;
     const gameplay::MotorInput motor_input{
         .move_right = rooted ? 0.0F : input->get_axis(action_left_, action_right_),
         .move_forward = rooted ? 0.0F : input->get_axis(action_back_, action_forward_),
@@ -1575,6 +1605,9 @@ void E5PlayerController::take_damage(float amount) {
     if (remote_) {
         return; // decided on its own machine
     }
+    if (amount > 0.0F) {
+        end_disguise(); // whatever hurts a bush finds her in it
+    }
     if (amount > 0.0F && !vitals_.dead && dodge_left_ <= 0.0F) {
         if (resolve_left_ > 0.0F) {
             // Never Give Up: only a share of it gets through.
@@ -1658,8 +1691,46 @@ void E5PlayerController::set_use_button(UseButton next) {
     use_button_ = next;
 }
 
+godot::Node3D* E5PlayerController::get_turret() const {
+    auto* const turret = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(turret_id_));
+    return turret != nullptr && !turret->is_queued_for_deletion() && static_cast<bool>(turret->call("is_standing"))
+               ? turret
+               : nullptr;
+}
+
+bool E5PlayerController::try_set_manning(bool manning) {
+    if (remote_ || manning == manning_) {
+        return !remote_;
+    }
+    if (!manning) {
+        leave_turret();
+        return true;
+    }
+    godot::Node3D* const turret = get_turret();
+    if (input_blocked_ || is_busy() || mounted_ || disguised_ || !is_on_floor() || vitals_.dead || turret == nullptr ||
+        !static_cast<bool>(turret->call("is_built"))) {
+        return false;
+    }
+    manning_ = true;
+    gatling_until_next_ = 0.0F;
+    emote_left_ = 0.0F;
+    set_velocity(godot::Vector3());
+    turret->call("set_gunner", this);
+    return true;
+}
+
+void E5PlayerController::leave_turret() {
+    if (!manning_) {
+        return;
+    }
+    manning_ = false;
+    if (godot::Node3D* const turret = get_turret()) {
+        turret->call("set_gunner", godot::Variant());
+    }
+}
+
 bool E5PlayerController::try_set_mounted(bool mounted) {
-    if (remote_ || input_blocked_ || is_busy() || !is_on_floor() || vitals_.dead) {
+    if (remote_ || input_blocked_ || is_busy() || !is_on_floor() || vitals_.dead || (mounted && disguised_)) {
         return false;
     }
     set_mounted(mounted);
@@ -1792,9 +1863,11 @@ bool E5PlayerController::update_vitals(float delta) {
         resolve_left_ = 0.0F;
         pieces_ = {};
         stampede_ = {};
-        tower_charge_ = 0.0F; // (whatever she charged is lost: nothing grows)
+        tower_charge_ = 0.0F; // (whatever she charged is lost: nothing grows, a gun half built falls apart)
         update_tower_charge(false, 0.0F);
         tower_charging_ = false;
+        leave_turret();
+        end_disguise();
         enrage_left_ = 0.0F;
         enrage_driving_ = false;
         enrage_blow_ = -1;
@@ -1897,6 +1970,13 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
         // The pose she holds while the whole of her is turned (update_facing).
         animator_.set_upper(godot::StringName());
         animator_.set_base(clip_whirl_, 1.0F);
+        animator_.update(delta);
+        return;
+    }
+    if (manning_) {
+        // She stands at the gun; her hands are brought to its grips by game/characters/gatling.gd.
+        animator_.set_upper(godot::StringName());
+        animator_.set_base(clip_idle_, 1.0F);
         animator_.update(delta);
         return;
     }
@@ -2169,7 +2249,9 @@ void E5PlayerController::update_nocked_arrow(float string_draw) {
 }
 
 void E5PlayerController::update_aim_camera(float delta) {
-    crosshair_->set_visible(is_aiming());
+    // (At her gun she aims as with the bow: the crosshair, and the camera over her shoulder,
+    // or she would stand between the player and what the gun points at.)
+    crosshair_->set_visible(is_aiming() || manning_);
     if (aim_offset_ != nullptr) {
         // For the arrow rain she shoots into the sky while the player looks at the ground.
         const float pitch = skills_.selected() == gameplay::SkillId::ArrowRain
@@ -2182,7 +2264,7 @@ void E5PlayerController::update_aim_camera(float delta) {
     }
     // Also during the summon: the bird on her hand deserves a closer look.
     const bool summoning = action_.active && action_skill_ == gameplay::SkillId::Kingfishers;
-    const float target = is_aiming() || summoning ? 1.0F : 0.0F;
+    const float target = is_aiming() || summoning || manning_ ? 1.0F : 0.0F;
     aim_camera_blend_ +=
         std::clamp(target - aim_camera_blend_, -aim_camera_blend_rate * delta, aim_camera_blend_rate * delta);
     camera_arm_->set_position(godot::Vector3(aim_shoulder_offset * aim_camera_blend_, 0.0F, 0.0F));
@@ -2267,9 +2349,9 @@ void E5PlayerController::prewarm_effects() {
         if (skills_.slot(slot) != gameplay::SkillId::CounterAttack) {
             continue;
         }
-        for (const char* const path : {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path,
-                                       leap_impact_path, seismic_burst_path, seismic_stun_path, enrage_path,
-                                       resolve_path, stampede_path}) {
+        for (const char* const path :
+             {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path, leap_impact_path,
+              seismic_burst_path, seismic_stun_path, enrage_path, resolve_path, stampede_path}) {
             if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                 prewarm_ids_.push_back(instance->get_instance_id());
             }
@@ -2374,6 +2456,9 @@ void E5PlayerController::use_skill(float power) {
     switch (skills_.selected()) {
     case gameplay::SkillId::VineTower:
         grow_tower(power);
+        break;
+    case gameplay::SkillId::GatlingGun:
+        raise_gatling();
         break;
     case gameplay::SkillId::ArrowRain:
         fire_rain();
@@ -2978,8 +3063,8 @@ void E5PlayerController::update_counter(float delta) {
                 const float angle = 2.39996F * static_cast<float>(stampede_ticks_ * stampede_bursts + burst);
                 const float away = gameplay::stampede_radius * (0.35F + 0.2F * static_cast<float>(burst));
                 eruptions_.push_back({.in_seconds = 0.08F * static_cast<float>(burst),
-                                      .place = get_global_position() + godot::Vector3(std::cos(angle) * away, 0.05F,
-                                                                                      std::sin(angle) * away),
+                                      .place = get_global_position() +
+                                               godot::Vector3(std::cos(angle) * away, 0.05F, std::sin(angle) * away),
                                       .size = stampede_burst_size});
             }
         }
@@ -2991,7 +3076,8 @@ void E5PlayerController::update_counter(float delta) {
         resolve_left_ -= lasts;
         if (!remote_ && !vitals_.dead) {
             const float full = effective_vitals().max_health;
-            const float gained = std::min(full * gameplay::resolve_heal_share * lasts, std::max(full - vitals_.health, 0.0F));
+            const float gained =
+                std::min(full * gameplay::resolve_heal_share * lasts, std::max(full - vitals_.health, 0.0F));
             vitals_.health += gained;
             resolve_healed_ += gained;
         }
@@ -3057,12 +3143,18 @@ void E5PlayerController::update_whirl(float delta) {
 }
 
 void E5PlayerController::start_tower_charge(gameplay::SkillId skill) {
+    end_disguise(); // a bush does not kneel down and build
     last_skill_ = skill;
     action_skill_ = skill;
     emote_left_ = 0.0F;
     tower_charging_ = true;
     tower_charge_ = 0.0F;
     set_velocity(godot::Vector3());
+    if (skill == gameplay::SkillId::GatlingGun) {
+        // What she builds stands in front of her from the first moment, piece by piece.
+        place_turret(false);
+        return;
+    }
     // The green that runs from her hand into the ground and out round her, while she charges.
     const godot::Node3D* const effect = E5Effect::spawn(effect_scene(tower_charge_path), this, get_global_position());
     tower_charge_effect_ = effect != nullptr ? effect->get_instance_id() : 0;
@@ -3072,15 +3164,35 @@ void E5PlayerController::update_tower_charge(bool held, float delta) {
     if (!tower_charging_) {
         return;
     }
+    const bool gun = action_skill_ == gameplay::SkillId::GatlingGun;
     if (held && is_on_floor()) {
         tower_charge_ = std::min(tower_charge_ + delta, gameplay::tower_full_charge_seconds);
-        return;
+        if (!gun || tower_charge_ < gameplay::gatling_build_seconds) {
+            return;
+        }
+        // The gun is done: it stands, whether she lets go or not.
     }
     tower_charging_ = false;
     if (auto* const effect = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(tower_charge_effect_))) {
         effect->queue_free();
     }
     tower_charge_effect_ = 0;
+    if (gun) {
+        if (tower_charge_ < gameplay::gatling_build_seconds || !is_on_floor()) {
+            // Let go too soon: what stands of it falls apart, and she can begin again shortly.
+            if (godot::Node3D* const turret = get_turret()) {
+                turret->call("collapse");
+            }
+            turret_id_ = 0;
+            if (cooldowns_enabled_) {
+                cooldown_left_.at(static_cast<std::size_t>(gameplay::SkillId::GatlingGun)) =
+                    gameplay::gatling_cancel_cooldown_seconds;
+            }
+            return;
+        }
+        use_skill(1.0F); // (the cooldown, the count, the word to the other players; then raise_gatling)
+        return;
+    }
     const float power = tower_charge_ / gameplay::tower_full_charge_seconds;
     if (gameplay::tower_height(tower_charge_) <= 0.0F || !is_on_floor()) {
         // Let go too soon: nothing grows, and she can try again shortly.
@@ -3108,6 +3220,181 @@ void E5PlayerController::grow_tower(float power) {
     get_parent()->add_child(tower);
     tower->set_global_position(get_global_position());
     ++towers_grown_;
+}
+
+E5PlayerController::Bush E5PlayerController::nearest_bush(float radius) const {
+    Bush best;
+    float nearest = radius;
+    const godot::Vector3 here = get_global_position();
+    const auto over_ground = [&here](const godot::Vector3& place) {
+        return std::hypot(static_cast<float>(place.x - here.x), static_cast<float>(place.z - here.z));
+    };
+    const godot::TypedArray<godot::Node> forests = get_tree()->get_nodes_in_group(E5Forest::group_name);
+    for (const godot::Variant& item : forests) {
+        const auto* const forest = godot::Object::cast_to<E5Forest>(item);
+        if (forest == nullptr) {
+            continue;
+        }
+        const E5Forest::Plant plant = forest->plant_near(here, nearest, "bush");
+        if (plant.mesh.is_valid()) {
+            nearest = over_ground(plant.transform.origin);
+            best = {.forest = forest->get_instance_id(),
+                    .node = 0,
+                    .index = plant.index,
+                    .transform = plant.transform,
+                    .mesh = plant.mesh,
+                    .material = plant.material};
+        }
+    }
+    // And the bushes that stand by themselves beside her in the scene (the arena's).
+    const godot::TypedArray<godot::Node> beside = get_parent()->get_children();
+    for (const godot::Variant& item : beside) {
+        auto* const node = godot::Object::cast_to<godot::Node3D>(item);
+        if (node == nullptr || !node->is_visible() || !node->get_scene_file_path().contains("bush") ||
+            over_ground(node->get_global_position()) > nearest) {
+            continue;
+        }
+        const E5Forest::Plant plant =
+            E5Forest::plant_of_scene(godot::ResourceLoader::get_singleton()->load(node->get_scene_file_path()));
+        if (plant.mesh.is_valid()) {
+            nearest = over_ground(node->get_global_position());
+            best = {.forest = 0,
+                    .node = node->get_instance_id(),
+                    .index = -1,
+                    .transform = node->get_global_transform(),
+                    .mesh = plant.mesh,
+                    .material = plant.material};
+        }
+    }
+    return best;
+}
+
+godot::Variant E5PlayerController::find_bush(float radius) const {
+    const Bush bush = nearest_bush(radius);
+    return bush.mesh.is_valid() ? godot::Variant(bush.transform.origin) : godot::Variant();
+}
+
+void E5PlayerController::start_disguise() {
+    const Bush bush = nearest_bush(gameplay::disguise_reach);
+    if (bush.mesh.is_null()) {
+        return; // she stands in no bush: nothing happens, and nothing is spent
+    }
+    // The bush is gone from where it grew: she is it now.
+    if (auto* const forest = godot::Object::cast_to<E5Forest>(godot::ObjectDB::get_instance(bush.forest))) {
+        forest->set_plant_hidden(bush.index, true);
+    }
+    if (auto* const node = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(bush.node))) {
+        node->set_visible(false);
+    }
+    disguise_bush_ = bush;
+    disguise_mesh_ = bush.mesh;
+    disguise_material_ = bush.material;
+    disguise_basis_ = bush.transform.basis;
+    disguised_ = true;
+    disguise_left_ = gameplay::disguise_seconds;
+    emote_left_ = 0.0F;
+    last_skill_ = gameplay::SkillId::Disguise;
+    ++skills_used_;
+    ++disguises_;
+}
+
+void E5PlayerController::end_disguise() {
+    if (!disguised_) {
+        return;
+    }
+    disguised_ = false;
+    disguise_left_ = 0.0F;
+    // The bush is back where it grew.
+    if (auto* const forest = godot::Object::cast_to<E5Forest>(godot::ObjectDB::get_instance(disguise_bush_.forest))) {
+        forest->set_plant_hidden(disguise_bush_.index, false);
+    }
+    if (auto* const node = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(disguise_bush_.node))) {
+        node->set_visible(true);
+    }
+    disguise_bush_ = {};
+    disguise_mesh_.unref();
+    disguise_material_.unref();
+    if (cooldowns_enabled_ && !remote_) {
+        cooldown_left_.at(static_cast<std::size_t>(gameplay::SkillId::Disguise)) =
+            gameplay::skill_cooldown_seconds(gameplay::SkillId::Disguise);
+    }
+}
+
+void E5PlayerController::update_disguise(float delta) {
+    if (!disguised_) {
+        return;
+    }
+    disguise_left_ -= delta;
+    if (disguise_left_ <= 0.0F || mounted_ || manning_ || vitals_.dead) {
+        end_disguise();
+    }
+}
+
+godot::Node3D* E5PlayerController::place_turret(bool built) {
+    const godot::Ref<godot::PackedScene> scene = effect_scene(gatling_path);
+    auto* const turret = scene.is_valid() ? godot::Object::cast_to<godot::Node3D>(scene->instantiate()) : nullptr;
+    if (turret == nullptr) {
+        return nullptr;
+    }
+    turret->set("build_seconds", gameplay::gatling_build_seconds);
+    turret->set("stand_seconds", gameplay::gatling_stand_seconds);
+    turret->set("built", built);
+    get_parent()->add_child(turret);
+    // In front of her, looking the way she does (its muzzle is its -Z).
+    const godot::Vector3 forward(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    turret->set_global_transform(
+        godot::Transform3D(godot::Basis(godot::Vector3(0.0F, 1.0F, 0.0F), model_yaw_ + std::numbers::pi_v<float>),
+                           get_global_position() + forward * gatling_ahead));
+    turret_id_ = turret->get_instance_id();
+    return turret;
+}
+
+void E5PlayerController::raise_gatling() {
+    godot::Node3D* turret = get_turret();
+    if (turret == nullptr) {
+        // Another player's hero: nothing was seen being built here. It stands at once.
+        turret = place_turret(true);
+    } else {
+        turret->call("finish");
+    }
+    if (turret != nullptr && !remote_ && !vitals_.dead) {
+        // She mans it by herself.
+        manning_ = true;
+        gatling_until_next_ = 0.0F;
+        turret->call("set_gunner", this);
+    }
+}
+
+void E5PlayerController::update_gatling(float delta) {
+    if (!manning_) {
+        return;
+    }
+    godot::Node3D* const turret = get_turret();
+    if (turret == nullptr || !static_cast<bool>(turret->call("is_built")) || mounted_) {
+        leave_turret(); // it has fallen apart under her hands
+        manning_ = false;
+        return;
+    }
+    // She stands behind it, whichever way she turns it.
+    const godot::Vector3 ahead(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw));
+    godot::Vector3 place = turret->get_global_position() - ahead * gatling_stand_back;
+    place.y = get_global_position().y;
+    set_global_position(place);
+    // It points at what the crosshair covers.
+    const AimPoint aim = find_aim_point(turret->call("get_muzzle"));
+    turret->call("aim_at", aim.position);
+    const gameplay::GatlingStep step = gameplay::step_gatling(gatling_until_next_, attack_held(), delta);
+    gatling_until_next_ = step.until_next;
+    for (int index = 0; index < step.arrows; ++index) {
+        const godot::Vector3 muzzle = turret->call("get_muzzle");
+        const godot::Vector3 direction = (aim.position - muzzle).normalized();
+        E5Arrow* const arrow = spawn_arrow(muzzle, direction);
+        arrow->set_damage(dealt(gameplay::SkillId::GatlingGun));
+        arrow->launch(direction * arrow_speed_, get_rid());
+        turret->call("fired");
+        last_skill_ = gameplay::SkillId::GatlingGun;
+        ++gatling_arrows_;
+    }
 }
 
 E5Enemy* E5PlayerController::pieces_victim() const {
@@ -3146,7 +3433,8 @@ bool E5PlayerController::update_pieces(float delta) {
     if (!is_cutting()) {
         return false;
     }
-    const gameplay::BleedStep step = gameplay::step_bleed(pieces_, gameplay::pieces_tick_seconds, std::max(delta, 1e-4F));
+    const gameplay::BleedStep step =
+        gameplay::step_bleed(pieces_, gameplay::pieces_tick_seconds, std::max(delta, 1e-4F));
     pieces_ = step.state;
     if (remote_) {
         return false; // her place and her clips arrive from where she is played
@@ -3267,7 +3555,8 @@ bool E5PlayerController::update_enrage(float delta) {
         const godot::StringName& clip = clip_combo_.at(static_cast<std::size_t>(enrage_blow_));
         enrage_blow_elapsed_ += delta;
         if (!enrage_arc_shown_ &&
-            enrage_blow_elapsed_ >= (timing.strike_at - look_of(gameplay::SkillId::Slash, enrage_blow_).before) / pace) {
+            enrage_blow_elapsed_ >=
+                (timing.strike_at - look_of(gameplay::SkillId::Slash, enrage_blow_).before) / pace) {
             enrage_arc_shown_ = true;
             show_slash_arc();
         }
@@ -3355,8 +3644,8 @@ void E5PlayerController::update_leap_aim(bool held) {
         return;
     }
     // Something else has begun, or she can no longer leap: the aiming is over and nothing happens.
-    const bool able = skills_.selected() == gameplay::SkillId::JumpAttack && !mounted_ && !is_busy() &&
-                      is_on_floor() && skill_ready(skills_.selected());
+    const bool able = skills_.selected() == gameplay::SkillId::JumpAttack && !mounted_ && !is_busy() && is_on_floor() &&
+                      skill_ready(skills_.selected());
     if (!held || !able) {
         leap_aiming_ = false;
         if (leap_marker_ != nullptr) {

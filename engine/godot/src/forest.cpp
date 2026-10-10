@@ -261,6 +261,39 @@ void E5Forest::add_plant(const Species& species, const godot::Transform3D& trans
                                 form(species.coarse, species.far_distance, card_distance)}});
 }
 
+E5Forest::Plant E5Forest::plant_near(const godot::Vector3& position, float radius, const godot::String& kind) const {
+    Plant found;
+    float nearest = radius;
+    for (std::size_t index = 0; index < drawn_.size(); ++index) {
+        const Drawn& plant = drawn_[index];
+        const float distance = std::hypot(static_cast<float>(plant.position.x - position.x),
+                                          static_cast<float>(plant.position.z - position.z));
+        if (plant.hidden || distance > nearest || !species_.at(plant.species).path.contains(kind)) {
+            continue;
+        }
+        nearest = distance;
+        found = {.index = static_cast<int>(index),
+                 .transform = godot::Transform3D(plant.basis, plant.position),
+                 .mesh = species_.at(plant.species).full,
+                 .material = species_.at(plant.species).material};
+    }
+    return found;
+}
+
+void E5Forest::set_plant_hidden(int index, bool hidden) {
+    if (index >= 0 && static_cast<std::size_t>(index) < drawn_.size()) {
+        drawn_[static_cast<std::size_t>(index)].hidden = hidden; // _process shows or hides its meshes
+    }
+}
+
+E5Forest::Plant E5Forest::plant_of_scene(const godot::Ref<godot::PackedScene>& scene) {
+    Species species;
+    if (!read_species(scene, species)) {
+        return {};
+    }
+    return {.index = -1, .transform = {}, .mesh = species.full, .material = species.material};
+}
+
 godot::Vector3 E5Forest::lod_origin() const {
     const godot::Viewport* const viewport = get_viewport();
     const godot::Camera3D* const camera = viewport != nullptr ? viewport->get_camera_3d() : nullptr;
@@ -285,7 +318,7 @@ void E5Forest::_process(double /*delta*/) {
     for (Drawn& plant : drawn_) {
         const auto distance = static_cast<float>(origin.distance_to(plant.position));
         for (Form& form : plant.forms) {
-            const bool visible = distance >= form.begin && (form.end <= 0.0F || distance <= form.end);
+            const bool visible = !plant.hidden && distance >= form.begin && (form.end <= 0.0F || distance <= form.end);
             if (visible != form.visible) {
                 form.visible = visible;
                 server->instance_set_visible(form.instance, visible);
@@ -402,6 +435,8 @@ void E5Forest::_ready() {
     for (const godot::Variant& scene : plant_scenes_) {
         Species species;
         if (read_species(scene, species)) {
+            const godot::Ref<godot::PackedScene> packed = scene;
+            species.path = packed.is_valid() ? packed->get_path() : godot::String();
             if (near_distance_ > 0.0F) {
                 species.near_distance = near_distance_;
             }
@@ -469,6 +504,8 @@ void E5Forest::_ready() {
         const godot::Transform3D local(turned.scaled(godot::Vector3(point.scale, point.scale, point.scale)), position);
         // The forest node's turn and scale are ignored: a forest is placed, not rotated.
         add_plant(species, godot::Transform3D(local.basis, origin + position));
+        drawn_.back().species = species_index;
+        drawn_.back().basis = local.basis;
         planted.push_back({.species = species_index, .local = local});
 
         if (species.trunk.is_valid()) {

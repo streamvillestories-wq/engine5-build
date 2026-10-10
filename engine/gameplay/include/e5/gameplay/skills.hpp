@@ -57,6 +57,8 @@ enum class SkillId : unsigned char {
     VineTower,     // the archer's: she kneels and charges; a tower of vines lifts her above the fight
     Stampede,      // the new warrior's "Sprintsz": for a few seconds she is faster and tramples what is near
     CutInPieces,   // the new warrior's, on a full charge: she is at one enemy after another, a blow for each
+    GatlingGun,    // the archer's "Gatling Arrow Gun": she builds a turret, mans it and shoots arrows fast
+    Disguise,      // the archer's: standing in a bush she becomes that bush; enemies do not see her
 };
 
 // Which skills a character has on the bar.
@@ -222,6 +224,35 @@ inline constexpr float tower_stand_seconds = 5.0F;
 inline constexpr float tower_cancel_cooldown_seconds = 5.0F;
 // How high the tower grows after a charge of so many seconds; 0: it does not grow.
 [[nodiscard]] float tower_height(float charged_seconds) noexcept;
+
+// The archer's Gatling Arrow Gun (ticket 35, a player's wish): she kneels and builds a turret in
+// front of her for as long as the button is held; after `gatling_build_seconds` it stands and she
+// mans it by herself. Let go sooner and what was built falls apart (ready again after
+// `gatling_cancel_cooldown_seconds`). Manning it she stands behind it, aims with the crosshair,
+// and the left button, held, shoots `gatling_arrows_per_second` arrows (skill_damage each; the
+// bow in her weapon slot adds nothing to them). E leaves it and mans it again. It stands for
+// `gatling_stand_seconds` and then falls apart.
+inline constexpr float gatling_build_seconds = 5.0F;
+inline constexpr float gatling_cancel_cooldown_seconds = 5.0F;
+inline constexpr float gatling_stand_seconds = 30.0F;
+inline constexpr float gatling_arrows_per_second = 4.0F;
+// How many arrows leave it in a step of `dt` seconds with the button held. `until_next`: seconds
+// until the next one is due (0: at once), carried from step to step; let go, it runs down to 0
+// and no further, so that a new press shoots at once but tapping is no faster than holding.
+struct GatlingStep {
+    float until_next = 0.0F;
+    int arrows = 0;
+};
+[[nodiscard]] GatlingStep step_gatling(float until_next, bool held, float dt) noexcept;
+
+// The archer's Disguise (ticket 36, a player's wish): standing in a bush (its foot within
+// `disguise_reach` of her) she takes its place: the bush is gone from where it grew, she looks
+// like it, and enemies do not see her. She walks and shoots her standard shot as always. It ends
+// with E, when anything hurts her, when she begins another skill, or after `disguise_seconds`
+// (the wish had no end: unseen for ever would outdo everything else she has); the bush is then
+// back where it grew, and the cooldown runs from that moment.
+inline constexpr float disguise_reach = 1.8F; // metres
+inline constexpr float disguise_seconds = 15.0F;
 
 // A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound
 // on the same enemy starts the time anew and keeps the beat (no second wound beside it).

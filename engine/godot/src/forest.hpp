@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/shape3d.hpp>
 #include <godot_cpp/variant/rid.hpp>
+#include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/vector2.hpp>
@@ -51,6 +52,22 @@ public:
     void _ready() override;
     void _process(double delta) override;
     void _exit_tree() override;
+
+    // A plant someone can hide in (the Archer's Disguise): what it looks like and where it stands.
+    struct Plant {
+        int index = -1; // in its forest; -1: none, or a plant that stands by itself
+        godot::Transform3D transform;
+        godot::Ref<godot::Mesh> mesh; // empty: there is none
+        godot::Ref<godot::Material> material;
+    };
+    // The plant of this forest nearest to `position` (over the ground) within `radius` whose
+    // scene's path contains `kind` ("bush"), if there is one.
+    [[nodiscard]] Plant plant_near(const godot::Vector3& position, float radius, const godot::String& kind) const;
+    // Takes that plant out of the picture, or puts it back. (Its shadow and, from far away, its
+    // card stay: those are drawn in batches.)
+    void set_plant_hidden(int index, bool hidden);
+    // The same of a plant scene that stands by itself, not in a forest (`transform` is not set).
+    [[nodiscard]] static Plant plant_of_scene(const godot::Ref<godot::PackedScene>& scene);
 
     [[nodiscard]] int get_plant_count() const { return plant_count_; }
 
@@ -110,6 +127,7 @@ private:
         godot::Ref<godot::Shape3D> trunk; // may be missing
         godot::Vector3 trunk_offset;
         float foot_radius = 0.4F; // metres: how wide the plant stands on the ground
+        godot::String path;       // of its scene: says what kind of plant it is
     };
     // One mesh of one plant and the distances between which it can be seen at all.
     struct Form {
@@ -121,6 +139,9 @@ private:
     struct Drawn {
         godot::Vector3 position;
         std::array<Form, 3> forms; // full, mid, coarse
+        std::size_t species = 0;
+        godot::Basis basis;  // its turn and size
+        bool hidden = false; // someone has taken it (set_plant_hidden)
     };
 
     [[nodiscard]] static bool read_species(const godot::Ref<godot::PackedScene>& scene, Species& species);
