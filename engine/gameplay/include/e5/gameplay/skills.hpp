@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <span>
 #include <string_view>
 
 namespace e5::gameplay {
@@ -69,12 +70,15 @@ enum class SkillId : unsigned char {
 // back", the keeper's word): nothing of them is removed, test runs use them, and they can be put
 // back by making `Archer` build that bar again.
 // The numbers are sent between machines as which hero a player is (game/net/net.gd): add at the end.
-enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull };
+// `Mage` is the new wizard (2026-10-11): his arcane bolt, thrown with his wand, and nothing else
+// yet; his other slots are filled from the players' skill wishes, as the Archer's and the new
+// Warrior's are. The first wizard's spells stay his (`Wizard`).
+enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull, Mage };
 
 // How many of a hero's quick slots are hers to fill: shown on the bar also while they are empty.
-inline constexpr int open_slots = 9;
+inline constexpr int open_slots = 11;
 [[nodiscard]] constexpr int open_slot_count(SkillSet set) noexcept {
-    return set == SkillSet::Blade || set == SkillSet::Archer ? open_slots : 0;
+    return set == SkillSet::Blade || set == SkillSet::Archer || set == SkillSet::Mage ? open_slots : 0;
 }
 
 // How a skill is used.
@@ -269,6 +273,19 @@ struct BleedStep {
 
 [[nodiscard]] SkillInfo skill_info(SkillId skill) noexcept;
 
+// Every skill a hero has, whether it is on her bar or not: what the skill book (F5) shows and
+// what can be put on the bar. Her standard attack is the first. A new skill for a hero is added
+// here, and given a description below, or the book does not know it.
+[[nodiscard]] std::span<const SkillId> skill_catalogue(SkillSet set) noexcept;
+// What the skill does, in a sentence or two, for the player (the skill book's tooltip). The
+// numbers the tooltip shows beside it (damage, cooldown) come from the functions below, so
+// this text should name none that could change.
+[[nodiscard]] std::string_view skill_description(SkillId skill) noexcept;
+// Made from a player's wish (docs/BUGS.md, "Skill wishes"): the book lists these apart.
+[[nodiscard]] constexpr bool skill_from_wish(SkillId skill) noexcept {
+    return skill >= SkillId::CounterAttack;
+}
+
 // Damage of one hit of a skill: one arrow, one explosion, one kick, one peck of
 // one bird. `power` is the charge of a power shot (0..1) and ignored otherwise.
 [[nodiscard]] float skill_damage(SkillId skill, float power = 0.0F) noexcept;
@@ -342,6 +359,16 @@ public:
 
     // Returns true if the selection changed.
     bool select(std::size_t index) noexcept;
+
+    // Rearranging the bar (the skill book, F5). The first slot is the hero's standard attack
+    // and stays what it is. A skill is on the bar once at most: put into a slot while it is in
+    // another, the two slots exchange what they hold.
+    // Where a skill is on the bar; slot_count if it is not.
+    [[nodiscard]] std::size_t find(SkillId skill) const noexcept;
+    // Puts a skill into a slot. False if that cannot be (the first slot, no skill, the standard attack).
+    bool assign(std::size_t index, SkillId skill) noexcept;
+    // Empties a slot. False for the first slot or one that is empty already.
+    bool clear(std::size_t index) noexcept;
 
 private:
     std::array<SkillId, slot_count> slots_{};

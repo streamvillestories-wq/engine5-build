@@ -42,6 +42,8 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/core/object.hpp>
+#include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/node_path.hpp>
 #include <godot_cpp/variant/quaternion.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -51,6 +53,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -171,6 +174,7 @@ constexpr float kick_bolt_reach = 3.4F;  // metres from her
 // The wizard's spells. Each plays a clip of the magic pack, faster than it was made and
 // without its long wind-down; the spell leaves his hands at the moment they are stretched
 // furthest forward (measured in the clips, in seconds of the clip).
+constexpr float wand_tip_from_grip = 0.42F; // metres along the wand from where his fist holds it
 constexpr SpellTiming bolt_timing{.playback_scale = 1.7F, .strike_at = 1.13F, .end_at = 1.75F};
 constexpr SpellTiming fireball_timing{.playback_scale = 1.5F, .strike_at = 1.33F, .end_at = 2.1F};
 constexpr SpellTiming nova_timing{.playback_scale = 1.5F, .strike_at = 1.23F, .end_at = 2.2F};
@@ -496,6 +500,9 @@ bool is_melee(gameplay::SkillId skill) {
 }
 
 gameplay::SkillSet skill_set_from(int value) {
+    if (value == 6) {
+        return gameplay::SkillSet::Mage;
+    }
     if (value == 5) {
         return gameplay::SkillSet::ArcherFull;
     }
@@ -662,6 +669,11 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("take_outgoing_damage"), &E5PlayerController::take_outgoing_damage);
     ClassDB::bind_method(D_METHOD("get_skill_name", "slot"), &E5PlayerController::get_skill_name);
     ClassDB::bind_method(D_METHOD("get_open_slot_count"), &E5PlayerController::get_open_slot_count);
+    ClassDB::bind_method(D_METHOD("get_skill_catalogue"), &E5PlayerController::get_skill_catalogue);
+    ClassDB::bind_method(D_METHOD("set_skill_slot", "slot", "skill_name"), &E5PlayerController::set_skill_slot);
+    ClassDB::bind_method(D_METHOD("clear_skill_slot", "slot"), &E5PlayerController::clear_skill_slot);
+    ClassDB::bind_method(D_METHOD("get_selected_skill_name"), &E5PlayerController::get_selected_skill_name);
+    ADD_SIGNAL(godot::MethodInfo("skill_bar_changed"));
     ClassDB::bind_method(D_METHOD("get_last_skill"), &E5PlayerController::get_last_skill);
     ClassDB::bind_method(D_METHOD("get_skills_used"), &E5PlayerController::get_skills_used);
     ClassDB::bind_method(D_METHOD("is_standard_attack_in_use"), &E5PlayerController::is_standard_attack_in_use);
@@ -731,7 +743,7 @@ void E5PlayerController::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "max_health", godot::PROPERTY_HINT_RANGE, "1,1000,1"),
                  "set_max_health", "get_max_health");
     ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "skill_set", godot::PROPERTY_HINT_ENUM,
-                              "Archer,Wizard,Warrior,Dwarf,Blade,ArcherFull"),
+                              "Archer,Wizard,Warrior,Dwarf,Blade,ArcherFull,Mage"),
                  "set_skill_set", "get_skill_set");
     for (const char* const effect :
          {"charge_effect",           "charge_full_effect",  "trail_effect",       "impact_effect",
@@ -1378,7 +1390,7 @@ void E5PlayerController::note_net_event(int kind, float power) {
     }
     godot::Array event;
     event.push_back(kind);
-    event.push_back(static_cast<int>(skills_.selected_index()));
+    event.push_back(static_cast<int>(skills_.selected()));
     event.push_back(power);
     event.push_back(combo_step_);
     event.push_back(look_.yaw);
@@ -1392,15 +1404,31 @@ godot::Array E5PlayerController::take_net_events() {
     return events;
 }
 
-void E5PlayerController::apply_net_event(int kind, int slot, float power, int combo_step, float look_yaw,
+void E5PlayerController::apply_net_event(int kind, int skill, float power, int combo_step, float look_yaw,
                                          float look_pitch) {
-    if (!remote_ || slot < 0) {
+    if (!remote_) {
         return;
+    }
+    // Only a skill this hero has: what arrives is another machine's word.
+    const std::span<const gameplay::SkillId> hers = gameplay::skill_catalogue(skill_bar_set());
+    const auto named =
+        std::ranges::find_if(hers, [skill](gameplay::SkillId one) { return static_cast<int>(one) == skill; });
+    if (named == hers.end()) {
+        return;
+    }
+    // Her bar here need not be the bar of whoever plays her: a skill that is not on it takes
+    // the last slot for as long as it is the one she uses.
+    std::size_t slot = skills_.find(*named);
+    if (slot >= gameplay::SkillBar::slot_count) {
+        slot = gameplay::SkillBar::slot_count - 1;
+        if (!skills_.assign(slot, *named)) {
+            return;
+        }
     }
     look_.yaw = look_yaw;
     look_.pitch = look_pitch;
     apply_look_to_nodes();
-    skills_.select(static_cast<std::size_t>(slot));
+    skills_.select(slot);
     if (kind == 0) {
         // Started in the next frame of hers, as on the machine that plays her.
         pending_start_ = true;
@@ -1665,6 +1693,72 @@ godot::String E5PlayerController::get_skill_name(int slot) const {
     const std::string_view name = gameplay::skill_info(skill).name;
     return skill == gameplay::SkillId::None ? godot::String()
                                             : godot::String::utf8(name.data(), static_cast<std::int64_t>(name.size()));
+}
+
+godot::Array E5PlayerController::get_skill_catalogue() const {
+    const auto text = [](std::string_view words) {
+        return godot::String::utf8(words.data(), static_cast<std::int64_t>(words.size()));
+    };
+    godot::Array catalogue;
+    for (const gameplay::SkillId skill : gameplay::skill_catalogue(skill_bar_set())) {
+        const gameplay::SkillInfo info = gameplay::skill_info(skill);
+        const std::size_t slot = skills_.find(skill);
+        godot::Dictionary entry;
+        entry["name"] = text(info.name);
+        entry["description"] = text(gameplay::skill_description(skill));
+        entry["damage"] = gameplay::skill_damage(skill, 0.0F);
+        entry["damage_full"] = gameplay::skill_damage(skill, 1.0F);
+        entry["cooldown"] = gameplay::skill_cooldown_seconds(skill);
+        entry["needs_charge"] = gameplay::skill_needs_charge(skill);
+        entry["kind"] = info.kind == gameplay::SkillKind::Bow ? "bow" : "instant";
+        entry["from_wish"] = gameplay::skill_from_wish(skill);
+        entry["standard"] = skill == skills_.slot(0);
+        entry["slot"] = slot < gameplay::SkillBar::slot_count ? static_cast<int>(slot) : -1;
+        catalogue.push_back(entry);
+    }
+    return catalogue;
+}
+
+bool E5PlayerController::set_skill_slot(int slot, const godot::String& skill_name) {
+    if (remote_ || slot < 1 || is_busy()) {
+        return false;
+    }
+    const std::string wanted = skill_name.utf8().get_data();
+    for (const gameplay::SkillId skill : gameplay::skill_catalogue(skill_bar_set())) {
+        if (gameplay::skill_info(skill).name != wanted) {
+            continue;
+        }
+        if (!skills_.assign(static_cast<std::size_t>(slot), skill)) {
+            return false;
+        }
+        skill_bar_changed();
+        return true;
+    }
+    return false;
+}
+
+bool E5PlayerController::clear_skill_slot(int slot) {
+    if (remote_ || slot < 1 || is_busy() || !skills_.clear(static_cast<std::size_t>(slot))) {
+        return false;
+    }
+    skill_bar_changed();
+    return true;
+}
+
+void E5PlayerController::skill_bar_changed() {
+    // The slot the right button had may be empty now, or hold another skill.
+    if (skills_.slot(selected_slot_) == gameplay::SkillId::None) {
+        selected_slot_ = 0;
+    }
+    dagger_return_slot_ = -1;
+    if (skill_hud_ != nullptr) {
+        for (std::size_t slot = 0; slot < gameplay::SkillBar::slot_count; ++slot) {
+            const std::string_view name = gameplay::skill_info(skills_.slot(slot)).name;
+            skill_hud_->set_slot_name(slot, godot::String::utf8(name.data(), static_cast<std::int64_t>(name.size())));
+        }
+        skill_hud_->set_selected(skills_.selected_index());
+    }
+    emit_signal("skill_bar_changed");
 }
 
 void E5PlayerController::set_skill_bar_visible(bool visible) {
@@ -2719,6 +2813,14 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
 }
 
 godot::Vector3 E5PlayerController::casting_point(bool both_hands) const {
+    // A wizard with a wand casts from its tip: the wand is whatever his scene's holder holds,
+    // and runs along the holder's +Y from his fist.
+    if (skill_set_ == static_cast<int>(gameplay::SkillSet::Mage) && !both_hands) {
+        if (const auto* const holder = godot::Object::cast_to<godot::Node3D>(
+                get_node_or_null(godot::NodePath("RightHandAttachment/WeaponHolder")))) {
+            return holder->get_global_transform().xform(godot::Vector3(0.0F, wand_tip_from_grip, 0.0F));
+        }
+    }
     if (right_hand_ == nullptr) {
         // No hand to follow: chest height, a little in front of him.
         return get_global_position() + godot::Vector3(-std::sin(look_.yaw) * 0.6F, 1.3F, -std::cos(look_.yaw) * 0.6F);

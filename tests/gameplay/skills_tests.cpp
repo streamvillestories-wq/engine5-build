@@ -22,7 +22,7 @@ TEST_CASE("the archer has her shot, the skills wished for her and slots to fill"
     }
     CHECK_FALSE(bar.select(3));
     CHECK(bar.select(5));
-    CHECK(open_slot_count(SkillSet::Archer) == 9);
+    CHECK(open_slot_count(SkillSet::Archer) == 11);
     CHECK(open_slot_count(SkillSet::ArcherFull) == 0);
     CHECK(open_slot_count(SkillSet::Wizard) == 0);
 }
@@ -231,7 +231,7 @@ TEST_CASE("the new warrior has her sword's combo, the skills wished for her and 
     CHECK_FALSE(bar.select(9));
     CHECK(bar.selected() == SkillId::Slash);
     CHECK(bar.select(1));
-    CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
+    CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 11);
 }
 
 TEST_CASE("the counter attack is a stance within the warrior's range", "[skills]") {
@@ -700,4 +700,71 @@ TEST_CASE("the charge fills from kills and a little from damage, and no further 
     CHECK(charge_after(0.97F, 100.0F, true) == Catch::Approx(1.0F));
     // Healing an enemy, should that ever happen, takes nothing away.
     CHECK(charge_after(0.5F, -40.0F, false) == Catch::Approx(0.5F));
+}
+
+TEST_CASE("every hero's skills are in her catalogue and have a description", "[skills]") {
+    for (const SkillSet set : {SkillSet::Archer, SkillSet::Wizard, SkillSet::Warrior, SkillSet::Dwarf, SkillSet::Blade,
+                               SkillSet::ArcherFull, SkillSet::Mage}) {
+        const auto catalogue = skill_catalogue(set);
+        REQUIRE_FALSE(catalogue.empty());
+        const SkillBar bar(set);
+        // The standard attack is the first of both.
+        CHECK(catalogue.front() == bar.slot(0));
+        for (std::size_t slot = 0; slot < SkillBar::slot_count; ++slot) {
+            if (bar.slot(slot) != SkillId::None) {
+                CHECK(std::ranges::find(catalogue, bar.slot(slot)) != catalogue.end());
+            }
+        }
+        for (const SkillId skill : catalogue) {
+            CHECK_FALSE(skill_info(skill).name.empty());
+            CHECK_FALSE(skill_description(skill).empty());
+            // No two of one hero share a name: the book and the saved bars know them by it.
+            CHECK(std::ranges::count_if(catalogue, [skill](SkillId other) {
+                      return skill_info(other).name == skill_info(skill).name;
+                  }) == 1);
+        }
+    }
+}
+
+TEST_CASE("the bar can be rearranged, but not its standard attack", "[skills]") {
+    SkillBar bar(SkillSet::Blade);
+    REQUIRE(bar.slot(0) == SkillId::Slash);
+    REQUIRE(bar.slot(1) == SkillId::CounterAttack);
+    REQUIRE(bar.slot(2) == SkillId::BladeWhirl);
+
+    // The first slot stays, and the standard attack goes nowhere else.
+    CHECK_FALSE(bar.assign(0, SkillId::Enrage));
+    CHECK_FALSE(bar.clear(0));
+    CHECK_FALSE(bar.assign(3, SkillId::Slash));
+    CHECK_FALSE(bar.assign(3, SkillId::None));
+    CHECK(bar.slot(0) == SkillId::Slash);
+
+    // Into a slot that holds another: the two change places, and it is on the bar once.
+    CHECK(bar.assign(1, SkillId::BladeWhirl));
+    CHECK(bar.slot(1) == SkillId::BladeWhirl);
+    CHECK(bar.slot(2) == SkillId::CounterAttack);
+    CHECK(bar.find(SkillId::BladeWhirl) == 1);
+
+    // Taken off the bar while chosen: the choice falls back to the standard attack.
+    CHECK(bar.select(2));
+    CHECK(bar.clear(2));
+    CHECK(bar.slot(2) == SkillId::None);
+    CHECK(bar.selected() == SkillId::Slash);
+    CHECK(bar.find(SkillId::CounterAttack) == SkillBar::slot_count);
+    CHECK_FALSE(bar.clear(2));
+
+    // And back from the book into an empty slot.
+    CHECK(bar.assign(11, SkillId::CounterAttack));
+    CHECK(bar.find(SkillId::CounterAttack) == 11);
+}
+
+TEST_CASE("the new wizard has his arcane bolt and slots to fill", "[skills]") {
+    const SkillBar bar(SkillSet::Mage);
+    CHECK(bar.slot(0) == SkillId::ArcaneBolt);
+    for (std::size_t slot = 1; slot < SkillBar::slot_count; ++slot) {
+        CHECK(bar.slot(slot) == SkillId::None);
+    }
+    CHECK(open_slot_count(SkillSet::Mage) == open_slots);
+    // The first wizard keeps all of his.
+    CHECK(SkillBar(SkillSet::Wizard).slot(6) == SkillId::BlackHole);
 }

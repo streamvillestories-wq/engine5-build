@@ -439,6 +439,8 @@ SkillBar::SkillBar(SkillSet set) noexcept {
                   SkillId::None, SkillId::None,      SkillId::GatlingGun};
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
+    } else if (set == SkillSet::Mage) {
+        slots_ = {SkillId::ArcaneBolt};
     } else if (set == SkillSet::Wizard) {
         slots_ = {SkillId::ArcaneBolt, SkillId::Fireball,    SkillId::FrostNova, SkillId::ChainLightning,
                   SkillId::Meteor,     SkillId::StarBarrage, SkillId::BlackHole};
@@ -451,6 +453,185 @@ SkillBar::SkillBar(SkillSet set) noexcept {
 
 SkillId SkillBar::slot(std::size_t index) const noexcept {
     return index < slot_count ? slots_[index] : SkillId::None;
+}
+
+std::size_t SkillBar::find(SkillId skill) const noexcept {
+    if (skill == SkillId::None) {
+        return slot_count;
+    }
+    const auto found = std::ranges::find(slots_, skill);
+    return static_cast<std::size_t>(found - slots_.begin());
+}
+
+bool SkillBar::assign(std::size_t index, SkillId skill) noexcept {
+    if (index == 0 || index >= slot_count || skill == SkillId::None || skill == slots_[0]) {
+        return false;
+    }
+    const std::size_t was_at = find(skill);
+    if (was_at == index) {
+        return true;
+    }
+    if (was_at < slot_count) {
+        slots_[was_at] = slots_[index];
+    }
+    slots_[index] = skill;
+    if (slots_[selected_] == SkillId::None) {
+        selected_ = 0; // the selection always names a usable skill
+    }
+    return true;
+}
+
+bool SkillBar::clear(std::size_t index) noexcept {
+    if (index == 0 || index >= slot_count || slots_[index] == SkillId::None) {
+        return false;
+    }
+    slots_[index] = SkillId::None;
+    if (selected_ == index) {
+        selected_ = 0;
+    }
+    return true;
+}
+
+std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
+    // The Archer's: what was made from wishes, then the skills she had before (kept "in the
+    // back" since 2026-10-10 and offered again in the book).
+    static constexpr std::array archer{
+        SkillId::Shot,       SkillId::VineTower, SkillId::Disguise,   SkillId::GatlingGun,   SkillId::PowerShot,
+        SkillId::ArrowRain,  SkillId::FrostFan,  SkillId::FireArrow,  SkillId::ThunderKick,  SkillId::Kingfishers,
+        SkillId::VenomArrow, SkillId::GaleArrow, SkillId::StormArrow, SkillId::BrambleArrow, SkillId::DaggerCombo,
+    };
+    static constexpr std::array blade{
+        SkillId::Slash,  SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,  SkillId::SeismicSlash,
+        SkillId::Enrage, SkillId::NeverGiveUp,   SkillId::Stampede,   SkillId::CutInPieces,
+    };
+    static constexpr std::array warrior{SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave,
+                                        SkillId::StarWhirl};
+    static constexpr std::array dwarf{SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
+                                      SkillId::Battlecry};
+    static constexpr std::array wizard{SkillId::ArcaneBolt,     SkillId::Fireball, SkillId::FrostNova,
+                                       SkillId::ChainLightning, SkillId::Meteor,   SkillId::StarBarrage,
+                                       SkillId::BlackHole};
+    static constexpr std::array mage{SkillId::ArcaneBolt};
+    switch (set) {
+    case SkillSet::Mage:
+        return mage;
+    case SkillSet::Archer:
+    case SkillSet::ArcherFull:
+        return archer;
+    case SkillSet::Blade:
+        return blade;
+    case SkillSet::Warrior:
+        return warrior;
+    case SkillSet::Dwarf:
+        return dwarf;
+    case SkillSet::Wizard:
+        return wizard;
+    }
+    return {};
+}
+
+std::string_view skill_description(SkillId skill) noexcept {
+    switch (skill) {
+    case SkillId::None:
+        return {};
+    case SkillId::Shot:
+        return "Her standard attack: draw the bow, let go at full draw. One clean arrow.";
+    case SkillId::PowerShot:
+        return "Hold the bow at full draw to gather power: the longer it is held, the harder the arrow hits, up to "
+               "three times a plain shot.";
+    case SkillId::ArrowRain:
+        return "A volley shot into the sky that comes down on the place she aims at. Each arrow hurts what "
+               "stands near where it lands.";
+    case SkillId::FrostFan:
+        return "Five frost arrows at once, spread like a fan. Each of them does this damage.";
+    case SkillId::FireArrow:
+        return "An arrow that explodes where it strikes and sets what the blast catches on fire: it burns "
+               "on for a few seconds.";
+    case SkillId::ThunderKick:
+        return "A kick with a shockwave for what has come too close: it hits everything right in front of her.";
+    case SkillId::Kingfishers:
+        return "She calls a flock of kingfishers that hunt the enemies around her for a while. The damage is "
+               "one peck of one bird; they peck many times.";
+    case SkillId::ArcaneBolt:
+        return "His standard attack: a bolt of arcane force, thrown at what the crosshair covers.";
+    case SkillId::Fireball:
+        return "A ball of fire that explodes where it strikes.";
+    case SkillId::FrostNova:
+        return "A ring of frost bursts out from him and hits everything around him.";
+    case SkillId::ChainLightning:
+        return "Lightning that strikes one enemy and leaps on to others near it, a little weaker each time.";
+    case SkillId::Meteor:
+        return "A meteor falls on the place he aims at, after a moment of warning.";
+    case SkillId::StarBarrage:
+        return "A stream of small stars. The damage is that of one star.";
+    case SkillId::BlackHole:
+        return "A black hole that draws enemies in, holds them and spits them out again.";
+    case SkillId::Slash:
+        return "Her standard attack: three sword blows in a row when the button is pressed again in time. "
+               "The damage is the first blow; the second and the finisher hit harder.";
+    case SkillId::FlameBlade:
+        return "A burning sword blow.";
+    case SkillId::FrostEdge:
+        return "A wide blow with a blade of frost.";
+    case SkillId::ThunderCleave:
+        return "A heavy blow from above with thunder in it.";
+    case SkillId::StarWhirl:
+        return "She whirls in a storm of stars that hits everything around her.";
+    case SkillId::AxeCombo:
+        return "His standard attack: three axe blows in a row. The damage is the first blow.";
+    case SkillId::Whirlwind:
+        return "He spins with his axe held out and hits everything around him.";
+    case SkillId::Earthbreaker:
+        return "A blow into the ground that breaks it open ahead of him.";
+    case SkillId::LeapStrike:
+        return "He leaps at the place he aims at and strikes where he lands.";
+    case SkillId::Battlecry:
+        return "A cry that hurts everything around him and throws it back.";
+    case SkillId::VenomArrow:
+        return "An arrow that leaves a cloud of venom where it strikes. The damage is the arrow's; the cloud "
+               "goes on hurting what stays in it.";
+    case SkillId::GaleArrow:
+        return "An arrow on a gust of wind: it goes through every enemy in its way and throws them back.";
+    case SkillId::StormArrow:
+        return "Lightning leaps on from what the arrow strikes to enemies near it, a little weaker each time.";
+    case SkillId::BrambleArrow:
+        return "Brambles shoot up where the arrow lands and hold what stands there in place for a few seconds.";
+    case SkillId::DaggerCombo:
+        return "Three quick dagger blows for what has come too close for the bow. The damage is the first "
+               "blow; the next two hit harder.";
+    case SkillId::CounterAttack:
+        return "A stance: for a few seconds she answers every blow an enemy lands on her with a blow of her "
+               "own that leaves a bleeding wound. She is still hit herself.";
+    case SkillId::BladeWhirl:
+        return "She whirls with her sword held out for a few seconds, walking slowly. Everything in reach is "
+               "hit twice a second, and enemies a little further off are drawn in.";
+    case SkillId::JumpAttack:
+        return "Hold the button to aim: a mark shows where she will land. Let go and she leaps there and "
+               "strikes everything where she lands; what is hit walks slower for a while.";
+    case SkillId::SeismicSlash:
+        return "A blow into the ground that breaks it open in a wedge ahead of her. Everything in the wedge "
+               "is hit and stunned for a few seconds.";
+    case SkillId::Enrage:
+        return "A cry, and for a few seconds she fights by herself in a frenzy: she runs at the nearest enemy "
+               "and strikes much faster than usual. The damage is one of those blows.";
+    case SkillId::NeverGiveUp:
+        return "A stance: for a few seconds blows hurt her far less and her wounds close while she fights on.";
+    case SkillId::VineTower:
+        return "Hold the button: she kneels and charges. Let go and a tower of vines grows under her and lifts "
+               "her above the fight, higher the longer she charged. It stands a few seconds and sinks back.";
+    case SkillId::Stampede:
+        return "For a few seconds she runs faster, and the ground breaks under her feet: everything near her "
+               "is hit twice a second.";
+    case SkillId::CutInPieces:
+        return "Takes a full charge. For a few seconds she is at one enemy after another, picked by chance "
+               "among those near, with a blow for each.";
+    case SkillId::GatlingGun:
+        return "Hold the button: she kneels and builds a turret. Then she mans it and, with the left button "
+               "held, shoots arrows very fast where she aims. E leaves it and mans it again. The damage is one arrow.";
+    case SkillId::Disguise:
+        return "Standing in a bush, she becomes that bush: enemies do not see her until she shoots or steps out.";
+    }
+    return {};
 }
 
 bool SkillBar::select(std::size_t index) noexcept {

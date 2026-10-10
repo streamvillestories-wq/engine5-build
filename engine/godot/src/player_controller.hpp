@@ -307,7 +307,8 @@ public:
     godot::Array take_net_events();
     // A remote hero replays one: the same effects and missiles, which hurt nobody. What the
     // real ones hit is decided on the machine that plays her.
-    void apply_net_event(int kind, int slot, float power, int combo_step, float look_yaw, float look_pitch);
+    // `skill` is the skill's number (SkillId), not its slot: bars differ from player to player.
+    void apply_net_event(int kind, int skill, float power, int combo_step, float look_yaw, float look_pitch);
     // Damage a hit on this remote hero would do, collected for her own machine.
     void take_remote_damage(float amount, const godot::Vector3& position);
     float take_outgoing_damage();
@@ -339,6 +340,17 @@ public:
     // For the interface script, which draws the skill bar: what a slot holds (empty for none), whether
     // the standard attack is in use, and a switch for the plain bar this node draws itself.
     [[nodiscard]] godot::String get_skill_name(int slot) const;
+    // The skill book (F5, game/ui/skill_book.gd): every skill this hero has, on the bar or not,
+    // with what the book shows of each (name, description, damage, damage at full power,
+    // cooldown, needs_charge, kind, from_wish, standard, slot: where it is on the bar, or -1).
+    [[nodiscard]] godot::Array get_skill_catalogue() const;
+    // Puts one of her skills, by its name, into a slot of the bar (not the first: that is her
+    // standard attack). If it was in another slot, the two exchange what they hold. Refused
+    // while she is busy with a skill. `skill_bar_changed` is emitted when the bar changed.
+    bool set_skill_slot(int slot, const godot::String& skill_name);
+    bool clear_skill_slot(int slot);
+    // The name of the skill the player selected (see get_selected_skill); empty for none.
+    [[nodiscard]] godot::String get_selected_skill_name() const { return get_skill_name(get_selected_skill()); }
     [[nodiscard]] bool is_standard_attack_in_use() const { return use_button_ == UseButton::Standard && is_busy(); }
     void set_skill_bar_visible(bool visible);
 
@@ -722,6 +734,8 @@ private:
     E5BowString* bow_string_ = nullptr;
     E5Arrow* nocked_arrow_ = nullptr;
     E5SkillBarHud* skill_hud_ = nullptr;
+    // After the bar was rearranged: the plain bar's names, and word of it to the interface.
+    void skill_bar_changed();
     godot::Node3D* rain_marker_ = nullptr;
     // Glow on the tip of the arrow on the string, shown while its skill is selected.
     struct TipGlow {
