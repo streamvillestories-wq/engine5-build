@@ -5,7 +5,8 @@
 namespace e5::gameplay {
 
 EnemyState spawn_enemy(const EnemyParams& params) noexcept {
-    return {.health = params.max_health};
+    return {.health = params.max_health,
+            .special_cooldown_seconds = params.special_cooldown_seconds * params.special_first_share};
 }
 
 namespace {
@@ -38,6 +39,9 @@ void enter(EnemyState& state, EnemyPhase phase) noexcept {
     if (before.phase == EnemyPhase::Cast) {
         next.cast_cooldown_seconds = params.cast_cooldown_seconds;
     }
+    if (before.phase == EnemyPhase::Special) {
+        next.special_cooldown_seconds = params.special_cooldown_seconds;
+    }
     enter(next, EnemyPhase::Hit);
     return true;
 }
@@ -53,7 +57,13 @@ void chase(const EnemyInput& input, const EnemyParams& params, EnemyStep& step) 
     const bool in_reach = input.distance_to_player <= params.attack_range;
     const bool in_cast_range = params.cast_range > 0.0F && input.distance_to_player <= params.cast_range &&
                                input.distance_to_player >= params.cast_min_range;
-    if (in_reach && next.attack_cooldown_seconds <= 0.0F) {
+    const bool special_ready = params.special_range > 0.0F && input.distance_to_player <= params.special_range &&
+                               next.special_cooldown_seconds <= 0.0F;
+    if (special_ready) {
+        enter(next, EnemyPhase::Special);
+        ++next.specials_started;
+        step.special_started = true;
+    } else if (in_reach && next.attack_cooldown_seconds <= 0.0F) {
         enter(next, EnemyPhase::Attack);
         step.attack_started = true;
     } else if (in_cast_range && next.cast_cooldown_seconds <= 0.0F) {
@@ -93,6 +103,9 @@ EnemyStep step_enemy(const EnemyState& state, const EnemyInput& input, const Ene
     }
     next.attack_cooldown_seconds = std::max(state.attack_cooldown_seconds - delta_seconds, 0.0F);
     next.cast_cooldown_seconds = std::max(state.cast_cooldown_seconds - delta_seconds, 0.0F);
+    if (state.phase != EnemyPhase::Idle) {
+        next.special_cooldown_seconds = std::max(state.special_cooldown_seconds - delta_seconds, 0.0F);
+    }
     if (take_damage(state, input, params, step)) {
         return step;
     }
@@ -120,6 +133,12 @@ EnemyStep step_enemy(const EnemyState& state, const EnemyInput& input, const Ene
         break;
     case EnemyPhase::Hit:
         if (next.phase_seconds >= params.hit_seconds) {
+            enter(next, EnemyPhase::Chase);
+        }
+        break;
+    case EnemyPhase::Special:
+        if (next.phase_seconds >= params.special_seconds) {
+            next.special_cooldown_seconds = params.special_cooldown_seconds;
             enter(next, EnemyPhase::Chase);
         }
         break;

@@ -36,28 +36,30 @@
 namespace e5::bridge {
 namespace {
 
-constexpr float bar_width = 0.8F;         // metres
-constexpr float bar_height = 0.09F;       // metres
-constexpr float bar_above_head = 0.22F;   // metres
-constexpr float number_seconds = 0.9F;    // how long a damage number lives
-constexpr float number_rise_speed = 0.9F; // m/s
-constexpr float walk_clip_speed = 1.6F;   // m/s the walk clip was authored for
+constexpr float bar_width = 0.8F;            // metres
+constexpr float bar_height = 0.09F;          // metres
+constexpr float bar_above_head = 0.22F;      // metres
+constexpr float bar_full_size_height = 3.0F; // metres: a body taller than this gets a larger bar
+constexpr float number_seconds = 0.9F;       // how long a damage number lives
+constexpr float number_rise_speed = 0.9F;    // m/s
+constexpr float walk_clip_speed = 1.6F;      // m/s the walk clip was authored for
 
 } // namespace
 
 namespace {
-constexpr float fall_tumble = 2.5F;         // rad/s a flying enemy tips over while it drops
-constexpr float circle_share = 0.45F;       // of its speed: the sideways drift round the player
-constexpr float circle_turn_seconds = 6.0F; // it changes direction this often
-constexpr float fly_ease = 3.0F;            // 1/s: how quickly a flyer takes up a new velocity
-constexpr float bob_rate = 1.7F;            // rad/s
-constexpr float bob_height = 0.12F;         // metres
-constexpr float hover_stiffness = 4.0F;     // 1/s: how firmly it is held at its height
-constexpr float cast_height_share = 0.6F;   // of its height: where its spells leave
-constexpr float cast_reach = 0.35F;         // metres in front of its body
-constexpr float player_chest_height = 1.0F; // metres above the player's feet: what it aims at
-constexpr float blow_at_share = 0.45F;      // of the attack's length: when the fist arrives
-constexpr float blow_reach_share = 1.35F;   // of the attack range: how far the blow still reaches
+constexpr float fall_tumble = 2.5F;          // rad/s a flying enemy tips over while it drops
+constexpr float circle_share = 0.45F;        // of its speed: the sideways drift round the player
+constexpr float circle_turn_seconds = 6.0F;  // it changes direction this often
+constexpr float fly_ease = 3.0F;             // 1/s: how quickly a flyer takes up a new velocity
+constexpr float bob_rate = 1.7F;             // rad/s
+constexpr float bob_height = 0.12F;          // metres
+constexpr float hover_stiffness = 4.0F;      // 1/s: how firmly it is held at its height
+constexpr float cast_height_share = 0.6F;    // of its height: where its spells leave
+constexpr float cast_reach = 0.35F;          // metres in front of its body
+constexpr float player_chest_height = 1.0F;  // metres above the player's feet: what it aims at
+constexpr float blow_at_share = 0.45F;       // of the attack's length: when the fist arrives
+constexpr float blow_reach_share = 1.35F;    // of the attack range: how far the blow still reaches
+constexpr float parked_after_seconds = 4.0F; // one kept in reserve lies this long, then is gone
 } // namespace
 
 void E5Enemy::_bind_methods() {
@@ -119,6 +121,26 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_attack_damage"), &E5Enemy::get_attack_damage);
     ClassDB::bind_method(D_METHOD("set_body_radius", "metres"), &E5Enemy::set_body_radius);
     ClassDB::bind_method(D_METHOD("get_body_radius"), &E5Enemy::get_body_radius);
+    ClassDB::bind_method(D_METHOD("set_special_range", "metres"), &E5Enemy::set_special_range);
+    ClassDB::bind_method(D_METHOD("get_special_range"), &E5Enemy::get_special_range);
+    ClassDB::bind_method(D_METHOD("set_special_cooldown", "seconds"), &E5Enemy::set_special_cooldown);
+    ClassDB::bind_method(D_METHOD("get_special_cooldown"), &E5Enemy::get_special_cooldown);
+    ClassDB::bind_method(D_METHOD("set_special_count", "count"), &E5Enemy::set_special_count);
+    ClassDB::bind_method(D_METHOD("get_special_count"), &E5Enemy::get_special_count);
+    ClassDB::bind_method(D_METHOD("set_starts_parked", "parked"), &E5Enemy::set_starts_parked);
+    ClassDB::bind_method(D_METHOD("get_starts_parked"), &E5Enemy::get_starts_parked);
+    ClassDB::bind_method(D_METHOD("set_drops_loot", "drops"), &E5Enemy::set_drops_loot);
+    ClassDB::bind_method(D_METHOD("get_drops_loot"), &E5Enemy::get_drops_loot);
+    ClassDB::bind_method(D_METHOD("get_phase"), &E5Enemy::get_phase);
+    ClassDB::bind_method(D_METHOD("get_phase_seconds"), &E5Enemy::get_phase_seconds);
+    ClassDB::bind_method(D_METHOD("get_facing"), &E5Enemy::get_facing);
+    ClassDB::bind_method(D_METHOD("is_aggro"), &E5Enemy::is_aggro);
+    ClassDB::bind_method(D_METHOD("is_parked"), &E5Enemy::is_parked);
+    ClassDB::bind_method(D_METHOD("park"), &E5Enemy::park);
+    ClassDB::bind_method(D_METHOD("revive", "position"), &E5Enemy::revive);
+    ClassDB::bind_method(D_METHOD("fling", "velocity"), &E5Enemy::fling);
+    ClassDB::bind_method(D_METHOD("spin", "radians"), &E5Enemy::spin);
+    ClassDB::bind_method(D_METHOD("get_aim_point"), &E5Enemy::get_aim_point);
     ClassDB::bind_method(D_METHOD("take_damage", "amount", "position"), &E5Enemy::take_damage);
     ClassDB::bind_method(D_METHOD("get_health"), &E5Enemy::get_health);
     ClassDB::bind_method(D_METHOD("is_alive"), &E5Enemy::is_alive);
@@ -187,6 +209,17 @@ void E5Enemy::_bind_methods() {
                  "set_attack_damage", "get_attack_damage");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "body_radius", godot::PROPERTY_HINT_RANGE, "0.05,5,0.05,suffix:m"),
                  "set_body_radius", "get_body_radius");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "special_range", godot::PROPERTY_HINT_RANGE, "0,60,0.5,suffix:m"),
+                 "set_special_range", "get_special_range");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "special_cooldown", godot::PROPERTY_HINT_RANGE, "1,60,0.5,suffix:s"),
+        "set_special_cooldown", "get_special_cooldown");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "special_count", godot::PROPERTY_HINT_RANGE, "1,8,1"),
+                 "set_special_count", "get_special_count");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "starts_parked"), "set_starts_parked", "get_starts_parked");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "drops_loot"), "set_drops_loot", "get_drops_loot");
+
+    ADD_SIGNAL(godot::MethodInfo("special_started", PropertyInfo(godot::Variant::INT, "index")));
 }
 
 void E5Enemy::_ready() {
@@ -255,6 +288,63 @@ void E5Enemy::_ready() {
         }
     }
     build_health_bar();
+    if (starts_parked_) {
+        park();
+    }
+}
+
+void E5Enemy::park() {
+    parked_ = true;
+    state_.phase = gameplay::EnemyPhase::Dead;
+    state_.phase_seconds = 0.0F;
+    state_.health = 0.0F;
+    state_.aggro = false;
+    pending_damage_ = 0.0F;
+    heaviest_pending_blow_ = 0.0F;
+    flung_ = false;
+    set_collision_layer(0);
+    set_velocity(godot::Vector3());
+    set_visible(false);
+    E5Effect::set_active(trail_, false);
+    update_health_bar();
+}
+
+void E5Enemy::revive(const godot::Vector3& position) {
+    if (remote_) {
+        return; // decided elsewhere: it comes back here when word of it arrives
+    }
+    parked_ = false;
+    state_ = gameplay::spawn_enemy(params_);
+    state_.aggro = true;
+    held_ = false;
+    flung_ = false;
+    rooted_left_ = 0.0F;
+    slowed_left_ = 0.0F;
+    stunned_left_ = 0.0F;
+    pending_damage_ = 0.0F;
+    heaviest_pending_blow_ = 0.0F;
+    set_shrink(1.0F);
+    set_global_position(position);
+    set_collision_layer(collision_layer_);
+    set_velocity(godot::Vector3());
+    set_visible(true);
+    E5Effect::set_active(trail_, true);
+    update_health_bar();
+    play_phase_animation(false);
+}
+
+godot::StringName E5Enemy::special_clip() const {
+    const godot::StringName clip(godot::String("special_") + godot::String::num_int64(special_index_ + 1));
+    return animator_.has_clip(clip) ? clip : clip_attack_;
+}
+
+// A great attack begins: which one, how long it takes, and word of it to whoever listens.
+void E5Enemy::begin_special(int index) {
+    special_index_ = std::clamp(index, 0, special_count_ - 1);
+    if (animator_.is_ready()) {
+        params_.special_seconds = std::max(animator_.clip_length(special_clip()), 0.3F);
+    }
+    emit_signal("special_started", special_index_);
 }
 
 void E5Enemy::build_health_bar() {
@@ -268,7 +358,9 @@ void E5Enemy::build_health_bar() {
     material->set_shader(health_bar_shader_);
     godot::Ref<godot::QuadMesh> quad;
     quad.instantiate();
-    quad->set_size(godot::Vector2(bar_width, bar_height));
+    // Something huge gets a bar to match, or it is a speck over its head.
+    const float bar_scale = std::max(body_height_ / bar_full_size_height, 1.0F);
+    quad->set_size(godot::Vector2(bar_width, bar_height) * bar_scale);
     quad->set_material(material);
 
     health_bar_ = memnew(godot::MeshInstance3D);
@@ -340,11 +432,14 @@ void E5Enemy::set_remote(bool remote) {
 godot::PackedFloat32Array E5Enemy::get_net_state() const {
     const godot::Vector3 position = get_global_position();
     godot::PackedFloat32Array state;
-    for (const double value : {static_cast<double>(position.x), static_cast<double>(position.y),
-                               static_cast<double>(position.z), static_cast<double>(model_yaw_),
-                               static_cast<double>(static_cast<int>(state_.phase)), static_cast<double>(state_.health),
-                               static_cast<double>(target_position_.x), static_cast<double>(target_position_.y),
-                               static_cast<double>(target_position_.z), static_cast<double>(bolts_thrown_)}) {
+    for (const double value :
+         {static_cast<double>(position.x), static_cast<double>(position.y), static_cast<double>(position.z),
+          static_cast<double>(model_yaw_),
+          static_cast<double>(static_cast<int>(state_.phase) +
+                              (state_.phase == gameplay::EnemyPhase::Special ? special_index_ : 0)),
+          static_cast<double>(state_.health), static_cast<double>(target_position_.x),
+          static_cast<double>(target_position_.y), static_cast<double>(target_position_.z),
+          static_cast<double>(bolts_thrown_)}) {
         state.push_back(value);
     }
     return state;
@@ -357,7 +452,9 @@ void E5Enemy::apply_net_state(const godot::PackedFloat32Array& state) {
     net_position_ = godot::Vector3(state[0], state[1], state[2]);
     net_facing_ = state[3];
     target_position_ = godot::Vector3(state[6], state[7], state[8]);
-    const auto phase = static_cast<gameplay::EnemyPhase>(std::clamp(static_cast<int>(state[4]), 0, 5));
+    constexpr int special_number = static_cast<int>(gameplay::EnemyPhase::Special);
+    const int phase_number = std::clamp(static_cast<int>(state[4]), 0, special_number + special_count_ - 1);
+    const auto phase = static_cast<gameplay::EnemyPhase>(std::min(phase_number, special_number));
     const int thrown = static_cast<int>(state[9]);
     if (!has_net_state_) {
         // The first word of it: there at once, and no bolts for casts that happened before.
@@ -380,6 +477,11 @@ void E5Enemy::apply_net_state(const godot::PackedFloat32Array& state) {
             set_collision_layer(collision_layer_);
             E5Effect::set_active(trail_, true);
             set_global_position(net_position_);
+            parked_ = false;
+            set_visible(true);
+        }
+        if (phase == gameplay::EnemyPhase::Special) {
+            begin_special(phase_number - special_number);
         }
         if (phase == gameplay::EnemyPhase::Attack) {
             // The blow of this attack lands here too, on the hero played on this machine.
@@ -409,6 +511,11 @@ void E5Enemy::update_remote(float dt) {
             }
             const bool moving = (net_position_ - before).length() > 0.02F;
             play_phase_animation(moving);
+        } else if (starts_parked_ && !parked_) {
+            state_.phase_seconds += dt;
+            if (state_.phase_seconds >= parked_after_seconds) {
+                park();
+            }
         }
     }
     animator_.update(dt);
@@ -631,6 +738,12 @@ void E5Enemy::update_dead(float dt) {
         }
     }
     state_.phase_seconds += dt;
+    if (starts_parked_) {
+        if (!parked_ && state_.phase_seconds >= parked_after_seconds) {
+            park();
+        }
+        return;
+    }
     if (respawn_seconds_ > 0.0F && state_.phase_seconds >= respawn_seconds_) {
         respawn();
     }
@@ -721,6 +834,9 @@ void E5Enemy::_physics_process(double delta) {
     }
     // Whether the blow lands is asked of the hero played here only (see set_remote).
     update_blow(step.attack_started, dt, distance_to_local_player());
+    if (step.special_started) {
+        begin_special((state_.specials_started - 1) % special_count_);
+    }
     if (step.cast_started) {
         // The glow gathering in front of it is the warning: time to step aside, or to strike first.
         E5Effect::spawn(cast_effect_, this, cast_origin());
@@ -739,8 +855,10 @@ void E5Enemy::_physics_process(double delta) {
         walk(step.moving && !rooted && !stunned, direction, dt);
     }
 
-    // Once it has noticed the player it keeps facing her.
-    if (state_.aggro && model_ != nullptr && to_player.length() > 0.01F) {
+    // Once it has noticed the player it keeps facing her. Not during a great attack: where it
+    // looked when that began is where it goes, or there would be no stepping out of it.
+    if (state_.aggro && state_.phase != gameplay::EnemyPhase::Special && model_ != nullptr &&
+        to_player.length() > 0.01F) {
         const float wanted = gameplay::facing_yaw(static_cast<float>(direction.x), static_cast<float>(direction.z));
         model_yaw_ = gameplay::turn_toward(model_yaw_, wanted, turn_speed_ * dt);
         model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
@@ -776,6 +894,9 @@ void E5Enemy::play_phase_animation(bool moving) {
     case gameplay::EnemyPhase::Dead:
         animator_.set_base(clip_death_, 1.0F);
         break;
+    case gameplay::EnemyPhase::Special:
+        animator_.set_base(special_clip(), 1.0F);
+        break;
     }
 }
 
@@ -795,7 +916,9 @@ void E5Enemy::die() {
             arrow->queue_free();
         }
     }
-    drop_loot();
+    if (drops_loot_) {
+        drop_loot();
+    }
 }
 
 float E5Enemy::ground_height() const {

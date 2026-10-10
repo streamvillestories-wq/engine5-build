@@ -12,6 +12,7 @@
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -76,6 +77,33 @@ public:
     // Throws it: it flies under gravity until it lands, then carries on as before.
     void fling(const godot::Vector3& velocity);
 
+    // A boss's great attacks (EnemyPhase::Special): with a `special_range` it does one of
+    // `special_count` in turn, plays the clip `special_<n>` for as long as that clip is, and
+    // says so with the signal `special_started(index)` (0-based), on every machine. What the
+    // attack does is a script's business (game/creatures/boss_attacks.gd).
+    void set_special_range(float metres) { params_.special_range = metres; }
+    [[nodiscard]] float get_special_range() const { return params_.special_range; }
+    void set_special_cooldown(float seconds) { params_.special_cooldown_seconds = seconds; }
+    [[nodiscard]] float get_special_cooldown() const { return params_.special_cooldown_seconds; }
+    void set_special_count(int count) { special_count_ = std::max(count, 1); }
+    [[nodiscard]] int get_special_count() const { return special_count_; }
+    [[nodiscard]] int get_phase() const { return static_cast<int>(state_.phase); }
+    [[nodiscard]] float get_phase_seconds() const { return state_.phase_seconds; }
+    [[nodiscard]] float get_facing() const { return model_yaw_; }
+
+    // Kept in reserve (a boss's helpers, which he throws): `starts_parked` makes it begin
+    // out of the world, unseen and untouchable, like one that died long ago and does not come
+    // back. `revive` puts it at a place, alive and after the heroes; when it dies it lies a
+    // moment and is out of the world again. It exists on every machine from the start, so it
+    // is the same enemy everywhere like any other.
+    void set_starts_parked(bool parked) { starts_parked_ = parked; }
+    [[nodiscard]] bool get_starts_parked() const { return starts_parked_; }
+    void park();
+    void revive(const godot::Vector3& position);
+    [[nodiscard]] bool is_parked() const { return parked_; }
+    void set_drops_loot(bool drops) { drops_loot_ = drops; }
+    [[nodiscard]] bool get_drops_loot() const { return drops_loot_; }
+
     // Makes something that stuck in the body (an arrow) move and turn with it.
     void attach(godot::Node3D* stuck);
 
@@ -86,7 +114,8 @@ public:
     // or a bolt hurts only the hero who is played there.
     void set_remote(bool remote);
     [[nodiscard]] bool is_remote() const { return remote_; }
-    // [x, y, z, facing, phase, health, target x, y, z, bolts thrown so far]
+    // [x, y, z, facing, phase, health, target x, y, z, bolts thrown so far]. During a great
+    // attack the phase's number has which one added to it (Special, Special + 1, ...).
     [[nodiscard]] godot::PackedFloat32Array get_net_state() const;
     void apply_net_state(const godot::PackedFloat32Array& state);
     // The damage dealt to it here since the last call, to be sent to the machine that decides.
@@ -234,6 +263,13 @@ private:
     godot::StringName clip_cast_;
     // Seconds until the blow of the attack in progress lands; negative = none pending.
     float blow_in_seconds_ = -1.0F;
+    int special_count_ = 1;
+    int special_index_ = 0; // which great attack is, or was last, in progress
+    bool starts_parked_ = false;
+    bool parked_ = false;
+    bool drops_loot_ = true;
+    [[nodiscard]] godot::StringName special_clip() const;
+    void begin_special(int index);
     bool held_ = false;
     bool flung_ = false;
     float rooted_left_ = 0.0F;  // seconds it still cannot move

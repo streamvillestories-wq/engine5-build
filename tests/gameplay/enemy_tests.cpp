@@ -208,3 +208,57 @@ TEST_CASE("an enemy that keeps its distance comes closer, holds, and backs off",
     // It never strikes: its attack range is zero.
     CHECK_FALSE(close.attack_started);
 }
+
+TEST_CASE("a boss does its great attacks in turn, with a rest between, and not before it fights", "[enemy]") {
+    const EnemyParams params{.aggro_range = 8.0F,
+                             .attack_range = 3.0F,
+                             .special_range = 20.0F,
+                             .special_seconds = 2.0F,
+                             .special_cooldown_seconds = 10.0F};
+    EnemyState state = spawn_enemy(params);
+    // Idle, the wait before the first does not run down.
+    for (int i = 0; i < 100; ++i) {
+        state = step_enemy(state, {.has_player = true, .distance_to_player = 30.0F}, params, 0.1F).state;
+    }
+    CHECK(state.phase == EnemyPhase::Idle);
+    CHECK(state.special_cooldown_seconds == Catch::Approx(4.0F));
+
+    int started = 0;
+    float first_at = -1.0F;
+    float second_at = -1.0F;
+    for (int i = 0; i < 300; ++i) {
+        const EnemyStep step = step_enemy(state, {.has_player = true, .distance_to_player = 6.0F}, params, 0.1F);
+        state = step.state;
+        if (step.special_started) {
+            ++started;
+            (started == 1 ? first_at : second_at) = static_cast<float>(i) * 0.1F;
+            CHECK(state.phase == EnemyPhase::Special);
+            CHECK_FALSE(step.moving);
+        }
+        if (started == 2) {
+            break;
+        }
+    }
+    REQUIRE(started == 2);
+    CHECK(state.specials_started == 2);
+    CHECK(first_at == Catch::Approx(4.0F).margin(0.3F));
+    // The attack's two seconds, then the rest of ten.
+    CHECK(second_at - first_at == Catch::Approx(12.0F).margin(0.3F));
+}
+
+TEST_CASE("an enemy without great attacks never does one, and none is done out of range", "[enemy]") {
+    EnemyParams params{.aggro_range = 30.0F};
+    EnemyState state = spawn_enemy(params);
+    for (int i = 0; i < 300; ++i) {
+        const EnemyStep step = step_enemy(state, {.has_player = true, .distance_to_player = 6.0F}, params, 0.1F);
+        CHECK_FALSE(step.special_started);
+        state = step.state;
+    }
+    params.special_range = 5.0F;
+    state = spawn_enemy(params);
+    for (int i = 0; i < 300; ++i) {
+        const EnemyStep step = step_enemy(state, {.has_player = true, .distance_to_player = 12.0F}, params, 0.1F);
+        CHECK_FALSE(step.special_started);
+        state = step.state;
+    }
+}
