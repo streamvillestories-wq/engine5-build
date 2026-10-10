@@ -212,11 +212,12 @@ TEST_CASE("the new warrior has her sword's combo, the skills wished for her and 
     CHECK(bar.slot(0) == SkillId::Slash);
     CHECK(bar.slot(1) == SkillId::CounterAttack);
     CHECK(bar.slot(2) == SkillId::BladeWhirl);
-    for (std::size_t slot = 3; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(3) == SkillId::JumpAttack);
+    for (std::size_t slot = 4; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
     // An empty slot cannot be chosen.
-    CHECK_FALSE(bar.select(3));
+    CHECK_FALSE(bar.select(4));
     CHECK(bar.selected() == SkillId::Slash);
     CHECK(bar.select(1));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
@@ -263,6 +264,40 @@ TEST_CASE("the new warrior's whirlwind is a channel within her range", "[skills]
               e5::gameplay::open_wound({}, e5::gameplay::whirl_seconds, e5::gameplay::whirl_tick_seconds),
               e5::gameplay::whirl_tick_seconds, 60.0F)
               .ticks == 8);
+}
+
+TEST_CASE("the jump attack's leap lands where it is aimed", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::JumpAttack).name == "Jump Attack");
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::JumpAttack) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::JumpAttack) <= 12.0F);
+    // Harder than a blow of her sword, not harder than the old warrior's heaviest on a cooldown.
+    CHECK(e5::gameplay::skill_damage(SkillId::JumpAttack) > e5::gameplay::skill_damage(SkillId::Slash));
+    CHECK(e5::gameplay::skill_damage(SkillId::JumpAttack) <= e5::gameplay::skill_damage(SkillId::ThunderCleave));
+
+    for (const float distance : {0.0F, 4.0F, 15.0F, 40.0F}) {
+        const e5::gameplay::LeapArc arc = e5::gameplay::leap_arc(distance);
+        const float way = std::min(distance, e5::gameplay::leap_max_distance);
+        // Stepped as the game steps it: she is back at the height she left from when the time
+        // is up, has gone the distance (never further than the longest leap), and was as high
+        // as the apex in between.
+        float height = 0.0F;
+        float highest = 0.0F;
+        float rise = arc.rise_speed;
+        float gone = 0.0F;
+        const float dt = 1.0F / 120.0F;
+        for (float time = 0.0F; time < arc.seconds; time += dt) {
+            rise -= arc.gravity * dt;
+            height += rise * dt;
+            gone += arc.forward_speed * dt;
+            highest = std::max(highest, height);
+        }
+        CHECK(gone == Catch::Approx(way).margin(0.2));
+        CHECK(height == Catch::Approx(0.0F).margin(0.45)); // (stepped coarsely)
+        CHECK(highest == Catch::Approx(e5::gameplay::leap_apex_height(way)).margin(0.2));
+        CHECK(arc.seconds <= 1.05F);
+    }
+    CHECK(e5::gameplay::leap_apex_height(15.0F) > e5::gameplay::leap_apex_height(2.0F));
 }
 
 TEST_CASE("a wound bleeds once a tick until its time is up", "[skills]") {

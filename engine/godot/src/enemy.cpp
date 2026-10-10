@@ -526,6 +526,14 @@ void E5Enemy::spin(float radians) {
     }
 }
 
+void E5Enemy::slow(float share, float seconds) {
+    const float wanted = std::clamp(share, 0.0F, 0.9F);
+    if (slowed_left_ <= 0.0F || wanted >= slowed_share_) {
+        slowed_share_ = wanted;
+        slowed_left_ = seconds;
+    }
+}
+
 void E5Enemy::fling(const godot::Vector3& velocity) {
     flung_ = true;
     set_velocity(velocity);
@@ -625,8 +633,8 @@ void E5Enemy::update_dead(float dt) {
 
 void E5Enemy::walk(bool moving, const godot::Vector3& direction, float dt) {
     godot::Vector3 velocity = get_velocity();
-    velocity.x = moving ? direction.x * move_speed_ : 0.0F;
-    velocity.z = moving ? direction.z * move_speed_ : 0.0F;
+    velocity.x = moving ? direction.x * pace() : 0.0F;
+    velocity.z = moving ? direction.z * pace() : 0.0F;
     if (rooted_left_ <= 0.0F) {
         velocity.x += dragged_.x;
         velocity.z += dragged_.z;
@@ -656,6 +664,7 @@ void E5Enemy::_physics_process(double delta) {
         return;
     }
     rooted_left_ = std::max(rooted_left_ - dt, 0.0F);
+    slowed_left_ = std::max(slowed_left_ - dt, 0.0F);
     if (held_) {
         animator_.update(dt);
         return; // the holder moves it
@@ -742,7 +751,7 @@ void E5Enemy::play_phase_animation(bool moving) {
         break;
     case gameplay::EnemyPhase::Chase:
         if (moving) {
-            animator_.set_base(clip_walk_, move_speed_ / walk_clip_speed);
+            animator_.set_base(clip_walk_, pace() / walk_clip_speed);
         } else {
             animator_.set_base(clip_idle_, 1.0F);
         }
@@ -795,16 +804,16 @@ void E5Enemy::fly(const gameplay::EnemyStep& step, const godot::Vector3& to_play
     const godot::Vector3 direction = to_player.length() > 0.01F ? to_player.normalized() : godot::Vector3();
     godot::Vector3 wanted;
     if (step.moving) {
-        wanted = direction * move_speed_;
+        wanted = direction * pace();
     } else if (step.retreating) {
-        wanted = -direction * move_speed_;
+        wanted = -direction * pace();
     }
     // At its distance it does not hang still: it drifts round the player, now and then the other way.
     if (state_.phase == gameplay::EnemyPhase::Chase) {
         if (std::fmod(hover_seconds_, circle_turn_seconds) < dt) {
             circle_side_ = -circle_side_;
         }
-        wanted += godot::Vector3(-direction.z, 0.0F, direction.x) * (circle_side_ * move_speed_ * circle_share);
+        wanted += godot::Vector3(-direction.z, 0.0F, direction.x) * (circle_side_ * pace() * circle_share);
     }
     if (rooted_left_ > 0.0F) {
         wanted = godot::Vector3();
@@ -883,6 +892,7 @@ void E5Enemy::respawn() {
     held_ = false;
     flung_ = false;
     rooted_left_ = 0.0F;
+    slowed_left_ = 0.0F;
     set_shrink(1.0F);
     pending_damage_ = 0.0F;
     heaviest_pending_blow_ = 0.0F;

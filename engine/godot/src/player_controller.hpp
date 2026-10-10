@@ -356,6 +356,12 @@ private:
     void start_channel(gameplay::SkillId skill);
     void update_whirl(float delta);
     [[nodiscard]] bool is_whirling() const { return whirl_.seconds_left > 0.0F; }
+    // The Jump Attack: she leaves the ground for the place aimed at; flies, lands and strikes,
+    // and gathers herself. While it lasts nothing else moves her.
+    void start_leap(gameplay::SkillId skill);
+    void update_leap(float delta);
+    void land_leap();
+    [[nodiscard]] bool is_leaping() const { return leap_.flying || leap_.recover_left > 0.0F; }
     // The glow in his hand for a spell: the cast effect's variant for the spell's element
     // (<cast effect>_fire.tscn, _frost, _lightning, _star, _void), or the cast effect itself.
     [[nodiscard]] godot::Ref<godot::PackedScene> cast_glow(gameplay::SkillId spell) const;
@@ -406,7 +412,7 @@ private:
     [[nodiscard]] int get_bow_phase() const { return static_cast<int>(bow_.phase); }
     // In the middle of using a skill: the selection must not change now.
     [[nodiscard]] bool is_busy() const {
-        return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling();
+        return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling() || is_leaping();
     }
 
     gameplay::MotorParams params_;
@@ -502,6 +508,17 @@ private:
     std::vector<Bleeding> bleeding_;
     gameplay::BleedState whirl_; // the Whirlwind under way: the time it still has and until its next tick
     godot::StringName clip_whirl_;
+    struct Leap {
+        bool flying = false;
+        bool striking = false;     // the clip of the blow has begun: she is coming down
+        float elapsed = 0.0F;      // seconds in the air
+        float rise = 0.0F;         // m/s upwards
+        float recover_left = 0.0F; // seconds on the ground after the blow
+        gameplay::LeapArc arc;
+        godot::Vector3 direction; // level, towards where she lands
+    };
+    Leap leap_;
+    float remote_leap_left_ = 0.0F; // another player's hero: seconds until her leap lands here
     godot::StringName clip_block_;
     godot::Ref<godot::PackedScene> block_spark_;
     // Seconds until each skill can be used again, by its number; and the charge, 0 to 1.

@@ -71,6 +71,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Counter Attack", .charges = false, .kind = SkillKind::Instant};
     case SkillId::BladeWhirl:
         return {.name = "Whirlwind", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::JumpAttack:
+        return {.name = "Jump Attack", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -148,6 +150,8 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 18.0F; // each answer: four fifths of a sword blow; its wound adds counter_bleed_tick_damage
     case SkillId::BladeWhirl:
         return 8.0F; // every half second to all it reaches: 64 over its four seconds
+    case SkillId::JumpAttack:
+        return 33.0F; // one and a half sword blows, to everything where she lands
     case SkillId::None:
         break;
     }
@@ -234,6 +238,8 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::BrambleArrow:
     case SkillId::CounterAttack: // from the key: she stands ready for half of it
         return 10.0F;
+    case SkillId::JumpAttack:
+        return 12.0F;
     // Rarely.
     case SkillId::BladeWhirl:
         return 20.0F;
@@ -261,6 +267,22 @@ bool skill_needs_charge(SkillId skill) noexcept {
 float charge_after(float charge, float damage_dealt, bool killed) noexcept {
     const float gained = std::max(damage_dealt, 0.0F) * charge_per_damage + (killed ? charge_per_kill : 0.0F);
     return std::clamp(charge + gained, 0.0F, 1.0F);
+}
+
+float leap_apex_height(float distance) noexcept {
+    // A hop on the spot is still a jump; a long leap goes high.
+    return 1.5F + 0.15F * std::clamp(distance, 0.0F, leap_max_distance);
+}
+
+LeapArc leap_arc(float distance) noexcept {
+    const float way = std::clamp(distance, 0.0F, leap_max_distance);
+    LeapArc arc;
+    arc.seconds = 0.55F + 0.03F * way;
+    arc.forward_speed = way / arc.seconds;
+    // Up to the apex in half the time and down again in the other half.
+    arc.gravity = 8.0F * leap_apex_height(way) / (arc.seconds * arc.seconds);
+    arc.rise_speed = arc.gravity * arc.seconds * 0.5F;
+    return arc;
 }
 
 BleedState open_wound(const BleedState& state, float seconds, float tick_seconds) noexcept {
@@ -326,7 +348,7 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
                   SkillId::Battlecry};
     } else if (set == SkillSet::Blade) {
-        slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl};
+        slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack};
     } else if (set == SkillSet::Archer) {
         slots_ = {SkillId::Shot};
     } else if (set == SkillSet::Warrior) {

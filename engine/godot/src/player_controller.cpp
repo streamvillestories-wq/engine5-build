@@ -251,8 +251,15 @@ constexpr const char* counter_strike_path = "res://effects/counter_strike.tscn";
 constexpr const char* counter_bleed_path = "res://effects/counter_bleed.tscn";
 // The new warrior's Whirlwind (numbers in e5/gameplay/skills.hpp): the wind round her.
 constexpr const char* whirl_storm_path = "res://effects/whirlwind_storm.tscn";
-constexpr float whirl_shake = 0.008F;          // metres, with every tick
-constexpr float whirl_pull_keep_off = 1.1F;    // metres: nearer than this nothing is drawn further in
+constexpr float whirl_shake = 0.008F;       // metres, with every tick
+constexpr float whirl_pull_keep_off = 1.1F; // metres: nearer than this nothing is drawn further in
+// The new warrior's Jump Attack (numbers in e5/gameplay/skills.hpp).
+constexpr const char* leap_impact_path = "res://effects/jump_attack_impact.tscn";
+constexpr float leap_shake = 0.09F;            // metres, as she lands
+constexpr float leap_strike_lead = 0.5F;       // seconds before she lands that the blow's clip begins
+constexpr float leap_min_air_seconds = 0.12F;  // not "landed" while she is still leaving the ground
+constexpr float leap_longest_fall = 2.5F;      // seconds: a leap off a cliff ends at the latest then
+constexpr float leap_remote_seconds = 0.85F;   // another player's leap is taken to land after this
 constexpr float counter_shake = 0.02F;         // metres: the jolt of an answered blow
 constexpr float counter_swing_seconds = 0.45F; // her arm strikes the first blow of the combo
 // A blow comes "from" where the one who struck stands: the enemy this near to that place is it.
@@ -1009,6 +1016,12 @@ void E5PlayerController::_physics_process(double delta) {
     }
     update_counter(static_cast<float>(delta));
     update_whirl(static_cast<float>(delta));
+    if (is_leaping()) {
+        // In the air, and for a moment after she lands, the leap is all that moves her.
+        update_leap(static_cast<float>(delta));
+        animator_.update(static_cast<float>(delta));
+        return;
+    }
     // The shield: up while the key is held, as long as it lasts.
     if (block_enabled_) {
         const bool block_key = !input_blocked_ && input->is_action_pressed(actions::block);
@@ -1083,6 +1096,11 @@ void E5PlayerController::_physics_process(double delta) {
         if (instant && aim_just_pressed && gameplay::skill_is_channel(skills_.selected()) && !mounted_ && !is_busy() &&
             animator_.has_clip(clip_whirl_) && skill_ready(skills_.selected())) {
             start_channel(skills_.selected());
+        }
+        // The jump attack leaves the ground at once, for the place the crosshair covers.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::JumpAttack && !mounted_ && !is_busy() &&
+            is_on_floor() && skill_ready(skills_.selected())) {
+            start_leap(skills_.selected());
         }
         const bool start = instant && aim_just_pressed && !block_.raised && can_start_instant_skill(skills_.selected());
         // A combo is one movement, not three clicks timed to the frame: a press during a blow
@@ -1329,6 +1347,18 @@ void E5PlayerController::update_remote(float delta) {
         if (pending_start_ && gameplay::skill_is_channel(skills_.selected())) {
             pending_start_ = false;
             start_channel(skills_.selected());
+        }
+        if (pending_start_ && skills_.selected() == gameplay::SkillId::JumpAttack) {
+            // Where she flies arrives with her place; what is left to show is where she lands.
+            pending_start_ = false;
+            remote_leap_left_ = leap_remote_seconds;
+        }
+        if (remote_leap_left_ > 0.0F) {
+            remote_leap_left_ -= delta;
+            if (remote_leap_left_ <= 0.0F) {
+                E5Effect::spawn(effect_scene(leap_impact_path), get_parent(),
+                                get_global_position() + godot::Vector3(0.0F, 0.06F, 0.0F));
+            }
         }
         const bool start = pending_start_ && instant_clip(skills_.selected()) != nullptr;
         pending_start_ = false;
@@ -1657,6 +1687,7 @@ bool E5PlayerController::update_vitals(float delta) {
         counter_left_ = 0.0F;
         counter_swing_left_ = 0.0F;
         whirl_ = {};
+        leap_ = {};
         action_ = {};
         bow_ = {};
         if (nocked_arrow_ != nullptr) {
@@ -2118,7 +2149,7 @@ void E5PlayerController::prewarm_effects() {
             continue;
         }
         for (const char* const path :
-             {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path}) {
+             {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path, leap_impact_path}) {
             if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                 prewarm_ids_.push_back(instance->get_instance_id());
             }
@@ -2404,7 +2435,7 @@ const SpellTiming* E5PlayerController::advance_combo(gameplay::SkillId skill) {
 }
 
 godot::String E5PlayerController::get_action_skill_name() const {
-    if (!action_.active && !is_whirling()) {
+    if (!action_.active && !is_whirling() && !is_leaping()) {
         return {};
     }
     const std::string_view name = gameplay::skill_info(action_skill_).name;
@@ -2852,6 +2883,83 @@ void E5PlayerController::update_whirl(float delta) {
         const auto distance = static_cast<float>(towards.length());
         if (distance > whirl_pull_keep_off && distance <= gameplay::whirl_pull_radius + enemy->get_body_radius()) {
             enemy->drag(towards / distance * gameplay::whirl_pull_speed);
+        }
+    }
+}
+
+void E5PlayerController::start_leap(gameplay::SkillId skill) {
+    spend(skill);
+    last_skill_ = skill;
+    ++skills_used_;
+    action_skill_ = skill;
+    // To what the crosshair covers; with nothing under it, as far as she can leap that way.
+    const godot::Vector3 feet = get_global_position();
+    godot::Vector3 way = find_aim_point(feet + godot::Vector3(0.0F, point_blank_height, 0.0F)).position - feet;
+    way.y = 0.0F;
+    const float distance = std::min(static_cast<float>(way.length()), gameplay::leap_max_distance);
+    leap_ = {};
+    leap_.flying = true;
+    leap_.arc = gameplay::leap_arc(distance);
+    leap_.rise = leap_.arc.rise_speed;
+    leap_.direction =
+        distance > 0.3F ? way.normalized() : godot::Vector3(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    model_yaw_ = gameplay::facing_yaw(static_cast<float>(leap_.direction.x), static_cast<float>(leap_.direction.z));
+    if (model_ != nullptr) {
+        model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+    }
+    animator_.set_upper(godot::StringName());
+    animator_.set_base(clip_jump_, 1.0F);
+    note_net_event(0, 0.0F);
+}
+
+void E5PlayerController::update_leap(float delta) {
+    if (!leap_.flying) {
+        // On the ground after the blow: she gathers herself where she landed.
+        leap_.recover_left = std::max(leap_.recover_left - delta, 0.0F);
+        godot::Vector3 velocity = get_velocity();
+        velocity.x = 0.0F;
+        velocity.z = 0.0F;
+        velocity.y = is_on_floor() ? 0.0F : velocity.y - params_.gravity * delta;
+        set_velocity(velocity);
+        move_and_slide();
+        return;
+    }
+    leap_.elapsed += delta;
+    leap_.rise -= leap_.arc.gravity * delta;
+    set_velocity(leap_.direction * leap_.arc.forward_speed + godot::Vector3(0.0F, leap_.rise, 0.0F));
+    move_and_slide();
+    // The blow's clip (the combo's finisher, which comes down out of the air) begins so that
+    // the sword strikes as she lands.
+    if (!leap_.striking && leap_.elapsed >= leap_.arc.seconds - leap_strike_lead &&
+        animator_.has_clip(clip_combo_.back())) {
+        leap_.striking = true;
+        animator_.set_base(clip_combo_.back(), 1.0F);
+    }
+    const bool landed = leap_.elapsed > leap_min_air_seconds && leap_.rise <= 0.0F && is_on_floor();
+    if (landed || leap_.elapsed > leap_.arc.seconds + leap_longest_fall) {
+        land_leap();
+    }
+}
+
+void E5PlayerController::land_leap() {
+    leap_.flying = false;
+    leap_.recover_left = gameplay::leap_recover_seconds;
+    set_velocity(godot::Vector3());
+    const godot::Vector3 feet = get_global_position();
+    combat::blast(this, feet + godot::Vector3(0.0F, melee_height, 0.0F), gameplay::leap_radius,
+                  dealt(gameplay::SkillId::JumpAttack));
+    shake_ = std::max(shake_, leap_shake);
+    E5Effect::spawn(effect_scene(leap_impact_path), get_parent(), feet + godot::Vector3(0.0F, 0.06F, 0.0F));
+    // Whatever stood there staggers on more slowly for a while.
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive()) {
+            continue;
+        }
+        if (enemy->get_aim_point().distance_to(feet + godot::Vector3(0.0F, melee_height, 0.0F)) <=
+            gameplay::leap_radius + enemy->get_body_radius()) {
+            enemy->slow(gameplay::leap_slow_share, gameplay::leap_slow_seconds);
         }
     }
 }

@@ -50,6 +50,7 @@ enum class SkillId : unsigned char {
     // Made from players' skill wishes (docs/BUGS.md, "Skill wishes"), one by one. At the end.
     CounterAttack, // the new warrior's: for a few seconds she answers every blow that lands on her
     BladeWhirl,    // the new warrior's "Whirlwind": she whirls with her sword and draws enemies in
+    JumpAttack,    // the new warrior's: a high leap onto the place aimed at, and a blow where she lands
 };
 
 // Which skills a character has on the bar.
@@ -128,6 +129,26 @@ inline constexpr float whirl_turns_per_second = 2.2F; //
 [[nodiscard]] constexpr bool skill_is_channel(SkillId skill) noexcept {
     return skill == SkillId::BladeWhirl;
 }
+
+// The new warrior's Jump Attack (bug report 23, a player's wish): she leaps in a high arc onto
+// the place the crosshair covers, `leap_max_distance` at most, and strikes the ground there:
+// skill_damage to everything within `leap_radius`, and enemies there walk slower for a while.
+inline constexpr float leap_max_distance = 15.0F;   // metres
+inline constexpr float leap_radius = 4.0F;          // metres round where she lands
+inline constexpr float leap_slow_share = 0.2F;      // of an enemy's pace, taken away ...
+inline constexpr float leap_slow_seconds = 3.0F;    // ... for so long
+inline constexpr float leap_recover_seconds = 0.5F; // on the ground after the blow, before she moves again
+// The arc of a leap over `distance` metres of level ground: how long it takes, how fast she
+// goes forward and upward at the start, and the pull that brings her down again at its end.
+struct LeapArc {
+    float seconds = 0.0F;
+    float forward_speed = 0.0F;
+    float rise_speed = 0.0F;
+    float gravity = 0.0F;
+};
+[[nodiscard]] LeapArc leap_arc(float distance) noexcept;
+// How high above the start the middle of that leap is.
+[[nodiscard]] float leap_apex_height(float distance) noexcept;
 
 // A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound
 // on the same enemy starts the time anew and keeps the beat (no second wound beside it).
