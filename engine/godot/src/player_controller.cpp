@@ -3128,7 +3128,7 @@ E5Enemy* E5PlayerController::pieces_victim() const {
     if (near.empty()) {
         return nullptr;
     }
-    return near.at(static_cast<std::size_t>(godot::UtilityFunctions::randi() % near.size()));
+    return near.at(static_cast<std::size_t>(godot::UtilityFunctions::randi()) % near.size());
 }
 
 void E5PlayerController::start_pieces(gameplay::SkillId skill) {
