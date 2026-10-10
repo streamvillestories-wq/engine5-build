@@ -56,6 +56,7 @@ enum class SkillId : unsigned char {
     NeverGiveUp,   // the new warrior's: a cry, and for a few seconds she is hurt less and her wounds close
     VineTower,     // the archer's: she kneels and charges; a tower of vines lifts her above the fight
     Stampede,      // the new warrior's "Sprintsz": for a few seconds she is faster and tramples what is near
+    CutInPieces,   // the new warrior's, on a full charge: she is at one enemy after another, a blow for each
 };
 
 // Which skills a character has on the bar.
@@ -136,6 +137,14 @@ inline constexpr float stampede_tick_seconds = 0.5F;
 inline constexpr float stampede_radius = 3.5F; // metres
 inline constexpr float stampede_move_share = 1.3F;
 
+// The new warrior's Cut in Pieces (bug report 29, a player's wish), the skill of hers that takes
+// a full charge: for `pieces_seconds` she is, every `pieces_tick_seconds`, beside an enemy picked
+// by chance from those within `pieces_reach` and strikes it (skill_damage: eight tenths of a sword
+// blow, as wished). Nobody steers her meanwhile. With no enemy that near it does not start.
+inline constexpr float pieces_seconds = 6.0F;
+inline constexpr float pieces_tick_seconds = 0.5F;
+inline constexpr float pieces_reach = 10.0F; // metres
+
 // The new warrior's Whirlwind (bug report 22, a player's wish; `SkillId::BladeWhirl`, the dwarf
 // has a Whirlwind of his own): for `whirl_seconds` she turns round and round with her sword
 // held out. Every `whirl_tick_seconds` everything within `whirl_radius` takes skill_damage, and
@@ -146,7 +155,7 @@ inline constexpr float whirl_radius = 3.0F;           // metres
 inline constexpr float whirl_pull_radius = 5.0F;      // metres
 inline constexpr float whirl_pull_speed = 0.5F;       // m/s towards her
 inline constexpr float whirl_move_speed = 2.6F;       // m/s: how fast she walks while she whirls
-inline constexpr float whirl_turns_per_second = 2.2F; //
+inline constexpr float whirl_turns_per_second = 4.4F; // (2.2 at first: "really slow", bug report 30)
 
 // A channel is on at once on its key, like a stance, but it is what she does while it lasts:
 // nothing else can be started, and it shows as the skill in use.

@@ -83,6 +83,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Vine Tower", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Stampede:
         return {.name = "Sprintsz", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::CutInPieces:
+        return {.name = "Cut in Pieces", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -159,7 +161,7 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::CounterAttack:
         return 18.0F; // each answer: four fifths of a sword blow; its wound adds counter_bleed_tick_damage
     case SkillId::BladeWhirl:
-        return 8.0F; // every half second to all it reaches: 64 over its four seconds
+        return 12.0F; // every half second to all it reaches: 96 over its four seconds (8 at first; bug report 30)
     case SkillId::JumpAttack:
         return 33.0F; // one and a half sword blows, to everything where she lands
     case SkillId::SeismicSlash:
@@ -171,6 +173,8 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 0.0F; // they strike nobody
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
+    case SkillId::CutInPieces:
+        return 17.6F; // each of its twelve blows: eight tenths of a sword blow
     case SkillId::None:
         break;
     }
@@ -279,6 +283,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::BlackHole:
     case SkillId::StarWhirl:
     case SkillId::Battlecry:
+    case SkillId::CutInPieces:
         return 0.0F;
     }
     return 0.0F;
@@ -286,7 +291,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
 
 bool skill_needs_charge(SkillId skill) noexcept {
     return skill == SkillId::Kingfishers || skill == SkillId::BlackHole || skill == SkillId::StarWhirl ||
-           skill == SkillId::Battlecry;
+           skill == SkillId::Battlecry || skill == SkillId::CutInPieces;
 }
 
 float charge_after(float charge, float damage_dealt, bool killed) noexcept {
@@ -403,7 +408,8 @@ SkillBar::SkillBar(SkillSet set) noexcept {
                   SkillId::Battlecry};
     } else if (set == SkillSet::Blade) {
         slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,
-                  SkillId::SeismicSlash, SkillId::Enrage,       SkillId::NeverGiveUp, SkillId::Stampede};
+                  SkillId::SeismicSlash, SkillId::Enrage,       SkillId::NeverGiveUp, SkillId::Stampede,
+                  SkillId::CutInPieces};
     } else if (set == SkillSet::Archer) {
         slots_ = {SkillId::Shot, SkillId::VineTower};
     } else if (set == SkillSet::Warrior) {

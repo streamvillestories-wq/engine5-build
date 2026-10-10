@@ -31,6 +31,7 @@ class SpringArm3D;
 namespace e5::bridge {
 
 struct SpellTiming; // player_controller.cpp
+class E5Enemy;
 
 class E5AimOffset;
 class E5Arrow;
@@ -261,6 +262,8 @@ public:
     // Sprintsz (the new warrior's): the seconds it still lasts, and how often it has pounded (for tests).
     [[nodiscard]] float get_stampede_seconds() const { return stampede_.seconds_left; }
     [[nodiscard]] int get_stampede_ticks() const { return stampede_ticks_; }
+    // Cut in Pieces (the new warrior's): how many of its blows have landed (for tests).
+    [[nodiscard]] int get_pieces_blows() const { return pieces_blows_; }
     // The Archer's Vine Tower: how many have grown under her (for tests).
     [[nodiscard]] int get_towers_grown() const { return towers_grown_; }
     [[nodiscard]] float get_resolve_spared() const { return resolve_spared_; }
@@ -373,6 +376,9 @@ private:
     // The Jump Attack: she leaves the ground for the place aimed at; flies, lands and strikes,
     // and gathers herself. While it lasts nothing else moves her.
     void start_leap(gameplay::SkillId skill);
+    // While its button is held a mark on the ground shows where she would land; let go, she leaps
+    // (bug report 32: there was no telling where a leap would end).
+    void update_leap_aim(bool held);
     void update_leap(float delta);
     void land_leap();
     [[nodiscard]] bool is_leaping() const { return leap_.flying || leap_.recover_left > 0.0F; }
@@ -388,6 +394,12 @@ private:
     void update_tower_charge(bool held, float delta);
     void grow_tower(float power);
     [[nodiscard]] bool is_charging_tower() const { return tower_charging_; }
+    // Cut in Pieces: it begins if an enemy is near; while it lasts it is what moves her (from one
+    // enemy to the next) and strikes, and update_pieces returns true: nothing else is asked.
+    [[nodiscard]] E5Enemy* pieces_victim() const;
+    void start_pieces(gameplay::SkillId skill);
+    bool update_pieces(float delta);
+    [[nodiscard]] bool is_cutting() const { return pieces_.seconds_left > 0.0F; }
     // The Seismic Slash: her blow lands; the ground breaks open ahead of her, row after row.
     void strike_seismic();
     void update_eruptions(float delta);
@@ -442,7 +454,7 @@ private:
     // In the middle of using a skill: the selection must not change now.
     [[nodiscard]] bool is_busy() const {
         return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling() || is_leaping() ||
-               enrage_driving_ || tower_charging_;
+               enrage_driving_ || tower_charging_ || is_cutting();
     }
 
     gameplay::MotorParams params_;
@@ -549,6 +561,8 @@ private:
     };
     Leap leap_;
     float remote_leap_left_ = 0.0F; // another player's hero: seconds until her leap lands here
+    bool leap_aiming_ = false;      // the Jump Attack's button is held: its mark shows
+    godot::Node3D* leap_marker_ = nullptr; // non-owning child, made when first needed
     bool tower_charging_ = false;   // the Vine Tower: she kneels and charges
     int towers_grown_ = 0;
     float tower_charge_ = 0.0F;     // seconds charged
@@ -556,6 +570,8 @@ private:
     godot::StringName clip_kneel_;
     gameplay::BleedState stampede_; // her Sprintsz under way: the time it still has and until its next pounding
     int stampede_ticks_ = 0;
+    gameplay::BleedState pieces_; // her Cut in Pieces under way: the time it still has and until its next blow
+    int pieces_blows_ = 0;
     float resolve_left_ = 0.0F;     // seconds her Never Give Up still lasts
     float resolve_spared_ = 0.0F;   // damage it has kept from her
     float resolve_healed_ = 0.0F;   // health it has given back

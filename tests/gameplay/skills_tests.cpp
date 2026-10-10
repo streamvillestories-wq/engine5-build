@@ -218,11 +218,12 @@ TEST_CASE("the new warrior has her sword's combo, the skills wished for her and 
     CHECK(bar.slot(5) == SkillId::Enrage);
     CHECK(bar.slot(6) == SkillId::NeverGiveUp);
     CHECK(bar.slot(7) == SkillId::Stampede);
-    for (std::size_t slot = 8; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(8) == SkillId::CutInPieces);
+    for (std::size_t slot = 9; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
     // An empty slot cannot be chosen.
-    CHECK_FALSE(bar.select(8));
+    CHECK_FALSE(bar.select(9));
     CHECK(bar.selected() == SkillId::Slash);
     CHECK(bar.select(1));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
@@ -255,11 +256,13 @@ TEST_CASE("the new warrior's whirlwind is a channel within her range", "[skills]
     CHECK_FALSE(e5::gameplay::skill_is_stance(SkillId::BladeWhirl));
     CHECK(e5::gameplay::skill_info(SkillId::BladeWhirl).name == "Whirlwind");
     CHECK(e5::gameplay::skill_info(SkillId::BladeWhirl).kind == e5::gameplay::SkillKind::Instant);
-    // All of it on one enemy: more than her combo's finisher, less than the old warrior's star whirl.
+    // All of it on one enemy: more than her combo's finisher, less than half of what her skill for a
+    // full charge does.
     const float in_all = e5::gameplay::skill_damage(SkillId::BladeWhirl) * e5::gameplay::whirl_seconds /
                          e5::gameplay::whirl_tick_seconds;
     CHECK(in_all > e5::gameplay::skill_damage(SkillId::Slash) * e5::gameplay::combo_damage_factor(2));
-    CHECK(in_all < e5::gameplay::skill_damage(SkillId::StarWhirl));
+    CHECK(in_all < 0.5F * e5::gameplay::skill_damage(SkillId::CutInPieces) * e5::gameplay::pieces_seconds /
+                       e5::gameplay::pieces_tick_seconds);
     // "Rarely": 20 to 30 seconds.
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) >= 20.0F);
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) <= 30.0F);
@@ -378,6 +381,27 @@ TEST_CASE("the new warrior's sprintsz is a stance weaker than her whirlwind", "[
     CHECK(e5::gameplay::stampede_radius <= e5::gameplay::whirl_pull_radius);
     CHECK(e5::gameplay::stampede_move_share > 1.0F);
     CHECK(e5::gameplay::stampede_move_share <= 1.3F);
+}
+
+TEST_CASE("cut in pieces is the new warrior's skill for a full charge", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::CutInPieces).name == "Cut in Pieces");
+    CHECK(e5::gameplay::skill_needs_charge(SkillId::CutInPieces));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::CutInPieces) == 0.0F);
+    // The only one of hers that takes a charge.
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Blade);
+    int charged = 0;
+    for (std::size_t slot = 0; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+        charged += e5::gameplay::skill_needs_charge(bar.slot(slot)) ? 1 : 0;
+    }
+    CHECK(charged == 1);
+    // Each blow eight tenths of a sword blow; twelve of them.
+    CHECK(e5::gameplay::skill_damage(SkillId::CutInPieces) ==
+          Catch::Approx(0.8F * e5::gameplay::skill_damage(SkillId::Slash)));
+    CHECK(e5::gameplay::step_bleed(
+              e5::gameplay::open_wound({}, e5::gameplay::pieces_seconds, e5::gameplay::pieces_tick_seconds),
+              e5::gameplay::pieces_tick_seconds, 60.0F)
+              .ticks == 12);
 }
 
 TEST_CASE("the seismic slash catches what is in its wedge", "[skills]") {

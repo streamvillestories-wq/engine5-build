@@ -255,6 +255,7 @@ constexpr float whirl_shake = 0.008F;       // metres, with every tick
 constexpr float whirl_pull_keep_off = 1.1F; // metres: nearer than this nothing is drawn further in
 // The new warrior's Jump Attack (numbers in e5/gameplay/skills.hpp).
 constexpr const char* leap_impact_path = "res://effects/jump_attack_impact.tscn";
+constexpr const char* leap_marker_path = "res://effects/leap_marker.tscn"; // where she would land, while she aims
 constexpr float leap_shake = 0.09F;           // metres, as she lands
 constexpr float leap_strike_lead = 0.5F;      // seconds before she lands that the blow's clip begins
 constexpr float leap_min_air_seconds = 0.12F; // not "landed" while she is still leaving the ground
@@ -265,7 +266,7 @@ constexpr float leap_remote_seconds = 0.85F;  // another player's leap is taken 
 constexpr const char* seismic_burst_path = "res://effects/seismic_burst.tscn";
 constexpr const char* seismic_crack_path = "res://effects/seismic_crack.tscn"; // its sound, once
 constexpr const char* seismic_stun_path = "res://effects/seismic_stun.tscn";   // over a stunned enemy
-constexpr int seismic_rows = 5;
+constexpr int seismic_rows = 7; // (five at first, of one to five bursts: too thin to fill the wedge, bug report 33)
 constexpr float seismic_row_seconds = 0.07F; // from one row to the next
 constexpr float seismic_first_row = 2.0F;    // metres ahead of her
 constexpr float seismic_first_size = 0.7F;   // of the burst as made; the last row is twice that
@@ -282,6 +283,10 @@ constexpr const char* stampede_path = "res://effects/stampede.tscn";
 constexpr int stampede_bursts = 3;           // with every pounding
 constexpr float stampede_burst_size = 0.4F;  // of the burst as made
 constexpr float stampede_shake = 0.012F;     // metres
+// The new warrior's Cut in Pieces (numbers in e5/gameplay/skills.hpp).
+constexpr float pieces_stand_off = 1.0F;   // metres from an enemy's body to where she appears beside it
+constexpr float pieces_blow_pace = 2.2F;   // the combo's clips, so much faster than made
+constexpr float pieces_shake = 0.02F;      // metres, with every blow
 // The new warrior's Never Give Up: the cry and the blue round her.
 constexpr const char* resolve_path = "res://effects/never_give_up.tscn";
 constexpr float enrage_strike_gap = 0.5F;  // metres beyond her blow's middle at which she starts to strike
@@ -605,6 +610,7 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_enrage_blows"), &E5PlayerController::get_enrage_blows);
     ClassDB::bind_method(D_METHOD("get_resolve_seconds"), &E5PlayerController::get_resolve_seconds);
     ClassDB::bind_method(D_METHOD("get_towers_grown"), &E5PlayerController::get_towers_grown);
+    ClassDB::bind_method(D_METHOD("get_pieces_blows"), &E5PlayerController::get_pieces_blows);
     ClassDB::bind_method(D_METHOD("get_stampede_seconds"), &E5PlayerController::get_stampede_seconds);
     ClassDB::bind_method(D_METHOD("get_stampede_ticks"), &E5PlayerController::get_stampede_ticks);
     ClassDB::bind_method(D_METHOD("get_resolve_spared"), &E5PlayerController::get_resolve_spared);
@@ -1065,6 +1071,9 @@ void E5PlayerController::_physics_process(double delta) {
     if (update_enrage(static_cast<float>(delta))) {
         return; // beside herself: she goes for the nearest enemy, whatever the keys say
     }
+    if (update_pieces(static_cast<float>(delta))) {
+        return; // from one enemy to the next: nobody steers her
+    }
     update_tower_charge(aim_pressed, static_cast<float>(delta));
     // The shield: up while the key is held, as long as it lasts.
     if (block_enabled_) {
@@ -1146,16 +1155,23 @@ void E5PlayerController::_physics_process(double delta) {
             is_on_floor() && animator_.has_clip(clip_kneel_) && skill_ready(skills_.selected())) {
             start_tower_charge(skills_.selected());
         }
+        // Cut in Pieces takes her charge and begins, if there is anyone to cut.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::CutInPieces && !mounted_ && !is_busy() &&
+            is_on_floor() && skill_ready(skills_.selected()) && pieces_victim() != nullptr) {
+            start_pieces(skills_.selected());
+        }
         // Enrage is on at once too; what it does begins with the next step (update_enrage).
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Enrage && !mounted_ && !is_busy() &&
             !is_enraged() && skill_ready(skills_.selected())) {
             start_enrage(skills_.selected());
         }
-        // The jump attack leaves the ground at once, for the place the crosshair covers.
+        // The jump attack is aimed for as long as its button is held, a mark showing where she would
+        // land, and leaves the ground when it is let go, for the place the crosshair covers.
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::JumpAttack && !mounted_ && !is_busy() &&
             is_on_floor() && skill_ready(skills_.selected())) {
-            start_leap(skills_.selected());
+            leap_aiming_ = true;
         }
+        update_leap_aim(aim_pressed);
         const bool start = instant && aim_just_pressed && !block_.raised && can_start_instant_skill(skills_.selected());
         // A combo is one movement, not three clicks timed to the frame: a press during a blow
         // counts for the next one, and so does a button that is still held when the blow ends.
@@ -1769,7 +1785,12 @@ bool E5PlayerController::update_vitals(float delta) {
         counter_swing_left_ = 0.0F;
         whirl_ = {};
         leap_ = {};
+        leap_aiming_ = false;
+        if (leap_marker_ != nullptr) {
+            leap_marker_->set_visible(false);
+        }
         resolve_left_ = 0.0F;
+        pieces_ = {};
         stampede_ = {};
         tower_charge_ = 0.0F; // (whatever she charged is lost: nothing grows)
         update_tower_charge(false, 0.0F);
@@ -2537,7 +2558,7 @@ const SpellTiming* E5PlayerController::advance_combo(gameplay::SkillId skill) {
 }
 
 godot::String E5PlayerController::get_action_skill_name() const {
-    if (!action_.active && !is_whirling() && !is_leaping() && !is_enraged() && !tower_charging_) {
+    if (!action_.active && !is_whirling() && !is_leaping() && !is_enraged() && !tower_charging_ && !is_cutting()) {
         return {};
     }
     const std::string_view name = gameplay::skill_info(action_skill_).name;
@@ -3089,6 +3110,96 @@ void E5PlayerController::grow_tower(float power) {
     ++towers_grown_;
 }
 
+E5Enemy* E5PlayerController::pieces_victim() const {
+    // One of those within reach, by chance. (On the ground: she cannot stand beside one that flies.)
+    std::vector<E5Enemy*> near;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held() || !enemy->is_on_floor()) {
+            continue;
+        }
+        godot::Vector3 to = enemy->get_global_position() - get_global_position();
+        to.y = 0.0F;
+        if (static_cast<float>(to.length()) - enemy->get_body_radius() <= gameplay::pieces_reach) {
+            near.push_back(enemy);
+        }
+    }
+    if (near.empty()) {
+        return nullptr;
+    }
+    return near.at(static_cast<std::size_t>(godot::UtilityFunctions::randi() % near.size()));
+}
+
+void E5PlayerController::start_pieces(gameplay::SkillId skill) {
+    spend(skill);
+    last_skill_ = skill;
+    ++skills_used_;
+    action_skill_ = skill;
+    emote_left_ = 0.0F;
+    // The first blow at once, the others every half second after it.
+    pieces_ = {.seconds_left = gameplay::pieces_seconds, .until_tick = 0.0F};
+    note_net_event(0, 0.0F);
+}
+
+bool E5PlayerController::update_pieces(float delta) {
+    if (!is_cutting()) {
+        return false;
+    }
+    const gameplay::BleedStep step = gameplay::step_bleed(pieces_, gameplay::pieces_tick_seconds, std::max(delta, 1e-4F));
+    pieces_ = step.state;
+    if (remote_) {
+        return false; // her place and her clips arrive from where she is played
+    }
+    for (int tick = 0; tick < step.ticks; ++tick) {
+        E5Enemy* const victim = pieces_victim();
+        if (victim == nullptr) {
+            break;
+        }
+        // Beside it, on the side she comes from, facing it.
+        godot::Vector3 from = get_global_position() - victim->get_global_position();
+        from.y = 0.0F;
+        const godot::Vector3 side = from.length() > 0.05F
+                                        ? from.normalized()
+                                        : godot::Vector3(-std::sin(model_yaw_), 0.0F, -std::cos(model_yaw_));
+        const godot::Vector3 place =
+            victim->get_global_position() + side * (victim->get_body_radius() + pieces_stand_off);
+        // The streak she leaves from where she was to where she is.
+        E5LightningArc::spawn(get_parent(), get_global_position() + godot::Vector3(0.0F, 1.1F, 0.0F),
+                              place + godot::Vector3(0.0F, 1.1F, 0.0F), godot::Color(2.4F, 2.4F, 2.8F));
+        set_global_position(place);
+        model_yaw_ = gameplay::facing_yaw(-static_cast<float>(side.x), -static_cast<float>(side.z));
+        if (model_ != nullptr) {
+            model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+        }
+        const godot::Vector3 body = victim->get_aim_point();
+        combat::hit(victim, body, dealt(gameplay::SkillId::CutInPieces));
+        E5Effect::spawn(effect_scene(counter_strike_path), get_parent(), body);
+        shake_ = std::max(shake_, pieces_shake);
+        // The blow: the combo's first two, turn about, begun anew each time.
+        combo_step_ = pieces_blows_ % 2;
+        ++pieces_blows_;
+        show_slash_arc();
+        if (animator_.is_ready() && animator_.has_clip(clip_combo_.front())) {
+            animator_.set_upper(godot::StringName());
+            animator_.set_base(clip_idle_, 1.0F, 0.0F);
+            animator_.set_base(clip_combo_.at(static_cast<std::size_t>(combo_step_)), pieces_blow_pace, 0.04F);
+        }
+    }
+    // She stands where the last blow put her.
+    godot::Vector3 velocity = get_velocity();
+    velocity.x = 0.0F;
+    velocity.z = 0.0F;
+    velocity.y = is_on_floor() ? 0.0F : velocity.y - params_.gravity * delta;
+    set_velocity(velocity);
+    move_and_slide();
+    animator_.update(delta);
+    if (!is_cutting()) {
+        combo_step_ = -1;
+    }
+    return true;
+}
+
 void E5PlayerController::start_enrage(gameplay::SkillId skill) {
     spend(skill);
     last_skill_ = skill;
@@ -3239,6 +3350,47 @@ void E5PlayerController::strike_enrage(const godot::Vector3& forward) {
     }
 }
 
+void E5PlayerController::update_leap_aim(bool held) {
+    if (!leap_aiming_) {
+        return;
+    }
+    // Something else has begun, or she can no longer leap: the aiming is over and nothing happens.
+    const bool able = skills_.selected() == gameplay::SkillId::JumpAttack && !mounted_ && !is_busy() &&
+                      is_on_floor() && skill_ready(skills_.selected());
+    if (!held || !able) {
+        leap_aiming_ = false;
+        if (leap_marker_ != nullptr) {
+            leap_marker_->set_visible(false);
+        }
+        if (able) {
+            start_leap(skills_.selected());
+        }
+        return;
+    }
+    if (leap_marker_ == nullptr) {
+        const godot::Ref<godot::PackedScene> scene = effect_scene(leap_marker_path);
+        leap_marker_ = scene.is_valid() ? godot::Object::cast_to<godot::Node3D>(scene->instantiate()) : nullptr;
+        if (leap_marker_ == nullptr) {
+            return;
+        }
+        add_child(leap_marker_);
+        leap_marker_->set_as_top_level(true); // placed in the world, not carried by her
+    }
+    // Where start_leap would take her now: what the crosshair covers, or as far as she can leap that way.
+    const godot::Vector3 feet = get_global_position();
+    const AimPoint aim = find_aim_point(feet + godot::Vector3(0.0F, point_blank_height, 0.0F));
+    godot::Vector3 way = aim.position - feet;
+    way.y = 0.0F;
+    const auto length = static_cast<float>(way.length());
+    godot::Vector3 place = aim.position;
+    if (!aim.hit || length > gameplay::leap_max_distance) {
+        // Beyond her leap: the mark at its end, at the height she stands on (the ground there is not known).
+        place = feet + (length > 0.01F ? way / length : godot::Vector3()) * gameplay::leap_max_distance;
+    }
+    leap_marker_->set_global_position(place);
+    leap_marker_->set_visible(true);
+}
+
 void E5PlayerController::start_leap(gameplay::SkillId skill) {
     spend(skill);
     last_skill_ = skill;
@@ -3329,7 +3481,7 @@ void E5PlayerController::strike_seismic() {
     for (int row = 0; row < seismic_rows; ++row) {
         const float out = seismic_first_row + step * static_cast<float>(row);
         const float half_width = out * std::tan(gameplay::seismic_half_angle) * 0.8F;
-        const int count = row + 1;
+        const int count = row + 2;
         for (int index = 0; index < count; ++index) {
             const float across =
                 count == 1 ? 0.0F : (static_cast<float>(index) / static_cast<float>(count - 1) - 0.5F) * 2.0F;
