@@ -9,13 +9,14 @@
 using Catch::Approx;
 using namespace e5::gameplay;
 
-TEST_CASE("the archer has her shot and nine slots to fill", "[skills]") {
+TEST_CASE("the archer has her shot, the skills wished for her and slots to fill", "[skills]") {
     SkillBar bar;
     CHECK(bar.slot(0) == SkillId::Shot);
-    for (std::size_t slot = 1; slot < SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(1) == SkillId::VineTower);
+    for (std::size_t slot = 2; slot < SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
-    CHECK_FALSE(bar.select(1));
+    CHECK_FALSE(bar.select(2));
     CHECK(open_slot_count(SkillSet::Archer) == 9);
     CHECK(open_slot_count(SkillSet::ArcherFull) == 0);
     CHECK(open_slot_count(SkillSet::Wizard) == 0);
@@ -214,11 +215,14 @@ TEST_CASE("the new warrior has her sword's combo, the skills wished for her and 
     CHECK(bar.slot(2) == SkillId::BladeWhirl);
     CHECK(bar.slot(3) == SkillId::JumpAttack);
     CHECK(bar.slot(4) == SkillId::SeismicSlash);
-    for (std::size_t slot = 5; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(5) == SkillId::Enrage);
+    CHECK(bar.slot(6) == SkillId::NeverGiveUp);
+    CHECK(bar.slot(7) == SkillId::Stampede);
+    for (std::size_t slot = 8; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
     // An empty slot cannot be chosen.
-    CHECK_FALSE(bar.select(5));
+    CHECK_FALSE(bar.select(8));
     CHECK(bar.selected() == SkillId::Slash);
     CHECK(bar.select(1));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
@@ -299,6 +303,81 @@ TEST_CASE("the jump attack's leap lands where it is aimed", "[skills]") {
         CHECK(arc.seconds <= 1.05F);
     }
     CHECK(e5::gameplay::leap_apex_height(15.0F) > e5::gameplay::leap_apex_height(2.0F));
+}
+
+TEST_CASE("the new warrior's enrage is a frenzy within her range", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::Enrage).name == "Enrage");
+    CHECK(e5::gameplay::skill_info(SkillId::Enrage).kind == e5::gameplay::SkillKind::Instant);
+    CHECK_FALSE(e5::gameplay::skill_is_stance(SkillId::Enrage));
+    CHECK_FALSE(e5::gameplay::skill_is_channel(SkillId::Enrage));
+    CHECK_FALSE(e5::gameplay::skill_needs_charge(SkillId::Enrage));
+    // "Now and then": 8 to 12 seconds, and longer than the frenzy itself.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Enrage) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Enrage) <= 12.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Enrage) > e5::gameplay::enrage_seconds);
+    // Faster blows, each weaker: what she deals in a second is more than with her sword alone,
+    // but no more than twice that.
+    const float pace = e5::gameplay::enrage_attack_speed * e5::gameplay::skill_damage(SkillId::Enrage) /
+                       e5::gameplay::skill_damage(SkillId::Slash);
+    CHECK(pace > 1.0F);
+    CHECK(pace <= 2.0F);
+    CHECK(e5::gameplay::enrage_move_share > 1.0F);
+    CHECK(e5::gameplay::enrage_move_share <= 1.25F);
+}
+
+TEST_CASE("never give up is a stance that protects and heals within reason", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::NeverGiveUp).name == "Never Give Up");
+    CHECK(e5::gameplay::skill_is_stance(SkillId::NeverGiveUp));
+    CHECK_FALSE(e5::gameplay::skill_is_channel(SkillId::NeverGiveUp));
+    CHECK(e5::gameplay::skill_damage(SkillId::NeverGiveUp) == 0.0F);
+    // "Rarely": 20 to 30 seconds.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::NeverGiveUp) >= 20.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::NeverGiveUp) <= 30.0F);
+    // Less of a blow gets through, but not nothing; and all of it heals less than half of her.
+    CHECK(e5::gameplay::resolve_damage_share < 1.0F);
+    CHECK(e5::gameplay::resolve_damage_share >= 0.5F);
+    CHECK(e5::gameplay::resolve_heal_share * e5::gameplay::resolve_seconds <= 0.5F);
+}
+
+TEST_CASE("the vine tower grows by how long it was charged", "[skills]") {
+    using e5::gameplay::SkillId;
+    using e5::gameplay::tower_height;
+    CHECK(e5::gameplay::skill_info(SkillId::VineTower).name == "Vine Tower");
+    CHECK(e5::gameplay::skill_info(SkillId::VineTower).kind == e5::gameplay::SkillKind::Instant);
+    // The players' archer has it beside her shot; the bar kept for tests is as it was.
+    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(1) == SkillId::VineTower);
+    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(2) == SkillId::None);
+    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::ArcherFull).slot(1) == SkillId::PowerShot);
+    // "Rarely"; let go too soon, sooner.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::VineTower) >= 20.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::VineTower) <= 30.0F);
+    CHECK(e5::gameplay::tower_cancel_cooldown_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::VineTower));
+    CHECK(tower_height(0.0F) == 0.0F);
+    CHECK(tower_height(0.9F) == 0.0F);
+    CHECK(tower_height(1.0F) == Catch::Approx(e5::gameplay::tower_lowest));
+    CHECK(tower_height(3.0F) == Catch::Approx((e5::gameplay::tower_lowest + e5::gameplay::tower_tallest) * 0.5F));
+    CHECK(tower_height(5.0F) == Catch::Approx(e5::gameplay::tower_tallest));
+    CHECK(tower_height(60.0F) == Catch::Approx(e5::gameplay::tower_tallest));
+}
+
+TEST_CASE("the new warrior's sprintsz is a stance weaker than her whirlwind", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::Stampede).name == "Sprintsz");
+    CHECK(e5::gameplay::skill_is_stance(SkillId::Stampede));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Stampede) >= 20.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Stampede) <= 30.0F);
+    // She can fight on while it lasts: less in all, and less far, than the whirl that holds her.
+    const float in_all = e5::gameplay::skill_damage(SkillId::Stampede) * e5::gameplay::stampede_seconds /
+                         e5::gameplay::stampede_tick_seconds;
+    const float whirl = e5::gameplay::skill_damage(SkillId::BladeWhirl) * e5::gameplay::whirl_seconds /
+                        e5::gameplay::whirl_tick_seconds;
+    CHECK(in_all > 0.0F);
+    CHECK(in_all < whirl);
+    CHECK(e5::gameplay::stampede_radius <= e5::gameplay::whirl_pull_radius);
+    CHECK(e5::gameplay::stampede_move_share > 1.0F);
+    CHECK(e5::gameplay::stampede_move_share <= 1.3F);
 }
 
 TEST_CASE("the seismic slash catches what is in its wedge", "[skills]") {

@@ -52,6 +52,10 @@ enum class SkillId : unsigned char {
     BladeWhirl,    // the new warrior's "Whirlwind": she whirls with her sword and draws enemies in
     JumpAttack,    // the new warrior's: a high leap onto the place aimed at, and a blow where she lands
     SeismicSlash,  // the new warrior's: a blow into the ground that breaks it open ahead of her and stuns
+    Enrage,        // the new warrior's: a cry, and for a few seconds she fights by herself, in a frenzy
+    NeverGiveUp,   // the new warrior's: a cry, and for a few seconds she is hurt less and her wounds close
+    VineTower,     // the archer's: she kneels and charges; a tower of vines lifts her above the fight
+    Stampede,      // the new warrior's "Sprintsz": for a few seconds she is faster and tramples what is near
 };
 
 // Which skills a character has on the bar.
@@ -110,8 +114,27 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 // A stance is on at once on its key and stays on for a while: it has no clip that plays
 // through and does not hold her where she stands.
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
-    return skill == SkillId::CounterAttack;
+    return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede;
 }
+
+// The new warrior's Never Give Up (bug report 26, a player's wish), a stance too: for
+// `resolve_seconds` after her cry only `resolve_damage_share` of every blow gets through to
+// her (the game has no armour: "40% more armour" is 40% less of each blow), and every second
+// she gains `resolve_heal_share` of her full health, hurt a moment ago or not. (The wish had
+// 40% of her health a second: more than all of it twice over. This is 40% over the four.)
+inline constexpr float resolve_seconds = 4.0F;
+inline constexpr float resolve_damage_share = 0.6F;
+inline constexpr float resolve_heal_share = 0.1F; // of her full health, a second
+
+// The new warrior's Sprintsz (bug report 28, a player's wish; `SkillId::Stampede`), a third stance:
+// for `stampede_seconds` she is `stampede_move_share` times as fast on her feet, and every
+// `stampede_tick_seconds` the ground she pounds hurts everything within `stampede_radius`
+// (skill_damage). She fights on as she likes meanwhile, which is why it reaches less far and
+// hits less hard than her Whirlwind, during which she can do nothing else.
+inline constexpr float stampede_seconds = 4.0F;
+inline constexpr float stampede_tick_seconds = 0.5F;
+inline constexpr float stampede_radius = 3.5F; // metres
+inline constexpr float stampede_move_share = 1.3F;
 
 // The new warrior's Whirlwind (bug report 22, a player's wish; `SkillId::BladeWhirl`, the dwarf
 // has a Whirlwind of his own): for `whirl_seconds` she turns round and round with her sword
@@ -162,6 +185,34 @@ inline constexpr float seismic_stun_seconds = 2.0F;
 // (need not be of length one). `allowance`: the width of its body.
 [[nodiscard]] bool in_wedge(float dx, float dz, float ahead_x, float ahead_z, float length, float half_angle,
                             float near, float allowance = 0.0F) noexcept;
+
+// The new warrior's Enrage (bug report 25, a player's wish): a cry, and for `enrage_seconds` she
+// is beside herself. She goes for the nearest enemy within `enrage_reach` by herself, faster than
+// she runs, and strikes the blows of her sword's combo one after another, `enrage_attack_speed`
+// times as fast as they usually are; the player does not steer her meanwhile (with no enemy
+// that near she is steered as always). Each of these blows is half a sword blow (skill_damage,
+// times combo_damage_factor): three times as many at half the strength, so that the frenzy is
+// worth about one of her stronger skills and not three.
+inline constexpr float enrage_seconds = 4.0F;
+inline constexpr float enrage_reach = 12.0F;       // metres: how far she goes for an enemy
+inline constexpr float enrage_attack_speed = 3.0F; // of the combo's usual pace
+inline constexpr float enrage_move_share = 1.2F;   // of her pace on foot
+
+// The archer's Vine Tower (bug report 27, a player's wish): she kneels with a hand on the ground
+// and charges for as long as the button is held, `tower_full_charge_seconds` at most. Let go
+// before `tower_least_charge_seconds` and nothing grows (and it is ready again after
+// `tower_cancel_cooldown_seconds`); otherwise a tower of vines grows under her and lifts her,
+// higher the longer she charged, stands for `tower_stand_seconds` and sinks back with her.
+// (The wish had it up to 30 m: that is twice the height of the island's tallest trees, where
+// neither the camera nor an arrow's flight has been tried. `tower_tallest` is what was.)
+inline constexpr float tower_least_charge_seconds = 1.0F;
+inline constexpr float tower_full_charge_seconds = 5.0F;
+inline constexpr float tower_lowest = 5.0F;   // metres, after the least charge
+inline constexpr float tower_tallest = 12.0F; // metres, after the full one
+inline constexpr float tower_stand_seconds = 5.0F;
+inline constexpr float tower_cancel_cooldown_seconds = 5.0F;
+// How high the tower grows after a charge of so many seconds; 0: it does not grow.
+[[nodiscard]] float tower_height(float charged_seconds) noexcept;
 
 // A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound
 // on the same enemy starts the time anew and keeps the beat (no second wound beside it).

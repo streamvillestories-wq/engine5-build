@@ -75,6 +75,14 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Jump Attack", .charges = false, .kind = SkillKind::Instant};
     case SkillId::SeismicSlash:
         return {.name = "Seismic Slash", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Enrage:
+        return {.name = "Enrage", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::NeverGiveUp:
+        return {.name = "Never Give Up", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::VineTower:
+        return {.name = "Vine Tower", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Stampede:
+        return {.name = "Sprintsz", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -156,6 +164,13 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 33.0F; // one and a half sword blows, to everything where she lands
     case SkillId::SeismicSlash:
         return 11.0F; // half a sword blow to each: what it is for is the stun
+    case SkillId::Enrage:
+        return 11.0F; // the first of its blows, half a sword blow; see combo_damage_factor and enrage_attack_speed
+    case SkillId::NeverGiveUp:
+    case SkillId::VineTower:
+        return 0.0F; // they strike nobody
+    case SkillId::Stampede:
+        return 5.0F; // every half second to all it reaches: 40 over its four seconds
     case SkillId::None:
         break;
     }
@@ -241,10 +256,15 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::Meteor:
     case SkillId::BrambleArrow:
     case SkillId::CounterAttack: // from the key: she stands ready for half of it
+    case SkillId::Enrage:        // from the key too: the frenzy takes four of them
         return 10.0F;
     case SkillId::JumpAttack:
         return 12.0F;
     // Rarely.
+    case SkillId::VineTower:
+        return 30.0F;
+    case SkillId::Stampede:
+    case SkillId::NeverGiveUp:
     case SkillId::SeismicSlash:
     case SkillId::BladeWhirl:
         return 20.0F;
@@ -291,6 +311,16 @@ bool in_wedge(float dx, float dz, float ahead_x, float ahead_z, float length, fl
     // Its body may reach into the wedge from beside it.
     const float aside = std::sqrt(std::max(distance * distance - along * along, 0.0F));
     return along > 0.0F && aside - allowance <= along * std::tan(half_angle);
+}
+
+float tower_height(float charged_seconds) noexcept {
+    if (charged_seconds < tower_least_charge_seconds) {
+        return 0.0F;
+    }
+    const float share = std::clamp((charged_seconds - tower_least_charge_seconds) /
+                                       (tower_full_charge_seconds - tower_least_charge_seconds),
+                                   0.0F, 1.0F);
+    return tower_lowest + (tower_tallest - tower_lowest) * share;
 }
 
 float leap_apex_height(float distance) noexcept {
@@ -373,9 +403,9 @@ SkillBar::SkillBar(SkillSet set) noexcept {
                   SkillId::Battlecry};
     } else if (set == SkillSet::Blade) {
         slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,
-                  SkillId::SeismicSlash};
+                  SkillId::SeismicSlash, SkillId::Enrage,       SkillId::NeverGiveUp, SkillId::Stampede};
     } else if (set == SkillSet::Archer) {
-        slots_ = {SkillId::Shot};
+        slots_ = {SkillId::Shot, SkillId::VineTower};
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
     } else if (set == SkillSet::Wizard) {

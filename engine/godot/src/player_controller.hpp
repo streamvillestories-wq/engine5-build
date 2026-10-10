@@ -251,6 +251,20 @@ public:
     // how many blows she has answered (for tests).
     [[nodiscard]] float get_stance_seconds() const { return counter_left_; }
     [[nodiscard]] int get_counters_struck() const { return counters_struck_; }
+    // Enrage (the new warrior's): the seconds her frenzy still lasts, also for another player's
+    // hero (stance_glow.gd shows it), and how many blows she has struck in it (for tests).
+    [[nodiscard]] float get_enrage_seconds() const { return enrage_left_; }
+    [[nodiscard]] int get_enrage_blows() const { return enrage_blows_; }
+    // Never Give Up (the new warrior's): the seconds it still lasts, also for another player's
+    // hero (stance_glow.gd shows it), and what it has kept from her and given back (for tests).
+    [[nodiscard]] float get_resolve_seconds() const { return resolve_left_; }
+    // Sprintsz (the new warrior's): the seconds it still lasts, and how often it has pounded (for tests).
+    [[nodiscard]] float get_stampede_seconds() const { return stampede_.seconds_left; }
+    [[nodiscard]] int get_stampede_ticks() const { return stampede_ticks_; }
+    // The Archer's Vine Tower: how many have grown under her (for tests).
+    [[nodiscard]] int get_towers_grown() const { return towers_grown_; }
+    [[nodiscard]] float get_resolve_spared() const { return resolve_spared_; }
+    [[nodiscard]] float get_resolve_healed() const { return resolve_healed_; }
 
     // A remote hero is another player's, shown here: it takes no input, has no camera and no
     // interface, collides with nothing, and does what `apply_net_state` tells it. To be set
@@ -362,6 +376,18 @@ private:
     void update_leap(float delta);
     void land_leap();
     [[nodiscard]] bool is_leaping() const { return leap_.flying || leap_.recover_left > 0.0F; }
+    // Enrage: the frenzy begins; while it lasts and an enemy is near, it is what moves her and
+    // strikes (update_enrage then returns true, and nothing else is asked that step).
+    void start_enrage(gameplay::SkillId skill);
+    bool update_enrage(float delta);
+    void strike_enrage(const godot::Vector3& forward);
+    [[nodiscard]] bool is_enraged() const { return enrage_left_ > 0.0F; }
+    // The Vine Tower: she kneels and charges while the button is held; let go, the tower grows
+    // under her (or, let go too soon, nothing does).
+    void start_tower_charge(gameplay::SkillId skill);
+    void update_tower_charge(bool held, float delta);
+    void grow_tower(float power);
+    [[nodiscard]] bool is_charging_tower() const { return tower_charging_; }
     // The Seismic Slash: her blow lands; the ground breaks open ahead of her, row after row.
     void strike_seismic();
     void update_eruptions(float delta);
@@ -415,7 +441,8 @@ private:
     [[nodiscard]] int get_bow_phase() const { return static_cast<int>(bow_.phase); }
     // In the middle of using a skill: the selection must not change now.
     [[nodiscard]] bool is_busy() const {
-        return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling() || is_leaping();
+        return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling() || is_leaping() ||
+               enrage_driving_ || tower_charging_;
     }
 
     gameplay::MotorParams params_;
@@ -522,6 +549,24 @@ private:
     };
     Leap leap_;
     float remote_leap_left_ = 0.0F; // another player's hero: seconds until her leap lands here
+    bool tower_charging_ = false;   // the Vine Tower: she kneels and charges
+    int towers_grown_ = 0;
+    float tower_charge_ = 0.0F;     // seconds charged
+    std::uint64_t tower_charge_effect_ = 0; // what shows round her meanwhile: an id, it may be gone
+    godot::StringName clip_kneel_;
+    gameplay::BleedState stampede_; // her Sprintsz under way: the time it still has and until its next pounding
+    int stampede_ticks_ = 0;
+    float resolve_left_ = 0.0F;     // seconds her Never Give Up still lasts
+    float resolve_spared_ = 0.0F;   // damage it has kept from her
+    float resolve_healed_ = 0.0F;   // health it has given back
+    float enrage_left_ = 0.0F;      // seconds her frenzy still lasts
+    bool enrage_driving_ = false;   // it moved her in this step: the player did not
+    int enrage_blow_ = -1;          // the blow of the combo under way in it, or -1: she runs
+    int enrage_next_blow_ = 0;      // the one that comes after
+    float enrage_blow_elapsed_ = 0.0F;
+    bool enrage_struck_ = false; // the blow under way has landed
+    bool enrage_arc_shown_ = false;
+    int enrage_blows_ = 0;
     // Bursts of the Seismic Slash still to come: the ground breaks open further and further out.
     struct Eruption {
         float in_seconds = 0.0F;

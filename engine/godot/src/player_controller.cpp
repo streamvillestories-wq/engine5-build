@@ -270,6 +270,23 @@ constexpr float seismic_row_seconds = 0.07F; // from one row to the next
 constexpr float seismic_first_row = 2.0F;    // metres ahead of her
 constexpr float seismic_first_size = 0.7F;   // of the burst as made; the last row is twice that
 constexpr float seismic_shake = 0.1F;
+// The new warrior's Enrage (numbers in e5/gameplay/skills.hpp): the cry and the red round her.
+constexpr const char* enrage_path = "res://effects/enrage.tscn";
+// The archer's Vine Tower (numbers in e5/gameplay/skills.hpp): what shows round her while she
+// charges, and the tower itself (effects/vine_tower.gd grows it, carries her and takes it away).
+constexpr const char* tower_charge_path = "res://effects/vine_tower_charge.tscn";
+constexpr const char* tower_path = "res://effects/vine_tower.tscn";
+// The new warrior's Sprintsz: its pounding, heard for as long as it lasts; the stone thrown up round
+// her with every step of it is the Seismic Slash's burst, small.
+constexpr const char* stampede_path = "res://effects/stampede.tscn";
+constexpr int stampede_bursts = 3;           // with every pounding
+constexpr float stampede_burst_size = 0.4F;  // of the burst as made
+constexpr float stampede_shake = 0.012F;     // metres
+// The new warrior's Never Give Up: the cry and the blue round her.
+constexpr const char* resolve_path = "res://effects/never_give_up.tscn";
+constexpr float enrage_strike_gap = 0.5F;  // metres beyond her blow's middle at which she starts to strike
+constexpr float enrage_blow_fade = 0.06F;  // seconds from one blow's clip to the next: they are short
+constexpr float enrage_shake_share = 0.5F; // of the combo's jolts: there are three times as many
 constexpr float counter_shake = 0.02F;         // metres: the jolt of an answered blow
 constexpr float counter_swing_seconds = 0.45F; // her arm strikes the first blow of the combo
 // A blow comes "from" where the one who struck stands: the enemy this near to that place is it.
@@ -584,6 +601,14 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_hits_blocked"), &E5PlayerController::get_hits_blocked);
     ClassDB::bind_method(D_METHOD("get_stance_seconds"), &E5PlayerController::get_stance_seconds);
     ClassDB::bind_method(D_METHOD("get_counters_struck"), &E5PlayerController::get_counters_struck);
+    ClassDB::bind_method(D_METHOD("get_enrage_seconds"), &E5PlayerController::get_enrage_seconds);
+    ClassDB::bind_method(D_METHOD("get_enrage_blows"), &E5PlayerController::get_enrage_blows);
+    ClassDB::bind_method(D_METHOD("get_resolve_seconds"), &E5PlayerController::get_resolve_seconds);
+    ClassDB::bind_method(D_METHOD("get_towers_grown"), &E5PlayerController::get_towers_grown);
+    ClassDB::bind_method(D_METHOD("get_stampede_seconds"), &E5PlayerController::get_stampede_seconds);
+    ClassDB::bind_method(D_METHOD("get_stampede_ticks"), &E5PlayerController::get_stampede_ticks);
+    ClassDB::bind_method(D_METHOD("get_resolve_spared"), &E5PlayerController::get_resolve_spared);
+    ClassDB::bind_method(D_METHOD("get_resolve_healed"), &E5PlayerController::get_resolve_healed);
     ClassDB::bind_method(D_METHOD("get_health"), &E5PlayerController::get_health);
     ClassDB::bind_method(D_METHOD("is_dead"), &E5PlayerController::is_dead);
     ClassDB::bind_method(D_METHOD("set_max_health", "health"), &E5PlayerController::set_max_health);
@@ -743,6 +768,7 @@ void E5PlayerController::_ready() {
     clip_leap_ = godot::StringName("leap");
     clip_battlecry_ = godot::StringName("battlecry");
     clip_whirl_ = godot::StringName("whirl");
+    clip_kneel_ = godot::StringName("kneel");
     skills_ = gameplay::SkillBar(skill_bar_set());
     // The first slot is on the left mouse button anyway: the right one starts on the second.
     skills_.select(1);
@@ -1036,6 +1062,10 @@ void E5PlayerController::_physics_process(double delta) {
         animator_.update(static_cast<float>(delta));
         return;
     }
+    if (update_enrage(static_cast<float>(delta))) {
+        return; // beside herself: she goes for the nearest enemy, whatever the keys say
+    }
+    update_tower_charge(aim_pressed, static_cast<float>(delta));
     // The shield: up while the key is held, as long as it lasts.
     if (block_enabled_) {
         const bool block_key = !input_blocked_ && input->is_action_pressed(actions::block);
@@ -1110,6 +1140,16 @@ void E5PlayerController::_physics_process(double delta) {
         if (instant && aim_just_pressed && gameplay::skill_is_channel(skills_.selected()) && !mounted_ && !is_busy() &&
             animator_.has_clip(clip_whirl_) && skill_ready(skills_.selected())) {
             start_channel(skills_.selected());
+        }
+        // The Vine Tower is charged for as long as the button is held, from the next step on.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::VineTower && !mounted_ && !is_busy() &&
+            is_on_floor() && animator_.has_clip(clip_kneel_) && skill_ready(skills_.selected())) {
+            start_tower_charge(skills_.selected());
+        }
+        // Enrage is on at once too; what it does begins with the next step (update_enrage).
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Enrage && !mounted_ && !is_busy() &&
+            !is_enraged() && skill_ready(skills_.selected())) {
+            start_enrage(skills_.selected());
         }
         // The jump attack leaves the ground at once, for the place the crosshair covers.
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::JumpAttack && !mounted_ && !is_busy() &&
@@ -1193,7 +1233,7 @@ void E5PlayerController::_physics_process(double delta) {
     const gameplay::MotorParams params = motor_params();
     // She stands still for the length of a kick.
     const bool dodging = dodge_left_ > 0.0F;
-    const bool rooted = action_.active || input_blocked_ || block_.raised || dodging;
+    const bool rooted = action_.active || input_blocked_ || block_.raised || dodging || tower_charging_;
     const gameplay::MotorInput motor_input{
         .move_right = rooted ? 0.0F : input->get_axis(action_left_, action_right_),
         .move_forward = rooted ? 0.0F : input->get_axis(action_back_, action_forward_),
@@ -1354,7 +1394,13 @@ void E5PlayerController::update_remote(float delta) {
     update_counter(delta);
     update_whirl(delta);
     update_eruptions(delta);
+    update_enrage(delta);
     if ((archery_enabled_ || spells_enabled_) && animator_.is_ready()) {
+        if (pending_start_ && skills_.selected() == gameplay::SkillId::Enrage) {
+            // Where she runs and what she strikes arrive with her place and her clips.
+            pending_start_ = false;
+            start_enrage(skills_.selected());
+        }
         if (pending_start_ && gameplay::skill_is_stance(skills_.selected())) {
             pending_start_ = false;
             start_stance(skills_.selected());
@@ -1434,6 +1480,9 @@ void E5PlayerController::credit_damage(float damage, bool killed) {
 }
 
 float E5PlayerController::get_cast_progress() const {
+    if (tower_charging_) {
+        return std::clamp(tower_charge_ / gameplay::tower_full_charge_seconds, 0.0F, 1.0F);
+    }
     const float seconds = get_cast_seconds();
     if (seconds <= 0.0F) {
         return -1.0F;
@@ -1446,6 +1495,9 @@ float E5PlayerController::get_cast_progress() const {
 }
 
 float E5PlayerController::get_cast_seconds() const {
+    if (tower_charging_) {
+        return gameplay::tower_full_charge_seconds;
+    }
     if (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming) {
         return bow_timings().draw_seconds;
     }
@@ -1508,6 +1560,11 @@ void E5PlayerController::take_damage(float amount) {
         return; // decided on its own machine
     }
     if (amount > 0.0F && !vitals_.dead && dodge_left_ <= 0.0F) {
+        if (resolve_left_ > 0.0F) {
+            // Never Give Up: only a share of it gets through.
+            resolve_spared_ += amount * (1.0F - gameplay::resolve_damage_share);
+            amount *= gameplay::resolve_damage_share;
+        }
         pending_damage_ += amount;
     }
 }
@@ -1615,8 +1672,17 @@ gameplay::MotorParams E5PlayerController::motor_params() const {
         params.walk_speed = gameplay::whirl_move_speed;
         params.sprint_speed = gameplay::whirl_move_speed;
     }
+    if (stampede_.seconds_left > 0.0F) {
+        params.walk_speed *= gameplay::stampede_move_share;
+        params.sprint_speed *= gameplay::stampede_move_share;
+    }
+    if (is_enraged()) {
+        params.walk_speed *= gameplay::enrage_move_share;
+        params.sprint_speed *= gameplay::enrage_move_share;
+    }
     // Held to a walk: the pace her walking clip is made for, whatever else is pressed.
-    if (!input_blocked_ && !remote_ && godot::Input::get_singleton()->is_action_pressed(actions::walk)) {
+    if (!input_blocked_ && !remote_ && !enrage_driving_ &&
+        godot::Input::get_singleton()->is_action_pressed(actions::walk)) {
         params.walk_speed = mounted_ ? mount_walk_speed_ : walk_clip_speed;
         params.sprint_speed = params.walk_speed;
     }
@@ -1703,6 +1769,14 @@ bool E5PlayerController::update_vitals(float delta) {
         counter_swing_left_ = 0.0F;
         whirl_ = {};
         leap_ = {};
+        resolve_left_ = 0.0F;
+        stampede_ = {};
+        tower_charge_ = 0.0F; // (whatever she charged is lost: nothing grows)
+        update_tower_charge(false, 0.0F);
+        tower_charging_ = false;
+        enrage_left_ = 0.0F;
+        enrage_driving_ = false;
+        enrage_blow_ = -1;
         action_ = {};
         bow_ = {};
         if (nocked_arrow_ != nullptr) {
@@ -1760,6 +1834,9 @@ void E5PlayerController::update_facing(const gameplay::Vec3& velocity, float del
         model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
         return;
     }
+    if (tower_charging_) {
+        return; // she kneels as she stood
+    }
     float target = 0.0F;
     if (is_busy()) {
         // An archer faces where the camera looks and strafes, instead of turning into the movement.
@@ -1787,6 +1864,12 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
     if (emote_left_ > 0.0F) {
         animator_.set_upper(godot::StringName());
         animator_.set_base(clip_emote_, 1.0F);
+        return;
+    }
+    if (tower_charging_) {
+        animator_.set_upper(godot::StringName());
+        animator_.set_base(clip_kneel_, 1.0F);
+        animator_.update(delta);
         return;
     }
     if (is_whirling()) {
@@ -2164,7 +2247,8 @@ void E5PlayerController::prewarm_effects() {
             continue;
         }
         for (const char* const path : {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path,
-                                       leap_impact_path, seismic_burst_path, seismic_stun_path}) {
+                                       leap_impact_path, seismic_burst_path, seismic_stun_path, enrage_path,
+                                       resolve_path, stampede_path}) {
             if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                 prewarm_ids_.push_back(instance->get_instance_id());
             }
@@ -2267,6 +2351,9 @@ void E5PlayerController::use_skill(float power) {
     ++skills_used_;
     note_net_event(1, power);
     switch (skills_.selected()) {
+    case gameplay::SkillId::VineTower:
+        grow_tower(power);
+        break;
     case gameplay::SkillId::ArrowRain:
         fire_rain();
         break;
@@ -2450,7 +2537,7 @@ const SpellTiming* E5PlayerController::advance_combo(gameplay::SkillId skill) {
 }
 
 godot::String E5PlayerController::get_action_skill_name() const {
-    if (!action_.active && !is_whirling() && !is_leaping()) {
+    if (!action_.active && !is_whirling() && !is_leaping() && !is_enraged() && !tower_charging_) {
         return {};
     }
     const std::string_view name = gameplay::skill_info(action_skill_).name;
@@ -2782,9 +2869,17 @@ void E5PlayerController::start_stance(gameplay::SkillId skill) {
     spend(skill);
     last_skill_ = skill;
     ++skills_used_;
-    counter_left_ = gameplay::counter_seconds;
     // Round her and with her for as long as it lasts: the effect's own lifetime is the stance's.
-    E5Effect::spawn(effect_scene(counter_stance_path), this, get_global_position());
+    if (skill == gameplay::SkillId::NeverGiveUp) {
+        resolve_left_ = gameplay::resolve_seconds;
+        E5Effect::spawn(effect_scene(resolve_path), this, get_global_position());
+    } else if (skill == gameplay::SkillId::Stampede) {
+        stampede_ = gameplay::open_wound({}, gameplay::stampede_seconds, gameplay::stampede_tick_seconds);
+        E5Effect::spawn(effect_scene(stampede_path), this, get_global_position());
+    } else {
+        counter_left_ = gameplay::counter_seconds;
+        E5Effect::spawn(effect_scene(counter_stance_path), this, get_global_position());
+    }
     note_net_event(0, 0.0F);
 }
 
@@ -2846,6 +2941,40 @@ void E5PlayerController::answer_blow(const godot::Vector3& from) {
 
 void E5PlayerController::update_counter(float delta) {
     counter_left_ = std::max(counter_left_ - delta, 0.0F);
+    if (stampede_.seconds_left > 0.0F) {
+        // Sprintsz: the ground she pounds hurts what is near, and stone flies up round her.
+        const gameplay::BleedStep pounding = gameplay::step_bleed(stampede_, gameplay::stampede_tick_seconds, delta);
+        stampede_ = pounding.state;
+        for (int tick = 0; tick < pounding.ticks; ++tick) {
+            ++stampede_ticks_;
+            if (!remote_) {
+                combat::blast(this, get_global_position() + godot::Vector3(0.0F, melee_height, 0.0F),
+                              gameplay::stampede_radius, dealt(gameplay::SkillId::Stampede));
+                shake_ = std::max(shake_, stampede_shake);
+            }
+            for (int burst = 0; burst < stampede_bursts; ++burst) {
+                // Spread round her, never twice in the same place (the golden angle), one after another.
+                const float angle = 2.39996F * static_cast<float>(stampede_ticks_ * stampede_bursts + burst);
+                const float away = gameplay::stampede_radius * (0.35F + 0.2F * static_cast<float>(burst));
+                eruptions_.push_back({.in_seconds = 0.08F * static_cast<float>(burst),
+                                      .place = get_global_position() + godot::Vector3(std::cos(angle) * away, 0.05F,
+                                                                                      std::sin(angle) * away),
+                                      .size = stampede_burst_size});
+            }
+        }
+    }
+    if (resolve_left_ > 0.0F) {
+        // Never Give Up: her wounds close, hurt a moment ago or not. (Not for a hero shown here
+        // for another player: her health is counted where she is played.)
+        const float lasts = std::min(delta, resolve_left_);
+        resolve_left_ -= lasts;
+        if (!remote_ && !vitals_.dead) {
+            const float full = effective_vitals().max_health;
+            const float gained = std::min(full * gameplay::resolve_heal_share * lasts, std::max(full - vitals_.health, 0.0F));
+            vitals_.health += gained;
+            resolve_healed_ += gained;
+        }
+    }
     counter_swing_left_ = std::max(counter_swing_left_ - delta, 0.0F);
     for (Bleeding& bleeding : bleeding_) {
         auto* const enemy = godot::Object::cast_to<E5Enemy>(godot::ObjectDB::get_instance(bleeding.enemy));
@@ -2903,6 +3032,210 @@ void E5PlayerController::update_whirl(float delta) {
         if (distance > whirl_pull_keep_off && distance <= gameplay::whirl_pull_radius + enemy->get_body_radius()) {
             enemy->drag(towards / distance * gameplay::whirl_pull_speed);
         }
+    }
+}
+
+void E5PlayerController::start_tower_charge(gameplay::SkillId skill) {
+    last_skill_ = skill;
+    action_skill_ = skill;
+    emote_left_ = 0.0F;
+    tower_charging_ = true;
+    tower_charge_ = 0.0F;
+    set_velocity(godot::Vector3());
+    // The green that runs from her hand into the ground and out round her, while she charges.
+    const godot::Node3D* const effect = E5Effect::spawn(effect_scene(tower_charge_path), this, get_global_position());
+    tower_charge_effect_ = effect != nullptr ? effect->get_instance_id() : 0;
+}
+
+void E5PlayerController::update_tower_charge(bool held, float delta) {
+    if (!tower_charging_) {
+        return;
+    }
+    if (held && is_on_floor()) {
+        tower_charge_ = std::min(tower_charge_ + delta, gameplay::tower_full_charge_seconds);
+        return;
+    }
+    tower_charging_ = false;
+    if (auto* const effect = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(tower_charge_effect_))) {
+        effect->queue_free();
+    }
+    tower_charge_effect_ = 0;
+    const float power = tower_charge_ / gameplay::tower_full_charge_seconds;
+    if (gameplay::tower_height(tower_charge_) <= 0.0F || !is_on_floor()) {
+        // Let go too soon: nothing grows, and she can try again shortly.
+        if (cooldowns_enabled_) {
+            cooldown_left_.at(static_cast<std::size_t>(gameplay::SkillId::VineTower)) =
+                gameplay::tower_cancel_cooldown_seconds;
+        }
+        return;
+    }
+    use_skill(power); // (the cooldown, the count, the word to the other players; then grow_tower)
+}
+
+void E5PlayerController::grow_tower(float power) {
+    const float height = gameplay::tower_height(power * gameplay::tower_full_charge_seconds);
+    const godot::Ref<godot::PackedScene> scene = effect_scene(tower_path);
+    if (height <= 0.0F || scene.is_null()) {
+        return;
+    }
+    auto* const tower = godot::Object::cast_to<godot::Node3D>(scene->instantiate());
+    if (tower == nullptr) {
+        return;
+    }
+    tower->set("height", height);
+    tower->set("stand_seconds", gameplay::tower_stand_seconds);
+    get_parent()->add_child(tower);
+    tower->set_global_position(get_global_position());
+    ++towers_grown_;
+}
+
+void E5PlayerController::start_enrage(gameplay::SkillId skill) {
+    spend(skill);
+    last_skill_ = skill;
+    ++skills_used_;
+    action_skill_ = skill;
+    emote_left_ = 0.0F;
+    enrage_left_ = gameplay::enrage_seconds;
+    enrage_blow_ = -1;
+    enrage_next_blow_ = 0;
+    // Her cry, and the red round her for as long as it lasts.
+    E5Effect::spawn(effect_scene(enrage_path), this, get_global_position());
+    note_net_event(0, 0.0F);
+}
+
+bool E5PlayerController::update_enrage(float delta) {
+    const bool was_driving = enrage_driving_;
+    enrage_driving_ = false;
+    if (!is_enraged()) {
+        enrage_blow_ = -1;
+        return false;
+    }
+    enrage_left_ = std::max(enrage_left_ - delta, 0.0F);
+    // Shown here for another player, or over; or something begun before still has her (a blow
+    // of her own, a roll), or she is in the air or in the saddle: then it does not move her.
+    const bool taken = action_.active || is_aiming() || block_.raised || dodge_left_ > 0.0F || is_whirling() ||
+                       mounted_ || !is_on_floor() || !animator_.is_ready() || !animator_.has_clip(clip_combo_.front());
+    E5Enemy* target = nullptr;
+    if (!remote_ && is_enraged() && !taken) {
+        float nearest = gameplay::enrage_reach;
+        const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+        for (const godot::Variant& node : enemies) {
+            auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+            if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+                continue;
+            }
+            godot::Vector3 to = enemy->get_global_position() - get_global_position();
+            to.y = 0.0F;
+            const float distance = static_cast<float>(to.length()) - enemy->get_body_radius();
+            if (distance <= nearest) {
+                nearest = distance;
+                target = enemy;
+            }
+        }
+    }
+    if (target == nullptr) {
+        // Nobody near enough: she is the player's to steer (and still faster on her feet).
+        enrage_blow_ = -1;
+        if (was_driving) {
+            combo_step_ = -1;
+        }
+        return false;
+    }
+    enrage_driving_ = true;
+    godot::Vector3 towards = target->get_global_position() - get_global_position();
+    towards.y = 0.0F;
+    const auto distance = static_cast<float>(towards.length());
+    const godot::Vector3 forward =
+        distance > 0.05F ? towards / distance : godot::Vector3(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+
+    // The blows of her combo, one after another for as long as the enemy is within her sword's
+    // reach: the same clips and moments, only faster.
+    if (enrage_blow_ >= 0) {
+        const SpellTiming& timing = combo_timings.at(static_cast<std::size_t>(enrage_blow_));
+        const float pace = timing.playback_scale * gameplay::enrage_attack_speed;
+        const godot::StringName& clip = clip_combo_.at(static_cast<std::size_t>(enrage_blow_));
+        enrage_blow_elapsed_ += delta;
+        if (!enrage_arc_shown_ &&
+            enrage_blow_elapsed_ >= (timing.strike_at - look_of(gameplay::SkillId::Slash, enrage_blow_).before) / pace) {
+            enrage_arc_shown_ = true;
+            show_slash_arc();
+        }
+        if (!enrage_struck_ && enrage_blow_elapsed_ >= timing.strike_at / pace) {
+            enrage_struck_ = true;
+            strike_enrage(forward);
+        }
+        if (enrage_blow_elapsed_ >= std::min(timing.end_at, animator_.clip_length(clip)) / pace) {
+            enrage_blow_ = -1;
+        }
+    }
+    if (enrage_blow_ < 0 && distance <= plain_blow.reach + target->get_body_radius() + enrage_strike_gap) {
+        enrage_blow_ = enrage_next_blow_;
+        enrage_next_blow_ = (enrage_next_blow_ + 1) % gameplay::combo_length;
+        enrage_blow_elapsed_ = 0.0F;
+        enrage_struck_ = false;
+        enrage_arc_shown_ = false;
+        // (What draws the arc of a blow and her sword asks these.)
+        action_skill_ = gameplay::SkillId::Enrage;
+        combo_step_ = enrage_blow_;
+        combo_idle_seconds_ = 0.0F;
+    }
+    const bool running = enrage_blow_ < 0;
+
+    // Towards the enemy, as if the player steered her there; she stands for a blow.
+    const gameplay::MotorParams params = motor_params();
+    const gameplay::MotorInput motor_input{
+        .move_right = 0.0F, .move_forward = running ? 1.0F : 0.0F, .sprint = false, .jump = false};
+    const godot::Vector3 current = get_velocity() - combo_push_;
+    combo_push_ = godot::Vector3();
+    const gameplay::MotorState state{
+        .velocity = {.x = static_cast<float>(current.x),
+                     .y = static_cast<float>(current.y),
+                     .z = static_cast<float>(current.z)},
+        .on_floor = is_on_floor(),
+    };
+    // (The motor's "forward" is where a camera of this yaw would look.)
+    const float steer_yaw = std::atan2(-static_cast<float>(forward.x), -static_cast<float>(forward.z));
+    const gameplay::Vec3 next = gameplay::step_velocity(state, motor_input, steer_yaw, params, delta);
+    set_velocity(godot::Vector3(next.x, next.y, next.z));
+    move_and_slide();
+
+    model_yaw_ = gameplay::turn_toward(
+        model_yaw_, gameplay::facing_yaw(static_cast<float>(forward.x), static_cast<float>(forward.z)),
+        turn_speed_ * delta);
+    if (model_ != nullptr) {
+        model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+    }
+    animator_.set_upper(godot::StringName());
+    if (running) {
+        const godot::Vector3 resolved = get_velocity();
+        const float speed = std::hypot(static_cast<float>(resolved.x), static_cast<float>(resolved.z));
+        if (speed < gameplay::LocomotionThresholds{}.idle_below) {
+            animator_.set_base(clip_idle_, 1.0F);
+        } else {
+            animator_.set_base(clip_run_, speed / run_clip_speed);
+        }
+    } else {
+        animator_.set_base(clip_combo_.at(static_cast<std::size_t>(enrage_blow_)),
+                           combo_timings.at(static_cast<std::size_t>(enrage_blow_)).playback_scale *
+                               gameplay::enrage_attack_speed,
+                           enrage_blow_fade);
+    }
+    animator_.update(delta);
+    return true;
+}
+
+void E5PlayerController::strike_enrage(const godot::Vector3& forward) {
+    ++enrage_blows_;
+    const godot::Vector3 centre =
+        get_global_position() + forward * plain_blow.reach + godot::Vector3(0.0F, melee_height, 0.0F);
+    combat::blast(this, centre, plain_blow.radius,
+                  dealt(gameplay::SkillId::Enrage) * gameplay::combo_damage_factor(enrage_blow_));
+    shake_ = std::max(shake_, look_of(gameplay::SkillId::Slash, enrage_blow_).shake * enrage_shake_share);
+    if (godot::Node3D* const impact =
+            E5Effect::spawn(impact_effect(gameplay::SkillId::Slash), get_parent(),
+                            get_global_position() + forward * plain_blow.reach + godot::Vector3(0.0F, 0.06F, 0.0F))) {
+        impact->set_rotation(godot::Vector3(
+            0.0F, gameplay::facing_yaw(static_cast<float>(forward.x), static_cast<float>(forward.z)), 0.0F));
     }
 }
 

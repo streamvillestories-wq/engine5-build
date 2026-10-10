@@ -467,6 +467,11 @@ bool E5Diagnostics::write_report() {
         player_info["skills_used"] = player->get_skills_used();
         player_info["hits_blocked"] = player->get_hits_blocked();
         player_info["counters_struck"] = player->get_counters_struck();
+        player_info["enrage_blows"] = player->get_enrage_blows();
+        player_info["resolve_spared"] = player->get_resolve_spared();
+        player_info["towers_grown"] = player->get_towers_grown();
+        player_info["stampede_ticks"] = player->get_stampede_ticks();
+        player_info["resolve_healed"] = player->get_resolve_healed();
         player_info["charge"] = player->get_charge();
         player_info["blocking"] = player->is_blocking();
         if (const E5Inventory* const inventory = player->get_inventory()) {
