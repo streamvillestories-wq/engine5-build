@@ -255,11 +255,21 @@ constexpr float whirl_shake = 0.008F;       // metres, with every tick
 constexpr float whirl_pull_keep_off = 1.1F; // metres: nearer than this nothing is drawn further in
 // The new warrior's Jump Attack (numbers in e5/gameplay/skills.hpp).
 constexpr const char* leap_impact_path = "res://effects/jump_attack_impact.tscn";
-constexpr float leap_shake = 0.09F;            // metres, as she lands
-constexpr float leap_strike_lead = 0.5F;       // seconds before she lands that the blow's clip begins
-constexpr float leap_min_air_seconds = 0.12F;  // not "landed" while she is still leaving the ground
-constexpr float leap_longest_fall = 2.5F;      // seconds: a leap off a cliff ends at the latest then
-constexpr float leap_remote_seconds = 0.85F;   // another player's leap is taken to land after this
+constexpr float leap_shake = 0.09F;           // metres, as she lands
+constexpr float leap_strike_lead = 0.5F;      // seconds before she lands that the blow's clip begins
+constexpr float leap_min_air_seconds = 0.12F; // not "landed" while she is still leaving the ground
+constexpr float leap_longest_fall = 2.5F;     // seconds: a leap off a cliff ends at the latest then
+constexpr float leap_remote_seconds = 0.85F;  // another player's leap is taken to land after this
+// The new warrior's Seismic Slash (numbers in e5/gameplay/skills.hpp): the ground breaks open in
+// rows, each further out, wider and larger than the one before, one after another.
+constexpr const char* seismic_burst_path = "res://effects/seismic_burst.tscn";
+constexpr const char* seismic_crack_path = "res://effects/seismic_crack.tscn"; // its sound, once
+constexpr const char* seismic_stun_path = "res://effects/seismic_stun.tscn";   // over a stunned enemy
+constexpr int seismic_rows = 5;
+constexpr float seismic_row_seconds = 0.07F; // from one row to the next
+constexpr float seismic_first_row = 2.0F;    // metres ahead of her
+constexpr float seismic_first_size = 0.7F;   // of the burst as made; the last row is twice that
+constexpr float seismic_shake = 0.1F;
 constexpr float counter_shake = 0.02F;         // metres: the jolt of an answered blow
 constexpr float counter_swing_seconds = 0.45F; // her arm strikes the first blow of the combo
 // A blow comes "from" where the one who struck stands: the enemy this near to that place is it.
@@ -390,6 +400,8 @@ const SpellTiming* timing_of(gameplay::SkillId skill) {
         return &thunder_timing;
     case gameplay::SkillId::StarWhirl:
         return &star_timing;
+    case gameplay::SkillId::SeismicSlash:
+        return &thunder_timing; // the same clip: the blow that comes down into the ground
     case gameplay::SkillId::Whirlwind:
         return &whirlwind_timing;
     case gameplay::SkillId::Earthbreaker:
@@ -446,6 +458,7 @@ bool is_melee(gameplay::SkillId skill) {
     case gameplay::SkillId::Earthbreaker:
     case gameplay::SkillId::LeapStrike:
     case gameplay::SkillId::Battlecry:
+    case gameplay::SkillId::SeismicSlash:
         return true;
     default:
         return false;
@@ -1016,6 +1029,7 @@ void E5PlayerController::_physics_process(double delta) {
     }
     update_counter(static_cast<float>(delta));
     update_whirl(static_cast<float>(delta));
+    update_eruptions(static_cast<float>(delta));
     if (is_leaping()) {
         // In the air, and for a moment after she lands, the leap is all that moves her.
         update_leap(static_cast<float>(delta));
@@ -1339,6 +1353,7 @@ void E5PlayerController::update_remote(float delta) {
     }
     update_counter(delta);
     update_whirl(delta);
+    update_eruptions(delta);
     if ((archery_enabled_ || spells_enabled_) && animator_.is_ready()) {
         if (pending_start_ && gameplay::skill_is_stance(skills_.selected())) {
             pending_start_ = false;
@@ -2148,8 +2163,8 @@ void E5PlayerController::prewarm_effects() {
         if (skills_.slot(slot) != gameplay::SkillId::CounterAttack) {
             continue;
         }
-        for (const char* const path :
-             {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path, leap_impact_path}) {
+        for (const char* const path : {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path,
+                                       leap_impact_path, seismic_burst_path, seismic_stun_path}) {
             if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                 prewarm_ids_.push_back(instance->get_instance_id());
             }
@@ -2378,7 +2393,7 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
         clip = &clip_flame_;
     } else if (skill == gameplay::SkillId::FrostEdge) {
         clip = &clip_frost_;
-    } else if (skill == gameplay::SkillId::ThunderCleave) {
+    } else if (skill == gameplay::SkillId::ThunderCleave || skill == gameplay::SkillId::SeismicSlash) {
         clip = &clip_thunder_;
     } else if (skill == gameplay::SkillId::StarWhirl) {
         clip = &clip_star_;
@@ -2545,6 +2560,10 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
     }
     if (spell == gameplay::SkillId::BlackHole) {
         cast_black_hole();
+        return;
+    }
+    if (spell == gameplay::SkillId::SeismicSlash) {
+        strike_seismic();
         return;
     }
     if (is_melee(spell)) {
@@ -2962,6 +2981,73 @@ void E5PlayerController::land_leap() {
             enemy->slow(gameplay::leap_slow_share, gameplay::leap_slow_seconds);
         }
     }
+}
+
+void E5PlayerController::strike_seismic() {
+    // Where the player looks, like every other skill.
+    const godot::Vector3 ahead(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw));
+    const godot::Vector3 right(-ahead.z, 0.0F, ahead.x);
+    const godot::Vector3 feet = get_global_position();
+    shake_ = std::max(shake_, seismic_shake);
+    E5Effect::spawn(effect_scene(seismic_crack_path), get_parent(), feet + ahead * seismic_first_row);
+
+    // The rows of bursts: further out, wider and larger, one after another.
+    const float step = (gameplay::seismic_length - seismic_first_row) / static_cast<float>(seismic_rows - 1);
+    for (int row = 0; row < seismic_rows; ++row) {
+        const float out = seismic_first_row + step * static_cast<float>(row);
+        const float half_width = out * std::tan(gameplay::seismic_half_angle) * 0.8F;
+        const int count = row + 1;
+        for (int index = 0; index < count; ++index) {
+            const float across =
+                count == 1 ? 0.0F : (static_cast<float>(index) / static_cast<float>(count - 1) - 0.5F) * 2.0F;
+            eruptions_.push_back(
+                {.in_seconds = seismic_row_seconds * static_cast<float>(row),
+                 .place = feet + ahead * out + right * (across * half_width) + godot::Vector3(0.0F, 0.06F, 0.0F),
+                 .size = seismic_first_size * (1.0F + static_cast<float>(row) / static_cast<float>(seismic_rows - 1))});
+        }
+    }
+
+    // What stands in the wedge is hit and stunned. (A hero shown here for another player hurts
+    // and stuns nobody: that is decided where she is played.)
+    const float damage = dealt(gameplay::SkillId::SeismicSlash);
+    if (remote_) {
+        return;
+    }
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+            continue;
+        }
+        const godot::Vector3 to = enemy->get_global_position() - feet;
+        if (std::abs(static_cast<float>(to.y)) > 6.0F ||
+            !gameplay::in_wedge(static_cast<float>(to.x), static_cast<float>(to.z), static_cast<float>(ahead.x),
+                                static_cast<float>(ahead.z), gameplay::seismic_length, gameplay::seismic_half_angle,
+                                gameplay::seismic_near, enemy->get_body_radius())) {
+            continue;
+        }
+        combat::hit(enemy, enemy->get_aim_point(), damage);
+        enemy->stun(gameplay::seismic_stun_seconds);
+        // Over its head for as long as it stands stunned; it goes with the enemy.
+        E5Effect::spawn(effect_scene(seismic_stun_path), enemy,
+                        enemy->get_aim_point() + godot::Vector3(0.0F, enemy->get_body_radius() + 0.7F, 0.0F));
+    }
+}
+
+void E5PlayerController::update_eruptions(float delta) {
+    if (eruptions_.empty()) {
+        return;
+    }
+    for (Eruption& eruption : eruptions_) {
+        eruption.in_seconds -= delta;
+        if (eruption.in_seconds <= 0.0F) {
+            if (godot::Node3D* const burst =
+                    E5Effect::spawn(effect_scene(seismic_burst_path), get_parent(), eruption.place)) {
+                burst->set_scale(godot::Vector3(eruption.size, eruption.size, eruption.size));
+            }
+        }
+    }
+    std::erase_if(eruptions_, [](const Eruption& eruption) { return eruption.in_seconds <= 0.0F; });
 }
 
 void E5PlayerController::cast_black_hole() {

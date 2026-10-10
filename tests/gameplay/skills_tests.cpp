@@ -213,11 +213,12 @@ TEST_CASE("the new warrior has her sword's combo, the skills wished for her and 
     CHECK(bar.slot(1) == SkillId::CounterAttack);
     CHECK(bar.slot(2) == SkillId::BladeWhirl);
     CHECK(bar.slot(3) == SkillId::JumpAttack);
-    for (std::size_t slot = 4; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(4) == SkillId::SeismicSlash);
+    for (std::size_t slot = 5; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
     // An empty slot cannot be chosen.
-    CHECK_FALSE(bar.select(4));
+    CHECK_FALSE(bar.select(5));
     CHECK(bar.selected() == SkillId::Slash);
     CHECK(bar.select(1));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
@@ -298,6 +299,36 @@ TEST_CASE("the jump attack's leap lands where it is aimed", "[skills]") {
         CHECK(arc.seconds <= 1.05F);
     }
     CHECK(e5::gameplay::leap_apex_height(15.0F) > e5::gameplay::leap_apex_height(2.0F));
+}
+
+TEST_CASE("the seismic slash catches what is in its wedge", "[skills]") {
+    using e5::gameplay::in_wedge;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::SeismicSlash).name == "Seismic Slash");
+    CHECK(e5::gameplay::skill_damage(SkillId::SeismicSlash) < e5::gameplay::skill_damage(SkillId::Slash));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::SeismicSlash) >= 20.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::SeismicSlash) <= 30.0F);
+
+    const float length = e5::gameplay::seismic_length;
+    const float half = e5::gameplay::seismic_half_angle;
+    const float near = e5::gameplay::seismic_near;
+    // She strikes along +Z.
+    CHECK(in_wedge(0.0F, 8.0F, 0.0F, 1.0F, length, half, near));
+    CHECK(in_wedge(0.0F, 15.0F, 0.0F, 2.0F, length, half, near));
+    CHECK_FALSE(in_wedge(0.0F, 15.5F, 0.0F, 1.0F, length, half, near));
+    CHECK_FALSE(in_wedge(0.0F, -8.0F, 0.0F, 1.0F, length, half, near));
+    // 30 degrees to either side: at 10 m ahead that is 5.8 m aside.
+    CHECK(in_wedge(5.5F, 10.0F, 0.0F, 1.0F, length, half, near));
+    CHECK(in_wedge(-5.5F, 10.0F, 0.0F, 1.0F, length, half, near));
+    CHECK_FALSE(in_wedge(6.5F, 10.0F, 0.0F, 1.0F, length, half, near));
+    // A wide body reaches in from beside it.
+    CHECK(in_wedge(6.5F, 10.0F, 0.0F, 1.0F, length, half, near, 1.0F));
+    // Right at her feet the wedge is as wide as she is: beside her counts, behind her does not.
+    CHECK(in_wedge(1.2F, 0.3F, 0.0F, 1.0F, length, half, near));
+    CHECK_FALSE(in_wedge(0.5F, -1.0F, 0.0F, 1.0F, length, half, near));
+    // Along another way.
+    CHECK(in_wedge(7.0F, 0.5F, 1.0F, 0.0F, length, half, near));
+    CHECK_FALSE(in_wedge(0.5F, 7.0F, 1.0F, 0.0F, length, half, near));
 }
 
 TEST_CASE("a wound bleeds once a tick until its time is up", "[skills]") {

@@ -73,6 +73,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Whirlwind", .charges = false, .kind = SkillKind::Instant};
     case SkillId::JumpAttack:
         return {.name = "Jump Attack", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::SeismicSlash:
+        return {.name = "Seismic Slash", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -152,6 +154,8 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 8.0F; // every half second to all it reaches: 64 over its four seconds
     case SkillId::JumpAttack:
         return 33.0F; // one and a half sword blows, to everything where she lands
+    case SkillId::SeismicSlash:
+        return 11.0F; // half a sword blow to each: what it is for is the stun
     case SkillId::None:
         break;
     }
@@ -241,6 +245,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::JumpAttack:
         return 12.0F;
     // Rarely.
+    case SkillId::SeismicSlash:
     case SkillId::BladeWhirl:
         return 20.0F;
     // The standard attacks, and the skills that take a charge instead.
@@ -267,6 +272,25 @@ bool skill_needs_charge(SkillId skill) noexcept {
 float charge_after(float charge, float damage_dealt, bool killed) noexcept {
     const float gained = std::max(damage_dealt, 0.0F) * charge_per_damage + (killed ? charge_per_kill : 0.0F);
     return std::clamp(charge + gained, 0.0F, 1.0F);
+}
+
+bool in_wedge(float dx, float dz, float ahead_x, float ahead_z, float length, float half_angle, float near,
+              float allowance) noexcept {
+    const float distance = std::hypot(dx, dz);
+    const float ahead = std::hypot(ahead_x, ahead_z);
+    if (distance > length + allowance || ahead <= 0.0F) {
+        return false;
+    }
+    if (distance <= allowance) {
+        return true; // where she stands
+    }
+    const float along = (dx * ahead_x + dz * ahead_z) / ahead; // how far ahead of her it is
+    if (distance <= near + allowance) {
+        return along >= 0.0F;
+    }
+    // Its body may reach into the wedge from beside it.
+    const float aside = std::sqrt(std::max(distance * distance - along * along, 0.0F));
+    return along > 0.0F && aside - allowance <= along * std::tan(half_angle);
 }
 
 float leap_apex_height(float distance) noexcept {
@@ -348,7 +372,8 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
                   SkillId::Battlecry};
     } else if (set == SkillSet::Blade) {
-        slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack};
+        slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,
+                  SkillId::SeismicSlash};
     } else if (set == SkillSet::Archer) {
         slots_ = {SkillId::Shot};
     } else if (set == SkillSet::Warrior) {

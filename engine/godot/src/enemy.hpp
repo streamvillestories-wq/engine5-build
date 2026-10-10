@@ -69,6 +69,10 @@ public:
     // Takes `share` of its pace away for so many seconds (the blow of a jump attack). A new
     // slowing replaces the old one if it is at least as strong.
     void slow(float share, float seconds);
+    // Stuns it for so many seconds: it stands, neither walks nor strikes nor casts, and sees
+    // nobody. It can be hit meanwhile, and goes for the hero again when it is over.
+    void stun(float seconds) { stunned_left_ = std::max(stunned_left_, seconds); }
+    [[nodiscard]] bool is_stunned() const { return stunned_left_ > 0.0F; }
     // Throws it: it flies under gravity until it lands, then carries on as before.
     void fling(const godot::Vector3& velocity);
 
@@ -236,6 +240,7 @@ private:
     godot::Vector3 dragged_;    // what draws it along in the next step (see drag)
     float slowed_share_ = 0.0F; // of its pace, taken away while slowed_left_ runs
     float slowed_left_ = 0.0F;
+    float stunned_left_ = 0.0F; // seconds it still stands stunned
     // Its pace now: move_speed_, less what slows it.
     [[nodiscard]] float pace() const { return move_speed_ * (slowed_left_ > 0.0F ? 1.0F - slowed_share_ : 1.0F); }
     bool remote_ = false;

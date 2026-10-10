@@ -665,6 +665,7 @@ void E5Enemy::_physics_process(double delta) {
     }
     rooted_left_ = std::max(rooted_left_ - dt, 0.0F);
     slowed_left_ = std::max(slowed_left_ - dt, 0.0F);
+    stunned_left_ = std::max(stunned_left_ - dt, 0.0F);
     if (held_) {
         animator_.update(dt);
         return; // the holder moves it
@@ -695,8 +696,10 @@ void E5Enemy::_physics_process(double delta) {
         to_player = player->get_global_position() - get_global_position();
         to_player.y = 0.0F;
     }
+    // Stunned, it sees nobody: it neither comes on nor strikes. What hits it still counts.
+    const bool stunned = stunned_left_ > 0.0F;
     const gameplay::EnemyInput input{
-        .has_player = player != nullptr,
+        .has_player = player != nullptr && !stunned,
         .distance_to_player = static_cast<float>(to_player.length()),
         .damage = pending_damage_,
         .heaviest_blow = heaviest_pending_blow_,
@@ -728,7 +731,7 @@ void E5Enemy::_physics_process(double delta) {
     if (hover_height_ > 0.0F) {
         fly(step, to_player, dt);
     } else {
-        walk(step.moving && !rooted, direction, dt);
+        walk(step.moving && !rooted && !stunned, direction, dt);
     }
 
     // Once it has noticed the player it keeps facing her.
@@ -893,6 +896,7 @@ void E5Enemy::respawn() {
     flung_ = false;
     rooted_left_ = 0.0F;
     slowed_left_ = 0.0F;
+    stunned_left_ = 0.0F;
     set_shrink(1.0F);
     pending_damage_ = 0.0F;
     heaviest_pending_blow_ = 0.0F;

@@ -51,6 +51,7 @@ enum class SkillId : unsigned char {
     CounterAttack, // the new warrior's: for a few seconds she answers every blow that lands on her
     BladeWhirl,    // the new warrior's "Whirlwind": she whirls with her sword and draws enemies in
     JumpAttack,    // the new warrior's: a high leap onto the place aimed at, and a blow where she lands
+    SeismicSlash,  // the new warrior's: a blow into the ground that breaks it open ahead of her and stuns
 };
 
 // Which skills a character has on the bar.
@@ -149,6 +150,18 @@ struct LeapArc {
 [[nodiscard]] LeapArc leap_arc(float distance) noexcept;
 // How high above the start the middle of that leap is.
 [[nodiscard]] float leap_apex_height(float distance) noexcept;
+
+// The new warrior's Seismic Slash (bug report 24, a player's wish): she strikes the ground and
+// it breaks open ahead of her, in a wedge that widens with the distance. Every enemy in the
+// wedge takes skill_damage and is stunned: it neither moves nor strikes for a while.
+inline constexpr float seismic_length = 15.0F;       // metres ahead of her
+inline constexpr float seismic_half_angle = 0.5236F; // radians to either side: a wedge of 60 degrees
+inline constexpr float seismic_near = 1.5F;          // metres: this near, whatever is not behind her is caught
+inline constexpr float seismic_stun_seconds = 2.0F;
+// Whether something at (dx, dz) from her is in such a wedge, she striking along (ahead_x, ahead_z)
+// (need not be of length one). `allowance`: the width of its body.
+[[nodiscard]] bool in_wedge(float dx, float dz, float ahead_x, float ahead_z, float length, float half_angle,
+                            float near, float allowance = 0.0F) noexcept;
 
 // A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound
 // on the same enemy starts the time anew and keeps the beat (no second wound beside it).

@@ -362,6 +362,9 @@ private:
     void update_leap(float delta);
     void land_leap();
     [[nodiscard]] bool is_leaping() const { return leap_.flying || leap_.recover_left > 0.0F; }
+    // The Seismic Slash: her blow lands; the ground breaks open ahead of her, row after row.
+    void strike_seismic();
+    void update_eruptions(float delta);
     // The glow in his hand for a spell: the cast effect's variant for the spell's element
     // (<cast effect>_fire.tscn, _frost, _lightning, _star, _void), or the cast effect itself.
     [[nodiscard]] godot::Ref<godot::PackedScene> cast_glow(gameplay::SkillId spell) const;
@@ -519,6 +522,13 @@ private:
     };
     Leap leap_;
     float remote_leap_left_ = 0.0F; // another player's hero: seconds until her leap lands here
+    // Bursts of the Seismic Slash still to come: the ground breaks open further and further out.
+    struct Eruption {
+        float in_seconds = 0.0F;
+        godot::Vector3 place;
+        float size = 1.0F;
+    };
+    std::vector<Eruption> eruptions_;
     godot::StringName clip_block_;
     godot::Ref<godot::PackedScene> block_spark_;
     // Seconds until each skill can be used again, by its number; and the charge, 0 to 1.
