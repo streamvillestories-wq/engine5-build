@@ -205,18 +205,64 @@ TEST_CASE("the wizard has his own skills on the bar", "[skills]") {
           e5::gameplay::skill_damage(e5::gameplay::SkillId::ArcaneBolt));
 }
 
-TEST_CASE("the new warrior has her sword's combo and nine slots to fill", "[skills]") {
+TEST_CASE("the new warrior has her sword's combo, the skills wished for her and slots to fill", "[skills]") {
     using e5::gameplay::SkillId;
     e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Blade);
 
     CHECK(bar.slot(0) == SkillId::Slash);
-    for (std::size_t slot = 1; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(1) == SkillId::CounterAttack);
+    for (std::size_t slot = 2; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
-    // Nothing to choose yet: the selection stays on the combo.
-    CHECK_FALSE(bar.select(1));
+    // An empty slot cannot be chosen.
+    CHECK_FALSE(bar.select(2));
     CHECK(bar.selected() == SkillId::Slash);
+    CHECK(bar.select(1));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
+}
+
+TEST_CASE("the counter attack is a stance within the warrior's range", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_is_stance(SkillId::CounterAttack));
+    CHECK_FALSE(e5::gameplay::skill_is_stance(SkillId::Slash));
+    CHECK(e5::gameplay::skill_info(SkillId::CounterAttack).kind == e5::gameplay::SkillKind::Instant);
+    CHECK(e5::gameplay::skill_info(SkillId::CounterAttack).name == "Counter Attack");
+    // One answer is less than a blow of her sword; with its wound, less than her finisher twice.
+    const float answer = e5::gameplay::skill_damage(SkillId::CounterAttack);
+    const float wound = e5::gameplay::counter_bleed_tick_damage * e5::gameplay::counter_bleed_seconds /
+                        e5::gameplay::counter_bleed_tick_seconds;
+    CHECK(answer > 0.0F);
+    CHECK(answer < e5::gameplay::skill_damage(SkillId::Slash));
+    CHECK(answer + wound < 2.0F * e5::gameplay::skill_damage(SkillId::Slash) * e5::gameplay::combo_damage_factor(2));
+    // "Now and then": 8 to 12 seconds, and she does not stand ready all the time.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::CounterAttack) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::CounterAttack) <= 12.0F);
+    CHECK(e5::gameplay::counter_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::CounterAttack));
+    CHECK_FALSE(e5::gameplay::skill_needs_charge(SkillId::CounterAttack));
+}
+
+TEST_CASE("a wound bleeds once a tick until its time is up", "[skills]") {
+    using e5::gameplay::BleedState;
+    BleedState wound = e5::gameplay::open_wound({}, 3.0F, 1.0F);
+    int ticks = 0;
+    for (int frame = 0; frame < 60 * 5; ++frame) {
+        const e5::gameplay::BleedStep step = e5::gameplay::step_bleed(wound, 1.0F, 1.0F / 60.0F);
+        wound = step.state;
+        ticks += step.ticks;
+    }
+    CHECK(ticks == 3);
+    CHECK(wound.seconds_left == 0.0F);
+    // Nothing more comes of a wound that has closed.
+    CHECK(e5::gameplay::step_bleed(wound, 1.0F, 10.0F).ticks == 0);
+
+    // One long step: every tick that fell due in it, and none after the end.
+    CHECK(e5::gameplay::step_bleed(e5::gameplay::open_wound({}, 3.0F, 1.0F), 1.0F, 60.0F).ticks == 3);
+
+    // Struck again while it bleeds: the time starts anew, the beat goes on.
+    BleedState again = e5::gameplay::step_bleed(e5::gameplay::open_wound({}, 3.0F, 1.0F), 1.0F, 0.6F).state;
+    again = e5::gameplay::open_wound(again, 3.0F, 1.0F);
+    CHECK(again.seconds_left == 3.0F);
+    CHECK(again.until_tick < 0.5F);
 }
 
 TEST_CASE("the warrior has her own skills on the bar", "[skills]") {

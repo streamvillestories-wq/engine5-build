@@ -246,6 +246,11 @@ public:
         return block_.raised ? block_params_.max_hold_seconds - block_.held_seconds : 0.0F;
     }
     [[nodiscard]] int get_hits_blocked() const { return hits_blocked_; }
+    // A stance (the new warrior's Counter Attack, e5/gameplay/skills.hpp): the seconds she still
+    // stands ready, also for another player's hero (game/characters/stance_glow.gd shows it), and
+    // how many blows she has answered (for tests).
+    [[nodiscard]] float get_stance_seconds() const { return counter_left_; }
+    [[nodiscard]] int get_counters_struck() const { return counters_struck_; }
 
     // A remote hero is another player's, shown here: it takes no input, has no camera and no
     // interface, collides with nothing, and does what `apply_net_state` tells it. To be set
@@ -341,6 +346,11 @@ private:
     void tick_combo(float delta);
     const SpellTiming* advance_combo(gameplay::SkillId skill);
     void strike_melee(gameplay::SkillId skill);
+    // The Counter Attack: the stance begins; a blow that came from `from` is answered; the
+    // stance runs out and the wounds bleed.
+    void start_stance(gameplay::SkillId skill);
+    void answer_blow(const godot::Vector3& from);
+    void update_counter(float delta);
     // The glow in his hand for a spell: the cast effect's variant for the spell's element
     // (<cast effect>_fire.tscn, _frost, _lightning, _star, _void), or the cast effect itself.
     [[nodiscard]] godot::Ref<godot::PackedScene> cast_glow(gameplay::SkillId spell) const;
@@ -475,10 +485,18 @@ private:
     gameplay::BlockParams block_params_;
     gameplay::BlockState block_;
     int hits_blocked_ = 0;
+    float counter_left_ = 0.0F;       // seconds she still stands ready to answer a blow
+    float counter_swing_left_ = 0.0F; // seconds of the answering blow her arm still shows
+    int counters_struck_ = 0;
+    struct Bleeding {
+        std::uint64_t enemy = 0; // an id: it may be gone
+        gameplay::BleedState wound;
+    };
+    std::vector<Bleeding> bleeding_;
     godot::StringName clip_block_;
     godot::Ref<godot::PackedScene> block_spark_;
     // Seconds until each skill can be used again, by its number; and the charge, 0 to 1.
-    std::array<float, 32> cooldown_left_{};
+    std::array<float, 64> cooldown_left_{};
     float charge_ = 0.0F;
     bool charge_always_full_ = false;
     bool cooldowns_enabled_ = true;

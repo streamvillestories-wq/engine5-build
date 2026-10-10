@@ -67,6 +67,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Bramble Arrow", .charges = false, .kind = SkillKind::Bow};
     case SkillId::DaggerCombo:
         return {.name = "Dagger Combo", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::CounterAttack:
+        return {.name = "Counter Attack", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -140,6 +142,8 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 18.0F; // to everything it catches
     case SkillId::DaggerCombo:
         return 20.0F; // the first blow; see combo_damage_factor. Less than an arrow, but at once
+    case SkillId::CounterAttack:
+        return 18.0F; // each answer: four fifths of a sword blow; its wound adds counter_bleed_tick_damage
     case SkillId::None:
         break;
     }
@@ -224,6 +228,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 9.0F;
     case SkillId::Meteor:
     case SkillId::BrambleArrow:
+    case SkillId::CounterAttack: // from the key: she stands ready for half of it
         return 10.0F;
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
@@ -249,6 +254,30 @@ bool skill_needs_charge(SkillId skill) noexcept {
 float charge_after(float charge, float damage_dealt, bool killed) noexcept {
     const float gained = std::max(damage_dealt, 0.0F) * charge_per_damage + (killed ? charge_per_kill : 0.0F);
     return std::clamp(charge + gained, 0.0F, 1.0F);
+}
+
+BleedState open_wound(const BleedState& state, float seconds, float tick_seconds) noexcept {
+    // One that bleeds already keeps its beat; a fresh one hurts first after a whole tick.
+    return {.seconds_left = seconds, .until_tick = state.seconds_left > 0.0F ? state.until_tick : tick_seconds};
+}
+
+BleedStep step_bleed(const BleedState& state, float tick_seconds, float dt) noexcept {
+    BleedStep step{.state = state};
+    if (state.seconds_left <= 0.0F || tick_seconds <= 0.0F || dt <= 0.0F) {
+        return step;
+    }
+    // Only the time the wound still has counts: a long step does not bleed past its end.
+    float passed = std::min(dt, state.seconds_left);
+    step.state.seconds_left = state.seconds_left - passed;
+    // (A hair of allowance: the last tick falls due exactly as the wound closes.)
+    constexpr float allowance = 1e-4F;
+    while (passed + allowance >= step.state.until_tick) {
+        passed = std::max(passed - step.state.until_tick, 0.0F);
+        step.state.until_tick = tick_seconds;
+        ++step.ticks;
+    }
+    step.state.until_tick -= passed;
+    return step;
 }
 
 BlockStep step_block(const BlockState& state, bool pressed, bool held, bool able, const BlockParams& params,
@@ -290,7 +319,7 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
                   SkillId::Battlecry};
     } else if (set == SkillSet::Blade) {
-        slots_ = {SkillId::Slash};
+        slots_ = {SkillId::Slash, SkillId::CounterAttack};
     } else if (set == SkillSet::Archer) {
         slots_ = {SkillId::Shot};
     } else if (set == SkillSet::Warrior) {

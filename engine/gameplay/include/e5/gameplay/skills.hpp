@@ -47,6 +47,8 @@ enum class SkillId : unsigned char {
     // The archer's dagger, for what has come too close for the bow: like Slash, a blow that
     // continues as a combo. On a key of its own (F).
     DaggerCombo,
+    // Made from players' skill wishes (docs/BUGS.md, "Skill wishes"), one by one. At the end.
+    CounterAttack, // the new warrior's: for a few seconds she answers every blow that lands on her
 };
 
 // Which skills a character has on the bar.
@@ -92,6 +94,34 @@ inline constexpr float storm_jump_reach = 9.0F;     // metres from one to the ne
 inline constexpr float storm_jump_share = 0.7F;     // of the arrow's damage, for each of them
 inline constexpr float bramble_radius = 4.0F;       // metres
 inline constexpr float bramble_root_seconds = 5.0F; // how long what it caught cannot move
+
+// The new warrior's Counter Attack (bug report 21, a player's wish): for `counter_seconds` after
+// the key every blow an enemy lands on her from within `counter_reach` is answered at once with
+// a blow of her own (skill_damage) that leaves a wound which bleeds. She is still hit herself.
+inline constexpr float counter_seconds = 5.0F;            // how long she stands ready
+inline constexpr float counter_reach = 5.0F;              // metres from her to the one who struck
+inline constexpr float counter_bleed_seconds = 3.0F;      // the wound bleeds this long ...
+inline constexpr float counter_bleed_tick_seconds = 1.0F; // ... and hurts this often ...
+inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 in all
+
+// A stance is on at once on its key and stays on for a while: it has no clip that plays
+// through and does not hold her where she stands.
+[[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
+    return skill == SkillId::CounterAttack;
+}
+
+// A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound
+// on the same enemy starts the time anew and keeps the beat (no second wound beside it).
+struct BleedState {
+    float seconds_left = 0.0F;
+    float until_tick = 0.0F;
+};
+struct BleedStep {
+    BleedState state;
+    int ticks = 0; // how many times it hurts in this step
+};
+[[nodiscard]] BleedState open_wound(const BleedState& state, float seconds, float tick_seconds) noexcept;
+[[nodiscard]] BleedStep step_bleed(const BleedState& state, float tick_seconds, float dt) noexcept;
 
 [[nodiscard]] SkillInfo skill_info(SkillId skill) noexcept;
 

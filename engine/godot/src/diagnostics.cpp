@@ -466,6 +466,7 @@ bool E5Diagnostics::write_report() {
         player_info["last_skill"] = player->get_last_skill();
         player_info["skills_used"] = player->get_skills_used();
         player_info["hits_blocked"] = player->get_hits_blocked();
+        player_info["counters_struck"] = player->get_counters_struck();
         player_info["charge"] = player->get_charge();
         player_info["blocking"] = player->is_blocking();
         if (const E5Inventory* const inventory = player->get_inventory()) {

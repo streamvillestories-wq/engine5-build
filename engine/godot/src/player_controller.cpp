@@ -245,6 +245,14 @@ constexpr const char* landing_dust_path = "res://effects/axe_wind_impact.tscn";
 constexpr const char* block_clip = "shield_block";
 constexpr const char* block_spark_path = "res://effects/shield_block.tscn";
 constexpr float block_shake = 0.03F;
+// The Counter Attack (the numbers are in e5/gameplay/skills.hpp): what is seen and heard of it.
+constexpr const char* counter_stance_path = "res://effects/counter_stance.tscn";
+constexpr const char* counter_strike_path = "res://effects/counter_strike.tscn";
+constexpr const char* counter_bleed_path = "res://effects/counter_bleed.tscn";
+constexpr float counter_shake = 0.02F;         // metres: the jolt of an answered blow
+constexpr float counter_swing_seconds = 0.45F; // her arm strikes the first blow of the combo
+// A blow comes "from" where the one who struck stands: the enemy this near to that place is it.
+constexpr float counter_attacker_slack = 1.5F; // metres
 struct ComboLook {
     // The plane the arc is drawn in, as two directions in her own terms (right, up, forward):
     // the arc runs from a little behind `y` round through `x` and on. None of the planes is
@@ -550,6 +558,8 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_block_cooldown_seconds"), &E5PlayerController::get_block_cooldown_seconds);
     ClassDB::bind_method(D_METHOD("get_block_time_left"), &E5PlayerController::get_block_time_left);
     ClassDB::bind_method(D_METHOD("get_hits_blocked"), &E5PlayerController::get_hits_blocked);
+    ClassDB::bind_method(D_METHOD("get_stance_seconds"), &E5PlayerController::get_stance_seconds);
+    ClassDB::bind_method(D_METHOD("get_counters_struck"), &E5PlayerController::get_counters_struck);
     ClassDB::bind_method(D_METHOD("get_health"), &E5PlayerController::get_health);
     ClassDB::bind_method(D_METHOD("is_dead"), &E5PlayerController::is_dead);
     ClassDB::bind_method(D_METHOD("set_max_health", "health"), &E5PlayerController::set_max_health);
@@ -841,7 +851,8 @@ void E5PlayerController::setup_animation() {
         // The shot cycle follows the clips, so the string and the hands stay in step.
         bow_timings_.draw_seconds = animator_.clip_length(clip_bow_draw_);
         bow_timings_.release_seconds = animator_.clip_length(clip_bow_recoil_);
-    } else if (instant_clip(skills_.selected()) != nullptr) {
+    } else if (instant_clip(skills_.slot(0)) != nullptr) {
+        // (Her standard attack's clip: the slot that is selected may hold a stance, which has none.)
         setup_spells();
     }
 }
@@ -991,6 +1002,7 @@ void E5PlayerController::_physics_process(double delta) {
     for (float& left : cooldown_left_) {
         left = std::max(left - static_cast<float>(delta), 0.0F);
     }
+    update_counter(static_cast<float>(delta));
     // The shield: up while the key is held, as long as it lasts.
     if (block_enabled_) {
         const bool block_key = !input_blocked_ && input->is_action_pressed(actions::block);
@@ -1056,6 +1068,11 @@ void E5PlayerController::_physics_process(double delta) {
     // Instant skills start on the press and play through; the bow stays down meanwhile.
     const bool instant = gameplay::skill_info(skills_.selected()).kind == gameplay::SkillKind::Instant;
     if (archery_enabled_ || spells_enabled_) {
+        // A stance is on at once and holds her to nothing: no action begins.
+        if (instant && aim_just_pressed && gameplay::skill_is_stance(skills_.selected()) && !mounted_ &&
+            skill_ready(skills_.selected())) {
+            start_stance(skills_.selected());
+        }
         const bool start = instant && aim_just_pressed && !block_.raised && can_start_instant_skill(skills_.selected());
         // A combo is one movement, not three clicks timed to the frame: a press during a blow
         // counts for the next one, and so does a button that is still held when the blow ends.
@@ -1289,7 +1306,12 @@ void E5PlayerController::update_remote(float delta) {
             model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
         }
     }
+    update_counter(delta);
     if ((archery_enabled_ || spells_enabled_) && animator_.is_ready()) {
+        if (pending_start_ && gameplay::skill_is_stance(skills_.selected())) {
+            pending_start_ = false;
+            start_stance(skills_.selected());
+        }
         const bool start = pending_start_ && instant_clip(skills_.selected()) != nullptr;
         pending_start_ = false;
         if (start) {
@@ -1401,6 +1423,9 @@ bool E5PlayerController::is_skill_ready(int slot) const {
 void E5PlayerController::take_damage_from(float amount, const godot::Vector3& from) {
     if (remote_ || amount <= 0.0F || vitals_.dead || dodge_left_ > 0.0F) {
         return; // (a dodge is not hit)
+    }
+    if (counter_left_ > 0.0F) {
+        answer_blow(from); // she is hit all the same, unless her shield is in the way
     }
     const godot::Vector3 away = from - get_global_position();
     if (block_.raised && gameplay::shield_covers(model_yaw_, static_cast<float>(away.x), static_cast<float>(away.z))) {
@@ -1607,6 +1632,8 @@ bool E5PlayerController::update_vitals(float delta) {
     if (step.died) {
         ++death_count_;
         // Whatever she was doing ends here.
+        counter_left_ = 0.0F;
+        counter_swing_left_ = 0.0F;
         action_ = {};
         bow_ = {};
         if (nocked_arrow_ != nullptr) {
@@ -1752,7 +1779,10 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
             animator_.set_upper(base != &clip_bow_aim_ ? clip_bow_aim_ : godot::StringName());
         }
     } else {
-        animator_.set_upper(godot::StringName());
+        // An answered blow: her arm strikes while her legs go on with what they do.
+        animator_.set_upper(counter_swing_left_ > 0.0F && animator_.has_clip(clip_combo_.front())
+                                ? clip_combo_.front()
+                                : godot::StringName());
         // Coming down from a jump she settles into standing or running over a longer stretch.
         const bool landing = animator_.base_clip() == clip_jump_;
         const float fade = landing ? landing_fade_seconds : usual_fade_seconds;
@@ -2042,6 +2072,16 @@ void E5PlayerController::prewarm_effects() {
                         E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                     prewarm_ids_.push_back(instance->get_instance_id());
                 }
+            }
+        }
+    }
+    for (std::size_t slot = 0; slot < gameplay::SkillBar::slot_count; ++slot) {
+        if (skills_.slot(slot) != gameplay::SkillId::CounterAttack) {
+            continue;
+        }
+        for (const char* const path : {counter_stance_path, counter_strike_path, counter_bleed_path}) {
+            if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
+                prewarm_ids_.push_back(instance->get_instance_id());
             }
         }
     }
@@ -2647,6 +2687,93 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
                                   godot::Color(0.6F, 0.9F, 3.0F));
         }
     }
+}
+
+void E5PlayerController::start_stance(gameplay::SkillId skill) {
+    spend(skill);
+    last_skill_ = skill;
+    ++skills_used_;
+    counter_left_ = gameplay::counter_seconds;
+    // Round her and with her for as long as it lasts: the effect's own lifetime is the stance's.
+    E5Effect::spawn(effect_scene(counter_stance_path), this, get_global_position());
+    note_net_event(0, 0.0F);
+}
+
+void E5PlayerController::answer_blow(const godot::Vector3& from) {
+    // Who struck: the living enemy nearest to where the blow came from, if it is that near to
+    // the place and within her reach. (An arrow or a bolt comes from no enemy's place.)
+    E5Enemy* attacker = nullptr;
+    float nearest = counter_attacker_slack;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive()) {
+            continue;
+        }
+        const float distance = static_cast<float>(enemy->get_global_position().distance_to(from));
+        if (distance <= nearest) {
+            nearest = distance;
+            attacker = enemy;
+        }
+    }
+    if (attacker == nullptr) {
+        return;
+    }
+    godot::Vector3 towards = attacker->get_global_position() - get_global_position();
+    towards.y = 0.0F;
+    if (static_cast<float>(towards.length()) > gameplay::counter_reach + attacker->get_body_radius()) {
+        return;
+    }
+    const godot::Vector3 body = attacker->get_aim_point();
+    combat::hit(attacker, body, dealt(gameplay::SkillId::CounterAttack));
+    ++counters_struck_;
+    shake_ = std::max(shake_, counter_shake);
+    counter_swing_left_ = counter_swing_seconds;
+    E5Effect::spawn(effect_scene(counter_strike_path), get_parent(), body);
+
+    // The wound: one for each enemy, begun anew by every answer.
+    const std::uint64_t id = attacker->get_instance_id();
+    auto wound = std::ranges::find(bleeding_, id, &Bleeding::enemy);
+    if (wound == bleeding_.end()) {
+        bleeding_.push_back({.enemy = id, .wound = {}});
+        wound = bleeding_.end() - 1;
+    }
+    wound->wound =
+        gameplay::open_wound(wound->wound, gameplay::counter_bleed_seconds, gameplay::counter_bleed_tick_seconds);
+
+    // The arc of her blade, towards the one she answers: level, dipping on the far side.
+    if (slash_arc_.is_null() || towards.length() < 0.05F) {
+        return;
+    }
+    if (godot::Node3D* const arc =
+            E5Effect::spawn(slash_arc_, this, get_global_position() + godot::Vector3(0.0F, 1.2F, 0.0F))) {
+        const godot::Vector3 forward = towards.normalized();
+        const godot::Vector3 right(-forward.z, 0.0F, forward.x);
+        const godot::Vector3 x = (forward * 0.94F + godot::Vector3(0.0F, -0.34F, 0.0F)).normalized();
+        const godot::Vector3 y = (right - x * right.dot(x)).normalized();
+        arc->set_global_basis(godot::Basis(x, y, x.cross(y)));
+    }
+}
+
+void E5PlayerController::update_counter(float delta) {
+    counter_left_ = std::max(counter_left_ - delta, 0.0F);
+    counter_swing_left_ = std::max(counter_swing_left_ - delta, 0.0F);
+    for (Bleeding& bleeding : bleeding_) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(godot::ObjectDB::get_instance(bleeding.enemy));
+        if (enemy == nullptr || !enemy->is_alive()) {
+            bleeding.wound = {};
+            continue;
+        }
+        const gameplay::BleedStep step =
+            gameplay::step_bleed(bleeding.wound, gameplay::counter_bleed_tick_seconds, delta);
+        bleeding.wound = step.state;
+        for (int tick = 0; tick < step.ticks; ++tick) {
+            const godot::Vector3 body = enemy->get_aim_point();
+            combat::hit(enemy, body, gameplay::counter_bleed_tick_damage);
+            E5Effect::spawn(effect_scene(counter_bleed_path), get_parent(), body);
+        }
+    }
+    std::erase_if(bleeding_, [](const Bleeding& bleeding) { return bleeding.wound.seconds_left <= 0.0F; });
 }
 
 void E5PlayerController::cast_black_hole() {
