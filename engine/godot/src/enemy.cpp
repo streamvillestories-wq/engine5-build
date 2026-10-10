@@ -627,6 +627,11 @@ void E5Enemy::walk(bool moving, const godot::Vector3& direction, float dt) {
     godot::Vector3 velocity = get_velocity();
     velocity.x = moving ? direction.x * move_speed_ : 0.0F;
     velocity.z = moving ? direction.z * move_speed_ : 0.0F;
+    if (rooted_left_ <= 0.0F) {
+        velocity.x += dragged_.x;
+        velocity.z += dragged_.z;
+    }
+    dragged_ = godot::Vector3();
     velocity.y = is_on_floor() ? 0.0F : velocity.y - gravity_ * dt;
     set_velocity(velocity);
     move_and_slide();

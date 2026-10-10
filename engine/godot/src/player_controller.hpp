@@ -351,6 +351,11 @@ private:
     void start_stance(gameplay::SkillId skill);
     void answer_blow(const godot::Vector3& from);
     void update_counter(float delta);
+    // The Whirlwind, a channel: it begins; and while it lasts it strikes round her and draws
+    // enemies in. (Her turning is in update_facing, her pose in update_animation.)
+    void start_channel(gameplay::SkillId skill);
+    void update_whirl(float delta);
+    [[nodiscard]] bool is_whirling() const { return whirl_.seconds_left > 0.0F; }
     // The glow in his hand for a spell: the cast effect's variant for the spell's element
     // (<cast effect>_fire.tscn, _frost, _lightning, _star, _void), or the cast effect itself.
     [[nodiscard]] godot::Ref<godot::PackedScene> cast_glow(gameplay::SkillId spell) const;
@@ -400,7 +405,9 @@ private:
     // 0 lowered, 1 drawing, 2 held at full draw, 3 just let go: for what is heard (game/characters/bow_sound.gd).
     [[nodiscard]] int get_bow_phase() const { return static_cast<int>(bow_.phase); }
     // In the middle of using a skill: the selection must not change now.
-    [[nodiscard]] bool is_busy() const { return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F; }
+    [[nodiscard]] bool is_busy() const {
+        return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling();
+    }
 
     gameplay::MotorParams params_;
     gameplay::LookAngles look_;
@@ -493,6 +500,8 @@ private:
         gameplay::BleedState wound;
     };
     std::vector<Bleeding> bleeding_;
+    gameplay::BleedState whirl_; // the Whirlwind under way: the time it still has and until its next tick
+    godot::StringName clip_whirl_;
     godot::StringName clip_block_;
     godot::Ref<godot::PackedScene> block_spark_;
     // Seconds until each skill can be used again, by its number; and the charge, 0 to 1.

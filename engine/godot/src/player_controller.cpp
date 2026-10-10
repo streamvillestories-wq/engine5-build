@@ -249,6 +249,10 @@ constexpr float block_shake = 0.03F;
 constexpr const char* counter_stance_path = "res://effects/counter_stance.tscn";
 constexpr const char* counter_strike_path = "res://effects/counter_strike.tscn";
 constexpr const char* counter_bleed_path = "res://effects/counter_bleed.tscn";
+// The new warrior's Whirlwind (numbers in e5/gameplay/skills.hpp): the wind round her.
+constexpr const char* whirl_storm_path = "res://effects/whirlwind_storm.tscn";
+constexpr float whirl_shake = 0.008F;          // metres, with every tick
+constexpr float whirl_pull_keep_off = 1.1F;    // metres: nearer than this nothing is drawn further in
 constexpr float counter_shake = 0.02F;         // metres: the jolt of an answered blow
 constexpr float counter_swing_seconds = 0.45F; // her arm strikes the first blow of the combo
 // A blow comes "from" where the one who struck stands: the enemy this near to that place is it.
@@ -718,6 +722,7 @@ void E5PlayerController::_ready() {
     clip_earthbreaker_ = godot::StringName("downward");
     clip_leap_ = godot::StringName("leap");
     clip_battlecry_ = godot::StringName("battlecry");
+    clip_whirl_ = godot::StringName("whirl");
     skills_ = gameplay::SkillBar(skill_bar_set());
     // The first slot is on the left mouse button anyway: the right one starts on the second.
     skills_.select(1);
@@ -1003,6 +1008,7 @@ void E5PlayerController::_physics_process(double delta) {
         left = std::max(left - static_cast<float>(delta), 0.0F);
     }
     update_counter(static_cast<float>(delta));
+    update_whirl(static_cast<float>(delta));
     // The shield: up while the key is held, as long as it lasts.
     if (block_enabled_) {
         const bool block_key = !input_blocked_ && input->is_action_pressed(actions::block);
@@ -1072,6 +1078,11 @@ void E5PlayerController::_physics_process(double delta) {
         if (instant && aim_just_pressed && gameplay::skill_is_stance(skills_.selected()) && !mounted_ &&
             skill_ready(skills_.selected())) {
             start_stance(skills_.selected());
+        }
+        // A channel too is on at once; it is then what she does until it is over.
+        if (instant && aim_just_pressed && gameplay::skill_is_channel(skills_.selected()) && !mounted_ && !is_busy() &&
+            animator_.has_clip(clip_whirl_) && skill_ready(skills_.selected())) {
+            start_channel(skills_.selected());
         }
         const bool start = instant && aim_just_pressed && !block_.raised && can_start_instant_skill(skills_.selected());
         // A combo is one movement, not three clicks timed to the frame: a press during a blow
@@ -1301,16 +1312,23 @@ void E5PlayerController::update_remote(float delta) {
         const float share = 1.0F - std::exp(-14.0F * delta);
         set_global_position(get_global_position().lerp(net_position_, share));
         const float turn = std::remainder(net_facing_ - model_yaw_, 2.0F * std::numbers::pi_v<float>);
-        model_yaw_ += turn * share;
+        // (Whirling, she turns here by herself: her facing arrives too seldom to show it.)
+        model_yaw_ +=
+            is_whirling() ? 2.0F * std::numbers::pi_v<float> * gameplay::whirl_turns_per_second * delta : turn * share;
         if (model_ != nullptr) {
             model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
         }
     }
     update_counter(delta);
+    update_whirl(delta);
     if ((archery_enabled_ || spells_enabled_) && animator_.is_ready()) {
         if (pending_start_ && gameplay::skill_is_stance(skills_.selected())) {
             pending_start_ = false;
             start_stance(skills_.selected());
+        }
+        if (pending_start_ && gameplay::skill_is_channel(skills_.selected())) {
+            pending_start_ = false;
+            start_channel(skills_.selected());
         }
         const bool start = pending_start_ && instant_clip(skills_.selected()) != nullptr;
         pending_start_ = false;
@@ -1548,6 +1566,10 @@ gameplay::MotorParams E5PlayerController::motor_params() const {
         params.walk_speed *= faster;
         params.sprint_speed *= faster;
     }
+    if (is_whirling()) {
+        params.walk_speed = gameplay::whirl_move_speed;
+        params.sprint_speed = gameplay::whirl_move_speed;
+    }
     // Held to a walk: the pace her walking clip is made for, whatever else is pressed.
     if (!input_blocked_ && !remote_ && godot::Input::get_singleton()->is_action_pressed(actions::walk)) {
         params.walk_speed = mounted_ ? mount_walk_speed_ : walk_clip_speed;
@@ -1634,6 +1656,7 @@ bool E5PlayerController::update_vitals(float delta) {
         // Whatever she was doing ends here.
         counter_left_ = 0.0F;
         counter_swing_left_ = 0.0F;
+        whirl_ = {};
         action_ = {};
         bow_ = {};
         if (nocked_arrow_ != nullptr) {
@@ -1683,6 +1706,14 @@ void E5PlayerController::update_facing(const gameplay::Vec3& velocity, float del
     if (model_ == nullptr) {
         return;
     }
+    if (is_whirling()) {
+        // Round and round, whichever way she walks.
+        model_yaw_ =
+            std::remainder(model_yaw_ + 2.0F * std::numbers::pi_v<float> * gameplay::whirl_turns_per_second * delta,
+                           2.0F * std::numbers::pi_v<float>);
+        model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+        return;
+    }
     float target = 0.0F;
     if (is_busy()) {
         // An archer faces where the camera looks and strafes, instead of turning into the movement.
@@ -1710,6 +1741,13 @@ void E5PlayerController::update_animation(const gameplay::Vec3& velocity, float 
     if (emote_left_ > 0.0F) {
         animator_.set_upper(godot::StringName());
         animator_.set_base(clip_emote_, 1.0F);
+        return;
+    }
+    if (is_whirling()) {
+        // The pose she holds while the whole of her is turned (update_facing).
+        animator_.set_upper(godot::StringName());
+        animator_.set_base(clip_whirl_, 1.0F);
+        animator_.update(delta);
         return;
     }
     if (mounted_) {
@@ -2079,7 +2117,8 @@ void E5PlayerController::prewarm_effects() {
         if (skills_.slot(slot) != gameplay::SkillId::CounterAttack) {
             continue;
         }
-        for (const char* const path : {counter_stance_path, counter_strike_path, counter_bleed_path}) {
+        for (const char* const path :
+             {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path}) {
             if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                 prewarm_ids_.push_back(instance->get_instance_id());
             }
@@ -2365,7 +2404,7 @@ const SpellTiming* E5PlayerController::advance_combo(gameplay::SkillId skill) {
 }
 
 godot::String E5PlayerController::get_action_skill_name() const {
-    if (!action_.active) {
+    if (!action_.active && !is_whirling()) {
         return {};
     }
     const std::string_view name = gameplay::skill_info(action_skill_).name;
@@ -2774,6 +2813,47 @@ void E5PlayerController::update_counter(float delta) {
         }
     }
     std::erase_if(bleeding_, [](const Bleeding& bleeding) { return bleeding.wound.seconds_left <= 0.0F; });
+}
+
+void E5PlayerController::start_channel(gameplay::SkillId skill) {
+    spend(skill);
+    last_skill_ = skill;
+    ++skills_used_;
+    action_skill_ = skill;
+    whirl_ = gameplay::open_wound({}, gameplay::whirl_seconds, gameplay::whirl_tick_seconds);
+    // The wind round her, with her for as long as it lasts.
+    E5Effect::spawn(effect_scene(whirl_storm_path), this, get_global_position());
+    note_net_event(0, 0.0F);
+}
+
+void E5PlayerController::update_whirl(float delta) {
+    if (!is_whirling()) {
+        return;
+    }
+    const gameplay::BleedStep step = gameplay::step_bleed(whirl_, gameplay::whirl_tick_seconds, delta);
+    whirl_ = step.state;
+    if (remote_) {
+        return; // shown here; what it does is decided where she is played
+    }
+    for (int tick = 0; tick < step.ticks; ++tick) {
+        combat::blast(this, get_global_position() + godot::Vector3(0.0F, melee_height, 0.0F), gameplay::whirl_radius,
+                      dealt(gameplay::SkillId::BladeWhirl));
+        shake_ = std::max(shake_, whirl_shake);
+    }
+    // What stands near is drawn in, step by step.
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+            continue;
+        }
+        godot::Vector3 towards = get_global_position() - enemy->get_global_position();
+        towards.y = 0.0F;
+        const auto distance = static_cast<float>(towards.length());
+        if (distance > whirl_pull_keep_off && distance <= gameplay::whirl_pull_radius + enemy->get_body_radius()) {
+            enemy->drag(towards / distance * gameplay::whirl_pull_speed);
+        }
+    }
 }
 
 void E5PlayerController::cast_black_hole() {

@@ -69,6 +69,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Dagger Combo", .charges = false, .kind = SkillKind::Instant};
     case SkillId::CounterAttack:
         return {.name = "Counter Attack", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BladeWhirl:
+        return {.name = "Whirlwind", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -144,6 +146,8 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 20.0F; // the first blow; see combo_damage_factor. Less than an arrow, but at once
     case SkillId::CounterAttack:
         return 18.0F; // each answer: four fifths of a sword blow; its wound adds counter_bleed_tick_damage
+    case SkillId::BladeWhirl:
+        return 8.0F; // every half second to all it reaches: 64 over its four seconds
     case SkillId::None:
         break;
     }
@@ -230,6 +234,9 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::BrambleArrow:
     case SkillId::CounterAttack: // from the key: she stands ready for half of it
         return 10.0F;
+    // Rarely.
+    case SkillId::BladeWhirl:
+        return 20.0F;
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
     case SkillId::Shot:
@@ -319,7 +326,7 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
                   SkillId::Battlecry};
     } else if (set == SkillSet::Blade) {
-        slots_ = {SkillId::Slash, SkillId::CounterAttack};
+        slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl};
     } else if (set == SkillSet::Archer) {
         slots_ = {SkillId::Shot};
     } else if (set == SkillSet::Warrior) {

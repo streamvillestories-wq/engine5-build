@@ -211,11 +211,12 @@ TEST_CASE("the new warrior has her sword's combo, the skills wished for her and 
 
     CHECK(bar.slot(0) == SkillId::Slash);
     CHECK(bar.slot(1) == SkillId::CounterAttack);
-    for (std::size_t slot = 2; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(2) == SkillId::BladeWhirl);
+    for (std::size_t slot = 3; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
     // An empty slot cannot be chosen.
-    CHECK_FALSE(bar.select(2));
+    CHECK_FALSE(bar.select(3));
     CHECK(bar.selected() == SkillId::Slash);
     CHECK(bar.select(1));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Blade) == 9);
@@ -239,6 +240,29 @@ TEST_CASE("the counter attack is a stance within the warrior's range", "[skills]
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::CounterAttack) <= 12.0F);
     CHECK(e5::gameplay::counter_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::CounterAttack));
     CHECK_FALSE(e5::gameplay::skill_needs_charge(SkillId::CounterAttack));
+}
+
+TEST_CASE("the new warrior's whirlwind is a channel within her range", "[skills]") {
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_is_channel(SkillId::BladeWhirl));
+    CHECK_FALSE(e5::gameplay::skill_is_channel(SkillId::CounterAttack));
+    CHECK_FALSE(e5::gameplay::skill_is_stance(SkillId::BladeWhirl));
+    CHECK(e5::gameplay::skill_info(SkillId::BladeWhirl).name == "Whirlwind");
+    CHECK(e5::gameplay::skill_info(SkillId::BladeWhirl).kind == e5::gameplay::SkillKind::Instant);
+    // All of it on one enemy: more than her combo's finisher, less than the old warrior's star whirl.
+    const float in_all = e5::gameplay::skill_damage(SkillId::BladeWhirl) * e5::gameplay::whirl_seconds /
+                         e5::gameplay::whirl_tick_seconds;
+    CHECK(in_all > e5::gameplay::skill_damage(SkillId::Slash) * e5::gameplay::combo_damage_factor(2));
+    CHECK(in_all < e5::gameplay::skill_damage(SkillId::StarWhirl));
+    // "Rarely": 20 to 30 seconds.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) >= 20.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) <= 30.0F);
+    CHECK(e5::gameplay::whirl_radius < e5::gameplay::whirl_pull_radius);
+    // Its ticks are counted like a wound's: eight in four seconds.
+    CHECK(e5::gameplay::step_bleed(
+              e5::gameplay::open_wound({}, e5::gameplay::whirl_seconds, e5::gameplay::whirl_tick_seconds),
+              e5::gameplay::whirl_tick_seconds, 60.0F)
+              .ticks == 8);
 }
 
 TEST_CASE("a wound bleeds once a tick until its time is up", "[skills]") {

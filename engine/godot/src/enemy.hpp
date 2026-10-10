@@ -63,6 +63,9 @@ public:
     // it still strikes and casts at what is in its reach, and can be hit.
     void root(float seconds) { rooted_left_ = std::max(rooted_left_, seconds); }
     [[nodiscard]] bool is_rooted() const { return rooted_left_ > 0.0F; }
+    // Drawn along by something (a whirlwind) for the next step, on top of where it goes by
+    // itself: to be said again every step. Not while it is rooted; only those that walk.
+    void drag(const godot::Vector3& velocity) { dragged_ = velocity; }
     // Throws it: it flies under gravity until it lands, then carries on as before.
     void fling(const godot::Vector3& velocity);
 
@@ -227,6 +230,7 @@ private:
     bool held_ = false;
     bool flung_ = false;
     float rooted_left_ = 0.0F; // seconds it still cannot move
+    godot::Vector3 dragged_;   // what draws it along in the next step (see drag)
     bool remote_ = false;
     bool has_net_state_ = false;
     godot::Vector3 net_position_;

@@ -49,6 +49,7 @@ enum class SkillId : unsigned char {
     DaggerCombo,
     // Made from players' skill wishes (docs/BUGS.md, "Skill wishes"), one by one. At the end.
     CounterAttack, // the new warrior's: for a few seconds she answers every blow that lands on her
+    BladeWhirl,    // the new warrior's "Whirlwind": she whirls with her sword and draws enemies in
 };
 
 // Which skills a character has on the bar.
@@ -108,6 +109,24 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 // through and does not hold her where she stands.
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
     return skill == SkillId::CounterAttack;
+}
+
+// The new warrior's Whirlwind (bug report 22, a player's wish; `SkillId::BladeWhirl`, the dwarf
+// has a Whirlwind of his own): for `whirl_seconds` she turns round and round with her sword
+// held out. Every `whirl_tick_seconds` everything within `whirl_radius` takes skill_damage, and
+// enemies within `whirl_pull_radius` are drawn towards her. She can walk meanwhile, slowly.
+inline constexpr float whirl_seconds = 4.0F;
+inline constexpr float whirl_tick_seconds = 0.5F;
+inline constexpr float whirl_radius = 3.0F;           // metres
+inline constexpr float whirl_pull_radius = 5.0F;      // metres
+inline constexpr float whirl_pull_speed = 0.5F;       // m/s towards her
+inline constexpr float whirl_move_speed = 2.6F;       // m/s: how fast she walks while she whirls
+inline constexpr float whirl_turns_per_second = 2.2F; //
+
+// A channel is on at once on its key, like a stance, but it is what she does while it lasts:
+// nothing else can be started, and it shows as the skill in use.
+[[nodiscard]] constexpr bool skill_is_channel(SkillId skill) noexcept {
+    return skill == SkillId::BladeWhirl;
 }
 
 // A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound
