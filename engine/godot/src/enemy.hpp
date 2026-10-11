@@ -101,6 +101,11 @@ public:
     void park();
     void revive(const godot::Vector3& position);
     [[nodiscard]] bool is_parked() const { return parked_; }
+    // Whether it is set onto the island's ground where it stands when the game starts (the scene
+    // then only says where, not how high). Off for one that stands somewhere else: in a cave
+    // under the island, where the ground above its head is not its floor.
+    void set_on_terrain(bool on) { on_terrain_ = on; }
+    [[nodiscard]] bool get_on_terrain() const { return on_terrain_; }
     void set_drops_loot(bool drops) { drops_loot_ = drops; }
     [[nodiscard]] bool get_drops_loot() const { return drops_loot_; }
 
@@ -268,6 +273,7 @@ private:
     bool starts_parked_ = false;
     bool parked_ = false;
     bool drops_loot_ = true;
+    bool on_terrain_ = true;
     [[nodiscard]] godot::StringName special_clip() const;
     void begin_special(int index);
     bool held_ = false;

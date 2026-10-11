@@ -129,6 +129,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_special_count"), &E5Enemy::get_special_count);
     ClassDB::bind_method(D_METHOD("set_starts_parked", "parked"), &E5Enemy::set_starts_parked);
     ClassDB::bind_method(D_METHOD("get_starts_parked"), &E5Enemy::get_starts_parked);
+    ClassDB::bind_method(D_METHOD("set_on_terrain", "on"), &E5Enemy::set_on_terrain);
+    ClassDB::bind_method(D_METHOD("get_on_terrain"), &E5Enemy::get_on_terrain);
     ClassDB::bind_method(D_METHOD("set_drops_loot", "drops"), &E5Enemy::set_drops_loot);
     ClassDB::bind_method(D_METHOD("get_drops_loot"), &E5Enemy::get_drops_loot);
     ClassDB::bind_method(D_METHOD("get_phase"), &E5Enemy::get_phase);
@@ -218,6 +220,7 @@ void E5Enemy::_bind_methods() {
                  "set_special_count", "get_special_count");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "starts_parked"), "set_starts_parked", "get_starts_parked");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "drops_loot"), "set_drops_loot", "get_drops_loot");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "on_terrain"), "set_on_terrain", "get_on_terrain");
 
     ADD_SIGNAL(godot::MethodInfo("special_started", PropertyInfo(godot::Variant::INT, "index")));
 }
@@ -233,7 +236,8 @@ void E5Enemy::_ready() {
 
     // On an island the scene only says where it stands, not how high the ground is there.
     if (const auto* const terrain =
-            godot::Object::cast_to<E5Terrain>(get_tree()->get_first_node_in_group(E5Terrain::group_name))) {
+            godot::Object::cast_to<E5Terrain>(get_tree()->get_first_node_in_group(E5Terrain::group_name));
+        terrain != nullptr && on_terrain_) {
         godot::Vector3 position = get_global_position();
         position.y = terrain->height_at(static_cast<float>(position.x), static_cast<float>(position.z));
         set_global_position(position);
