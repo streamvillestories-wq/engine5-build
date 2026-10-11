@@ -131,6 +131,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_starts_parked"), &E5Enemy::get_starts_parked);
     ClassDB::bind_method(D_METHOD("set_on_terrain", "on"), &E5Enemy::set_on_terrain);
     ClassDB::bind_method(D_METHOD("get_on_terrain"), &E5Enemy::get_on_terrain);
+    ClassDB::bind_method(D_METHOD("set_walk_stride", "times"), &E5Enemy::set_walk_stride);
+    ClassDB::bind_method(D_METHOD("get_walk_stride"), &E5Enemy::get_walk_stride);
     ClassDB::bind_method(D_METHOD("set_drops_loot", "drops"), &E5Enemy::set_drops_loot);
     ClassDB::bind_method(D_METHOD("get_drops_loot"), &E5Enemy::get_drops_loot);
     ClassDB::bind_method(D_METHOD("get_phase"), &E5Enemy::get_phase);
@@ -141,6 +143,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("park"), &E5Enemy::park);
     ClassDB::bind_method(D_METHOD("revive", "position"), &E5Enemy::revive);
     ClassDB::bind_method(D_METHOD("fling", "velocity"), &E5Enemy::fling);
+    ClassDB::bind_method(D_METHOD("stroll", "velocity"), &E5Enemy::stroll);
+    ClassDB::bind_method(D_METHOD("drag", "velocity"), &E5Enemy::drag);
     ClassDB::bind_method(D_METHOD("spin", "radians"), &E5Enemy::spin);
     ClassDB::bind_method(D_METHOD("get_aim_point"), &E5Enemy::get_aim_point);
     ClassDB::bind_method(D_METHOD("take_damage", "amount", "position"), &E5Enemy::take_damage);
@@ -220,6 +224,8 @@ void E5Enemy::_bind_methods() {
                  "set_special_count", "get_special_count");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "starts_parked"), "set_starts_parked", "get_starts_parked");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "drops_loot"), "set_drops_loot", "get_drops_loot");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "walk_stride", godot::PROPERTY_HINT_RANGE, "0.2,10,0.05"),
+                 "set_walk_stride", "get_walk_stride");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "on_terrain"), "set_on_terrain", "get_on_terrain");
 
     ADD_SIGNAL(godot::MethodInfo("special_started", PropertyInfo(godot::Variant::INT, "index")));
@@ -534,7 +540,7 @@ constexpr float sleep_check_interval = 0.4F;
 
 bool E5Enemy::should_sleep(float dt) {
     // Anything that hurts it, holds it or throws it wakes it at once.
-    if (pending_damage_ > 0.0F || held_ || flung_ || !is_alive() || state_.aggro ||
+    if (strolls_ || pending_damage_ > 0.0F || held_ || flung_ || !is_alive() || state_.aggro ||
         state_.phase != gameplay::EnemyPhase::Idle) {
         sleep_check_seconds_ = 0.0F;
         return false;
@@ -853,6 +859,20 @@ void E5Enemy::_physics_process(double delta) {
 
     const godot::Vector3 direction = to_player.length() > 0.01F ? to_player.normalized() : godot::Vector3();
     const bool rooted = rooted_left_ > 0.0F;
+    // On its rounds: while it has noticed nobody it goes where it is walked, and looks there.
+    const bool strolling = state_.phase == gameplay::EnemyPhase::Idle && !state_.aggro &&
+                           strolling_.length_squared() > 0.0001F && hover_height_ <= 0.0F;
+    if (strolling) {
+        dragged_ = strolling_;
+        if (model_ != nullptr) {
+            const float wanted =
+                gameplay::facing_yaw(static_cast<float>(strolling_.x), static_cast<float>(strolling_.z));
+            model_yaw_ = gameplay::turn_toward(model_yaw_, wanted, turn_speed_ * 0.4F * dt);
+            model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+        }
+    }
+    const float stroll_pace = strolling ? static_cast<float>(strolling_.length()) : 0.0F;
+    strolling_ = godot::Vector3();
     if (hover_height_ > 0.0F) {
         fly(step, to_player, dt);
     } else {
@@ -869,6 +889,9 @@ void E5Enemy::_physics_process(double delta) {
     }
     // Backing away is walking too; a flyer has no legs to show it with.
     play_phase_animation((step.moving || step.retreating) && !rooted);
+    if (strolling && animator_.is_ready()) {
+        animator_.set_base(clip_walk_, stroll_pace / walk_clip_speed / walk_stride_);
+    }
 }
 
 void E5Enemy::play_phase_animation(bool moving) {
@@ -881,7 +904,7 @@ void E5Enemy::play_phase_animation(bool moving) {
         break;
     case gameplay::EnemyPhase::Chase:
         if (moving) {
-            animator_.set_base(clip_walk_, pace() / walk_clip_speed);
+            animator_.set_base(clip_walk_, pace() / walk_clip_speed / walk_stride_);
         } else {
             animator_.set_base(clip_idle_, 1.0F);
         }

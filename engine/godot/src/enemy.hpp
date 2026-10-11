@@ -67,6 +67,13 @@ public:
     // Drawn along by something (a whirlwind) for the next step, on top of where it goes by
     // itself: to be said again every step. Not while it is rooted; only those that walk.
     void drag(const godot::Vector3& velocity) { dragged_ = velocity; }
+    // Walks it about while it has noticed nobody (a giant on his rounds; a script says where to,
+    // every step: game/creatures/warden_attacks.gd): it goes that way at that pace, looks where it
+    // goes and plays its walk. One that strolls never sleeps: its rounds go on with nobody near.
+    void stroll(const godot::Vector3& velocity) {
+        strolling_ = velocity;
+        strolls_ = true;
+    }
     // Takes `share` of its pace away for so many seconds (the blow of a jump attack). A new
     // slowing replaces the old one if it is at least as strong.
     void slow(float share, float seconds);
@@ -106,6 +113,10 @@ public:
     // under the island, where the ground above its head is not its floor.
     void set_on_terrain(bool on) { on_terrain_ = on; }
     [[nodiscard]] bool get_on_terrain() const { return on_terrain_; }
+    // How many times as long as a man's its stride is (a giant's legs): its walk clip is played
+    // that much slower for the same pace, or his feet would race.
+    void set_walk_stride(float times) { walk_stride_ = std::max(times, 0.1F); }
+    [[nodiscard]] float get_walk_stride() const { return walk_stride_; }
     void set_drops_loot(bool drops) { drops_loot_ = drops; }
     [[nodiscard]] bool get_drops_loot() const { return drops_loot_; }
 
@@ -273,6 +284,9 @@ private:
     bool starts_parked_ = false;
     bool parked_ = false;
     bool drops_loot_ = true;
+    float walk_stride_ = 1.0F;
+    godot::Vector3 strolling_; // where it is walked to in the next step while idle (see stroll)
+    bool strolls_ = false;
     bool on_terrain_ = true;
     [[nodiscard]] godot::StringName special_clip() const;
     void begin_special(int index);
