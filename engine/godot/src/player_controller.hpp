@@ -287,6 +287,8 @@ public:
     [[nodiscard]] godot::Basis get_disguise_basis() const { return disguise_basis_; }
     [[nodiscard]] int get_disguises() const { return disguises_; }
     void end_disguise();
+    /// Another player's hero, shown here: she is a bush or she is not, as her own machine says.
+    void set_shown_disguised(bool disguised);
     [[nodiscard]] godot::Variant find_bush(float radius) const;
     [[nodiscard]] float get_resolve_spared() const { return resolve_spared_; }
     [[nodiscard]] float get_resolve_healed() const { return resolve_healed_; }
@@ -445,7 +447,7 @@ private:
         godot::Ref<godot::Material> material;
     };
     [[nodiscard]] Bush nearest_bush(float radius) const;
-    void start_disguise();
+    void start_disguise(float reach);
     void update_disguise(float delta);
     // Cut in Pieces: it begins if an enemy is near; while it lasts it is what moves her (from one
     // enemy to the next) and strikes, and update_pieces returns true: nothing else is asked.

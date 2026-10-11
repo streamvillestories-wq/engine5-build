@@ -636,6 +636,7 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_disguise_basis"), &E5PlayerController::get_disguise_basis);
     ClassDB::bind_method(D_METHOD("get_disguises"), &E5PlayerController::get_disguises);
     ClassDB::bind_method(D_METHOD("end_disguise"), &E5PlayerController::end_disguise);
+    ClassDB::bind_method(D_METHOD("set_shown_disguised", "disguised"), &E5PlayerController::set_shown_disguised);
     ClassDB::bind_method(D_METHOD("find_bush", "radius"), &E5PlayerController::find_bush);
     ClassDB::bind_method(D_METHOD("get_pieces_blows"), &E5PlayerController::get_pieces_blows);
     ClassDB::bind_method(D_METHOD("get_stampede_seconds"), &E5PlayerController::get_stampede_seconds);
@@ -1195,7 +1196,7 @@ void E5PlayerController::_physics_process(double delta) {
         // The Disguise is on at once, if she stands in a bush.
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Disguise && !mounted_ && !is_busy() &&
             !disguised_ && skill_ready(skills_.selected())) {
-            start_disguise();
+            start_disguise(gameplay::disguise_reach);
         }
         // Cut in Pieces takes her charge and begins, if there is anyone to cut.
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::CutInPieces && !mounted_ && !is_busy() &&
@@ -1273,9 +1274,14 @@ void E5PlayerController::_physics_process(double delta) {
             .cancel_pressed = cancel,
             .build_charge = gameplay::skill_info(skills_.selected()).charges,
         };
+        const gameplay::BowPhase phase_before = bow_.phase;
         const gameplay::BowStep bow_step =
             gameplay::step_bow(bow_, bow_input, bow_timings(), static_cast<float>(delta));
         bow_ = bow_step.state;
+        if (phase_before == gameplay::BowPhase::Lowered && bow_.phase == gameplay::BowPhase::Drawing) {
+            // The others see her draw from her clips; this tells them which skill it is for.
+            note_net_event(2, 0.0F);
+        }
         update_bow_string(bow_step.string_draw);
         update_nocked_arrow(bow_step.string_draw);
         // Use the skill before refreshing the rain marker: the volley goes where the
@@ -1390,9 +1396,12 @@ void E5PlayerController::note_net_event(int kind, float power) {
     }
     godot::Array event;
     event.push_back(kind);
-    event.push_back(static_cast<int>(skills_.selected()));
+    // (A draw that begins, kind 2, names its skill in the fourth place and none in the second:
+    // a game of an older version knows no kind 2, would take it for a shot, and drops an event
+    // whose skill it does not know.)
+    event.push_back(kind == 2 ? -1 : static_cast<int>(skills_.selected()));
     event.push_back(power);
-    event.push_back(combo_step_);
+    event.push_back(kind == 2 ? static_cast<int>(skills_.selected()) : combo_step_);
     event.push_back(look_.yaw);
     event.push_back(look_.pitch);
     net_events_.push_back(event);
@@ -1408,6 +1417,9 @@ void E5PlayerController::apply_net_event(int kind, int skill, float power, int c
                                          float look_pitch) {
     if (!remote_) {
         return;
+    }
+    if (kind == 2) {
+        skill = combo_step; // (see note_net_event)
     }
     // Only a skill this hero has: what arrives is another machine's word.
     const std::span<const gameplay::SkillId> hers = gameplay::skill_catalogue(skill_bar_set());
@@ -1429,12 +1441,21 @@ void E5PlayerController::apply_net_event(int kind, int skill, float power, int c
     look_.pitch = look_pitch;
     apply_look_to_nodes();
     skills_.select(slot);
+    if (kind == 2) {
+        return; // she begins to draw: her clips show it, this said for which skill
+    }
     if (kind == 0) {
         // Started in the next frame of hers, as on the machine that plays her.
         pending_start_ = true;
         pending_combo_step_ = combo_step;
     } else if (archery_enabled_) {
         use_skill(power);
+        if (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming) {
+            // The string is let go here too (her clip goes on saying "aiming" while she follows through).
+            bow_.phase = gameplay::BowPhase::Releasing;
+            bow_.phase_seconds = 0.0F;
+            bow_.charge = 0.0F;
+        }
     }
 }
 
@@ -1519,8 +1540,33 @@ void E5PlayerController::update_remote(float delta) {
         }
         tick_combo(delta);
     }
+    // Her bow: she aims where she is played while her clip is one of the aiming ones. The bow's
+    // own course (drawing, held, let go) runs here from that, so the string is drawn, the arrow
+    // lies on it and whatever follows the bow's state (the bow taken from her back, the draw's
+    // lights and sounds) does so for her too. The shot itself comes as its own message.
+    godot::StringName upper;
+    if (archery_enabled_ && animator_.is_ready()) {
+        const bool walking = net_clip_ == clip_bow_walk_forward_ || net_clip_ == clip_bow_walk_back_ ||
+                             net_clip_ == clip_bow_walk_left_ || net_clip_ == clip_bow_walk_right_;
+        const gameplay::BowInput bow_input{
+            .aim_held = has_net_state_ && (walking || net_clip_ == clip_bow_aim_),
+            .cancel_pressed = false,
+            .build_charge = gameplay::skill_info(skills_.selected()).charges,
+        };
+        const gameplay::BowStep bow_step = gameplay::step_bow(bow_, bow_input, bow_timings(), delta);
+        bow_ = bow_step.state;
+        update_bow_string(bow_step.string_draw);
+        update_nocked_arrow(bow_step.string_draw);
+        if (bow_.phase == gameplay::BowPhase::Drawing) {
+            upper = clip_bow_draw_;
+        } else if (bow_.phase == gameplay::BowPhase::Releasing) {
+            upper = clip_bow_recoil_;
+        } else if (bow_.phase == gameplay::BowPhase::Aiming && walking) {
+            upper = clip_bow_aim_;
+        }
+    }
     if (has_net_state_ && animator_.is_ready() && !net_clip_.is_empty() && animator_.has_clip(net_clip_)) {
-        animator_.set_upper(godot::StringName());
+        animator_.set_upper(upper);
         animator_.set_base(net_clip_, net_speed_);
     }
     animator_.update(delta);
@@ -3376,8 +3422,21 @@ godot::Variant E5PlayerController::find_bush(float radius) const {
     return bush.mesh.is_valid() ? godot::Variant(bush.transform.origin) : godot::Variant();
 }
 
-void E5PlayerController::start_disguise() {
-    const Bush bush = nearest_bush(gameplay::disguise_reach);
+void E5PlayerController::set_shown_disguised(bool disguised) {
+    if (!remote_ || disguised == disguised_) {
+        return;
+    }
+    if (disguised) {
+        // The same bush as on her own machine: the nearest to where she stands. She is shown
+        // here a moment behind where she is, so the bush may be a little further from her.
+        start_disguise(gameplay::disguise_reach + 2.0F);
+    } else {
+        end_disguise();
+    }
+}
+
+void E5PlayerController::start_disguise(float reach) {
+    const Bush bush = nearest_bush(reach);
     if (bush.mesh.is_null()) {
         return; // she stands in no bush: nothing happens, and nothing is spent
     }
