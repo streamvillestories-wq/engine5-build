@@ -1382,7 +1382,8 @@ void E5PlayerController::apply_net_state(const godot::Vector3& position, float f
         model_yaw_ = facing;
         has_net_state_ = true;
     }
-    if (remote_pieces_left_ > 0.0F && has_net_state_ && position.distance_to(net_position_) > 2.0) {
+    if (remote_pieces_left_ > 0.0F && has_net_state_ &&
+        static_cast<float>(position.distance_to(net_position_)) > 2.0F) {
         // Cut in Pieces: she is beside the next enemy at once, and leaves the streak she leaves
         // on her own machine.
         E5LightningArc::spawn(get_parent(), get_global_position() + godot::Vector3(0.0F, 1.1F, 0.0F),
@@ -3603,7 +3604,7 @@ void E5PlayerController::update_gatling(float delta) {
         shot.push_back(5);
         shot.push_back(-1);
         shot.push_back(static_cast<float>(direction.x));
-        shot.push_back(direction.y >= 0.0 ? 1 : -1);
+        shot.push_back(static_cast<float>(direction.y) >= 0.0F ? 1 : -1);
         shot.push_back(static_cast<float>(direction.z));
         shot.push_back(0.0F);
         net_events_.push_back(shot);
