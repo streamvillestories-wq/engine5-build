@@ -311,6 +311,8 @@ constexpr float pieces_shake = 0.02F;    // metres, with every blow
 constexpr const char* resolve_path = "res://effects/never_give_up.tscn";
 constexpr const char* frost_armor_path = "res://effects/frost_armor.tscn";
 constexpr const char* chain_strike_path = "res://effects/lightning_strike.tscn"; // the new wizard's Chain Lightning
+// Where it first strikes: a bolt out of the sky and its thunder (ticket 51), all of it the scene's own scripts.
+constexpr const char* chain_thunder_path = "res://effects/chain_thunder.tscn";
 // His Poison Hydra: the hydra, what its venom looks like in the air and where it strikes, and on what it poisoned.
 constexpr const char* hydra_path = "res://effects/poison_hydra.tscn";
 constexpr const char* hydra_spit_trail_path = "res://effects/venom_trail.tscn";
@@ -1621,6 +1623,9 @@ void E5PlayerController::update_remote(float delta) {
     update_chain(delta);
     update_hydra(delta);
     update_hole(delta);
+    if (clone_) {
+        update_blizzard(delta); // his copy's own (another player's is his machine's business)
+    }
     update_traps();
     update_enrage(delta);
     if ((archery_enabled_ || spells_enabled_) && animator_.is_ready()) {
@@ -1845,8 +1850,8 @@ void E5PlayerController::take_damage_from(float amount, const godot::Vector3& fr
 
 void E5PlayerController::take_damage(float amount) {
     if (clone_) {
-        // His copy has a life of its own, and what strikes it counts for more (Whose Ur Mommy?).
-        clone_health_ -= std::max(amount, 0.0F) * gameplay::clone_damage_taken;
+        // Nothing hurts his copy (Whose Ur Mommy?, ticket 55); what would have is counted.
+        clone_struck_ += std::max(amount, 0.0F);
         return;
     }
     if (remote_) {
@@ -3221,6 +3226,7 @@ void E5PlayerController::cast_chain() {
     const godot::Vector3 struck = first != nullptr ? first->get_aim_point() : aimed;
     E5LightningArc::spawn(get_parent(), origin, struck, colour);
     E5Effect::spawn(effect_scene(chain_strike_path), get_parent(), struck);
+    E5Effect::spawn(effect_scene(chain_thunder_path), get_parent(), struck);
     if (first == nullptr) {
         return;
     }
@@ -3403,7 +3409,9 @@ void E5PlayerController::update_hydra(float delta) {
     spit->set_impact_effect(effect_scene(hydra_spit_impact_path));
     spit->set_impact_scale(0.6F);
     // (A hero shown here for another player does no damage; neither does his hydra's poison.)
-    spit->set_poison(damage > 0.0F ? gameplay::hydra_poison_tick_damage() : 0.0F, gameplay::hydra_poison_seconds,
+    // (His copy's hydra poisons by the share its spells do.)
+    spit->set_poison(damage > 0.0F ? gameplay::hydra_poison_tick_damage() * (clone_ ? clone_share_ : 1.0F) : 0.0F,
+                     gameplay::hydra_poison_seconds,
                      gameplay::hydra_poison_tick_seconds, effect_scene(hydra_poisoned_path));
     spit->launch((at - muzzle).normalized() * hydra_spit_speed, get_rid());
     ++hydra_spits_;
@@ -3454,7 +3462,7 @@ void E5PlayerController::update_hole(float delta) {
     look->set_global_transform(godot::Transform3D(
         godot::Basis(godot::Vector3(0.0F, 1.0F, 0.0F), age * hole_turn_speed).scaled(godot::Vector3(size, size, size)),
         hole_.at));
-    if (remote_) {
+    if (remote_ && !clone_) {
         return; // shown here for another player: what it draws and hurts is his own machine's business
     }
     // What is near is drawn after it (said anew every step: see E5Enemy::drag).
@@ -3528,7 +3536,7 @@ void E5PlayerController::update_blizzard(float delta) {
             // Held where it stands, and slower for a while after that. (Not by a hero shown here
             // for another player: his own machine holds them, and says so to the one that decides them.)
             blizzard_.held.push_back(id);
-            if (!remote_) {
+            if (!remote_ || clone_) {
                 enemy->root(gameplay::blizzard_root_seconds);
                 enemy->slow(gameplay::blizzard_slow_share,
                             gameplay::blizzard_root_seconds + gameplay::blizzard_slow_seconds);
@@ -3540,7 +3548,7 @@ void E5PlayerController::update_blizzard(float delta) {
     blizzard_.until_tick -= delta;
     if (blizzard_.until_tick <= 0.0F) {
         blizzard_.until_tick += gameplay::blizzard_tick_seconds;
-        if (!remote_) {
+        if (!remote_ || clone_) {
             for (std::size_t index = 0; index < bodies.size(); ++index) {
                 combat::hit(bodies[index], bodies[index]->get_aim_point(),
                             dealt(gameplay::SkillId::Blizzard) *
@@ -3670,7 +3678,6 @@ bool E5PlayerController::start_clone() {
     copy->set_remote(true);
     copy->clone_ = true;
     copy->clone_share_ = gameplay::clone_damage_share;
-    copy->clone_health_ = effective_vitals().max_health;
     const godot::TypedArray<godot::Node> cameras = copy->find_children("*", "Camera3D", true, false);
     for (const godot::Variant& node : cameras) {
         if (auto* const camera = godot::Object::cast_to<godot::Camera3D>(node)) {
@@ -3702,6 +3709,14 @@ bool E5PlayerController::start_clone() {
 void E5PlayerController::end_clone() {
     if (auto* const copy = godot::Object::cast_to<E5PlayerController>(godot::ObjectDB::get_instance(clone_id_))) {
         E5Effect::spawn(effect_scene(teleport_flash_path), get_parent(), copy->get_global_position());
+        clone_struck_ += copy->clone_struck_;
+        // What it cast goes with it: its hydra sinks, its black hole closes. (Its blizzard has blown over.)
+        if (auto* const hydra = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(copy->hydra_id_))) {
+            hydra->call("sink");
+        }
+        if (auto* const hole = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(copy->hole_.look))) {
+            hole->queue_free();
+        }
         copy->queue_free();
     }
     clone_id_ = 0;
@@ -3715,9 +3730,8 @@ void E5PlayerController::update_clone(float delta) {
         return;
     }
     clone_left_ -= delta;
-    if (clone_left_ <= 0.0F || copy->clone_health_ <= 0.0F || vitals_.dead) {
-        clone_struck_ += effective_vitals().max_health - std::max(copy->clone_health_, 0.0F);
-        end_clone(); // its time is over, or it was struck down
+    if (clone_left_ <= 0.0F || vitals_.dead) {
+        end_clone(); // its time is over
         return;
     }
     clone_until_cast_ -= delta;

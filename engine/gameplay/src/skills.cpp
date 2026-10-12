@@ -200,7 +200,7 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
     case SkillId::CutInPieces:
-        return 8.8F; // each of its twenty-four blows: four tenths of a sword blow
+        return 12.0F; // each of its twenty blows in five seconds (ticket 57; 8.8 for twenty-four in six before)
     case SkillId::GatlingGun:
         return 8.0F; // each arrow, four a second: 32 a second while she stands at it and holds the button
     case SkillId::BearTrap:
@@ -287,6 +287,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::ChainLightning:
     case SkillId::Whirlwind:
     case SkillId::GaleArrow:
+    case SkillId::Teleport: // (10 until ticket 53)
         return 6.0F;
     case SkillId::VenomArrow:
         return 7.0F;
@@ -307,8 +308,8 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::CounterAttack: // from the key: she stands ready for half of it
     case SkillId::Enrage:        // from the key too: the frenzy takes four of them
     case SkillId::Firebolt:      // from the throw
-    case SkillId::Teleport:
     case SkillId::BearTrap:      // from when it lies armed
+    case SkillId::BladeWhirl:    // from the key: it lasts four of them (20 until ticket 59, which asked for 9)
         return 10.0F;
     case SkillId::JumpAttack:
     case SkillId::FrostArmor: // from the key: it lasts five of them
@@ -324,7 +325,6 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::Stampede:
     case SkillId::NeverGiveUp:
     case SkillId::SeismicSlash:
-    case SkillId::BladeWhirl:
         return 20.0F;
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
@@ -718,8 +718,8 @@ std::string_view skill_description(SkillId skill) noexcept {
                "one more, the oldest is gone.";
     case SkillId::MirrorImage:
         return "Takes a full charge. A copy of him in all the rainbow's colours appears where he aims and casts "
-               "his spells at the enemies near it for a while, weaker than his own. Enemies go for it as they "
-               "go for him, and it does not stand much.";
+               "those of his spells that do damage at the enemies near it for a while, weaker than his own. "
+               "Enemies go for it as they go for him, and nothing hurts it.";
     }
     return {};
 }

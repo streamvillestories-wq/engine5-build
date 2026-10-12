@@ -248,22 +248,26 @@ inline constexpr int bear_trap_limit = 10;
 // The new wizard's Whose Ur Mommy? (ticket 49, a player's wish, and its name; `SkillId::MirrorImage`),
 // the skill of his that takes a full charge: a copy of him appears on the ground where the
 // crosshair points, `clone_range` from him at most, and for `clone_seconds` casts his spells at
-// the nearest enemy within `clone_reach` of it, one every `clone_cast_seconds`: his bolt, his
-// chain lightning, his firebolt at its least, in turn. What it casts does `clone_damage_share`
-// of what his own does and does not fill his charge. Enemies go for it as they go for him, and
-// what strikes it counts `clone_damage_taken` times against a life as long as his own: then it
-// is gone before its time. One at a time.
-inline constexpr float clone_seconds = 10.0F;
+// the nearest enemy within `clone_reach` of it, one every `clone_cast_seconds`. What it casts
+// does `clone_damage_share` of what his own does and does not fill his charge. Enemies go for
+// it as they go for him. One at a time.
+// Since ticket 55 (its wisher's change): nothing hurts it (at first what struck it counted three
+// times against a life like his, and one blow of a Shroomling ended it after its first spell), it
+// stands 8 seconds and not 10, does three tenths and not half, and casts only his spells that
+// are there to do damage: not his bolt, his Frost Armor or his Teleportation.
+inline constexpr float clone_seconds = 8.0F;
 inline constexpr float clone_range = 20.0F;        // metres from him
 inline constexpr float clone_reach = 20.0F;        // metres from it
 inline constexpr float clone_cast_seconds = 1.3F;  // from one cast to the next
-inline constexpr float clone_damage_share = 0.5F;  // as wished
-inline constexpr float clone_damage_taken = 3.0F;  // as wished
-inline constexpr int clone_spells = 5;
-// What it casts as its `cast`-th spell (0, 1, 2 ...): two bolts, the chain, a bolt, the firebolt, and again.
+inline constexpr float clone_damage_share = 0.3F;  // as its wisher asked
+inline constexpr int clone_spells = 6;
+// What it casts as its `cast`-th spell (0, 1, 2 ...): the blizzard (which holds what it is cast
+// at), the hydra, the firebolt (at its least), the chain lightning, the black hole, the firebolt;
+// six casts are what its eight seconds hold.
 [[nodiscard]] constexpr SkillId clone_spell(int cast) noexcept {
-    const int turn = (cast % clone_spells + clone_spells) % clone_spells;
-    return turn == 2 ? SkillId::ChainBolt : (turn == 4 ? SkillId::Firebolt : SkillId::ArcaneBolt);
+    constexpr std::array<SkillId, clone_spells> spells{SkillId::Blizzard, SkillId::PoisonHydra, SkillId::Firebolt,
+                                                       SkillId::ChainBolt, SkillId::RovingHole, SkillId::Firebolt};
+    return spells.at(static_cast<std::size_t>((cast % clone_spells + clone_spells) % clone_spells));
 }
 
 // What a barrier with `barrier` left takes of a blow of `amount`.
@@ -299,7 +303,7 @@ inline constexpr float stampede_move_share = 1.3F;
 // (Bug report 38, a change its wisher asked for: four blows a second instead of two, and unhurt
 // while it lasts. Each blow is half of what it was, so that all of it does what it did: the
 // three tenths less that were asked would have made it two fifths stronger, and safe besides.)
-inline constexpr float pieces_seconds = 6.0F;
+inline constexpr float pieces_seconds = 5.0F; // (6 until ticket 57)
 inline constexpr float pieces_tick_seconds = 0.25F;
 inline constexpr float pieces_reach = 10.0F; // metres
 
@@ -312,7 +316,7 @@ inline constexpr float whirl_tick_seconds = 0.5F;
 inline constexpr float whirl_radius = 3.0F;           // metres
 inline constexpr float whirl_pull_radius = 5.0F;      // metres
 inline constexpr float whirl_pull_speed = 0.5F;       // m/s towards her
-inline constexpr float whirl_move_speed = 2.6F;       // m/s: how fast she walks while she whirls
+inline constexpr float whirl_move_speed = 2.86F;      // m/s: how fast she walks while she whirls (2.6 until ticket 59)
 inline constexpr float whirl_turns_per_second = 4.4F; // (2.2 at first: "really slow", bug report 30)
 
 // A channel is on at once on its key, like a stance, but it is what she does while it lasts:
@@ -431,12 +435,13 @@ struct BleedStep {
 // throws a fireball at what the crosshair covers; it bursts where it strikes and hurts everything
 // within `firebolt_radius`. Damage (skill_damage with the power) and radius grow with the charge:
 // twice the damage after the full charge, as wished. (The wish had the radius grow by 5 m a
-// second, 20 m in the end: wider than a camp of enemies. It is `firebolt_full_radius`, a little
-// under the first wizard's meteor.)
+// second, 20 m in the end, and ticket 50 asked for 10 to 40 m: wider than a camp of enemies. It is
+// `firebolt_full_radius`: 5 m at first, 7 since ticket 50, the widest burst any hero has, for the
+// four seconds he stands still.)
 inline constexpr float firebolt_least_charge_seconds = 1.0F;
 inline constexpr float firebolt_full_charge_seconds = 4.0F;
-inline constexpr float firebolt_least_radius = 2.5F; // metres, after the least charge
-inline constexpr float firebolt_full_radius = 5.0F;  // metres, after the full one
+inline constexpr float firebolt_least_radius = 3.0F; // metres, after the least charge
+inline constexpr float firebolt_full_radius = 7.0F;  // metres, after the full one
 // How far a charge of so many seconds has come, 0 (the least that is thrown, or less) to 1 (full).
 [[nodiscard]] float firebolt_power(float charged_seconds) noexcept;
 // How far the burst of a fireball of that power (0..1) reaches.

@@ -750,7 +750,6 @@ private:
     // still lasts, until it casts again, and how many spells it has cast.
     bool clone_ = false;
     float clone_share_ = 0.0F;
-    float clone_health_ = 0.0F;
     std::uint64_t clone_id_ = 0;
     godot::Vector3 clone_place_;
     float clone_facing_ = 0.0F;

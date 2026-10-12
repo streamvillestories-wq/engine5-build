@@ -269,9 +269,14 @@ TEST_CASE("the new warrior's whirlwind is a channel within her range", "[skills]
     CHECK(in_all > e5::gameplay::skill_damage(SkillId::Slash) * e5::gameplay::combo_damage_factor(2));
     CHECK(in_all < 0.5F * e5::gameplay::skill_damage(SkillId::CutInPieces) * e5::gameplay::pieces_seconds /
                        e5::gameplay::pieces_tick_seconds);
-    // "Rarely": 20 to 30 seconds.
-    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) >= 20.0F);
-    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) <= 30.0F);
+    // 10 seconds since ticket 59 (20 at first, "rarely"; its wisher asked for 9): as her Counter
+    // Attack and her Enrage, the quickest of her skills, and never ready while it still lasts.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) == Catch::Approx(10.0F));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) >=
+          e5::gameplay::skill_cooldown_seconds(SkillId::CounterAttack));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BladeWhirl) > e5::gameplay::whirl_seconds);
+    // She walks a tenth faster while she whirls than at first (ticket 59), still slower than a walk at a run.
+    CHECK(e5::gameplay::whirl_move_speed == Catch::Approx(2.86F));
     CHECK(e5::gameplay::whirl_radius < e5::gameplay::whirl_pull_radius);
     // Its ticks are counted like a wound's: eight in four seconds.
     CHECK(e5::gameplay::step_bleed(
@@ -452,13 +457,14 @@ TEST_CASE("cut in pieces is the new warrior's skill for a full charge", "[skills
         charged += e5::gameplay::skill_needs_charge(bar.slot(slot)) ? 1 : 0;
     }
     CHECK(charged == 1);
-    // Each blow four tenths of a sword blow; twenty-four of them, four a second.
-    CHECK(e5::gameplay::skill_damage(SkillId::CutInPieces) ==
-          Catch::Approx(0.4F * e5::gameplay::skill_damage(SkillId::Slash)));
+    // Each blow 12, a little over half a sword blow; twenty of them in five seconds, four a second
+    // (ticket 57, its wisher's change; twenty-four of 8.8 in six seconds before).
+    CHECK(e5::gameplay::skill_damage(SkillId::CutInPieces) == Catch::Approx(12.0F));
+    CHECK(e5::gameplay::skill_damage(SkillId::CutInPieces) < e5::gameplay::skill_damage(SkillId::Slash));
     CHECK(e5::gameplay::step_bleed(
               e5::gameplay::open_wound({}, e5::gameplay::pieces_seconds, e5::gameplay::pieces_tick_seconds),
               e5::gameplay::pieces_tick_seconds, 60.0F)
-              .ticks == 24);
+              .ticks == 20);
 }
 
 TEST_CASE("the seismic slash catches what is in its wedge", "[skills]") {
@@ -904,9 +910,11 @@ TEST_CASE("the new wizard's teleportation takes him so far and no further", "[sk
     CHECK(e5::gameplay::skill_from_wish(SkillId::Teleport));
     CHECK(e5::gameplay::skill_damage(SkillId::Teleport) == 0.0F);
     CHECK_FALSE(e5::gameplay::skill_is_stance(SkillId::Teleport));
-    // "Now and then": 8 to 12 seconds.
-    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Teleport) >= 8.0F);
-    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Teleport) <= 12.0F);
+    // 6 seconds since ticket 53 (10 at first, "now and then"): it hurts nobody, and no skill of
+    // his is ready sooner than his Chain Lightning.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Teleport) == Catch::Approx(6.0F));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Teleport) >
+          e5::gameplay::skill_cooldown_seconds(SkillId::ChainBolt));
     CHECK(e5::gameplay::teleport_range == Catch::Approx(20.0F)); // as wished
     CHECK(teleport_share(0.0F) == 1.0F);
     CHECK(teleport_share(12.0F) == 1.0F);
@@ -1008,22 +1016,28 @@ TEST_CASE("whose ur mommy is the new wizard's skill for a full charge", "[skills
         charged += e5::gameplay::skill_needs_charge(bar.slot(slot)) ? 1 : 0;
     }
     CHECK(charged == 1);
-    // Ten seconds, half his damage, three times what strikes it: as wished.
-    CHECK(e5::gameplay::clone_seconds == Catch::Approx(10.0F));
-    CHECK(e5::gameplay::clone_damage_share == Catch::Approx(0.5F));
-    CHECK(e5::gameplay::clone_damage_taken == Catch::Approx(3.0F));
-    // What it casts, in turn: spells of his that do damage, and never itself.
-    CHECK(clone_spell(0) == SkillId::ArcaneBolt);
-    CHECK(clone_spell(1) == SkillId::ArcaneBolt);
-    CHECK(clone_spell(2) == SkillId::ChainBolt);
-    CHECK(clone_spell(3) == SkillId::ArcaneBolt);
-    CHECK(clone_spell(4) == SkillId::Firebolt);
-    CHECK(clone_spell(5) == SkillId::ArcaneBolt);
+    // Eight seconds and three tenths of his damage: as its wisher asked in ticket 55 (ten and half at first).
+    CHECK(e5::gameplay::clone_seconds == Catch::Approx(8.0F));
+    CHECK(e5::gameplay::clone_damage_share == Catch::Approx(0.3F));
+    // What it casts, in turn: the spells of his that are there to do damage.
+    CHECK(clone_spell(0) == SkillId::Blizzard);
+    CHECK(clone_spell(1) == SkillId::PoisonHydra);
+    CHECK(clone_spell(2) == SkillId::Firebolt);
+    CHECK(clone_spell(3) == SkillId::ChainBolt);
+    CHECK(clone_spell(4) == SkillId::RovingHole);
+    CHECK(clone_spell(5) == SkillId::Firebolt);
+    CHECK(clone_spell(6) == SkillId::Blizzard);
     CHECK(clone_spell(-1) == SkillId::Firebolt);
     const auto his = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Mage);
     for (int cast = 0; cast < 2 * e5::gameplay::clone_spells; ++cast) {
         CHECK(std::ranges::find(his, clone_spell(cast)) != his.end());
         CHECK(e5::gameplay::skill_damage(clone_spell(cast)) > 0.0F);
+        // Never itself, and none of the three its wisher took out: his bolt, the armour, the teleportation.
         CHECK(clone_spell(cast) != SkillId::MirrorImage);
+        CHECK(clone_spell(cast) != SkillId::ArcaneBolt);
+        CHECK(clone_spell(cast) != SkillId::FrostArmor);
+        CHECK(clone_spell(cast) != SkillId::Teleport);
     }
+    // It has time for one round of them, and no more.
+    CHECK(e5::gameplay::clone_seconds / e5::gameplay::clone_cast_seconds < static_cast<float>(e5::gameplay::clone_spells) + 1.0F);
 }
