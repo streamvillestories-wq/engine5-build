@@ -289,6 +289,8 @@ public:
     void end_disguise();
     /// Another player's hero, shown here: she is a bush or she is not, as her own machine says.
     void set_shown_disguised(bool disguised);
+    /// ... and stands at her arrow gun or does not.
+    void set_shown_manning(bool manning);
     [[nodiscard]] godot::Variant find_bush(float radius) const;
     [[nodiscard]] float get_resolve_spared() const { return resolve_spared_; }
     [[nodiscard]] float get_resolve_healed() const { return resolve_healed_; }
@@ -615,6 +617,7 @@ private:
         godot::Vector3 direction; // level, towards where she lands
     };
     Leap leap_;
+    float remote_pieces_left_ = 0.0F;      // another player's hero: she leaps from enemy to enemy for so long yet
     float remote_leap_left_ = 0.0F;        // another player's hero: seconds until her leap lands here
     bool leap_aiming_ = false;             // the Jump Attack's button is held: its mark shows
     godot::Node3D* leap_marker_ = nullptr; // non-owning child, made when first needed

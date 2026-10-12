@@ -637,6 +637,7 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_disguises"), &E5PlayerController::get_disguises);
     ClassDB::bind_method(D_METHOD("end_disguise"), &E5PlayerController::end_disguise);
     ClassDB::bind_method(D_METHOD("set_shown_disguised", "disguised"), &E5PlayerController::set_shown_disguised);
+    ClassDB::bind_method(D_METHOD("set_shown_manning", "manning"), &E5PlayerController::set_shown_manning);
     ClassDB::bind_method(D_METHOD("find_bush", "radius"), &E5PlayerController::find_bush);
     ClassDB::bind_method(D_METHOD("get_pieces_blows"), &E5PlayerController::get_pieces_blows);
     ClassDB::bind_method(D_METHOD("get_stampede_seconds"), &E5PlayerController::get_stampede_seconds);
@@ -1381,6 +1382,13 @@ void E5PlayerController::apply_net_state(const godot::Vector3& position, float f
         model_yaw_ = facing;
         has_net_state_ = true;
     }
+    if (remote_pieces_left_ > 0.0F && has_net_state_ && position.distance_to(net_position_) > 2.0) {
+        // Cut in Pieces: she is beside the next enemy at once, and leaves the streak she leaves
+        // on her own machine.
+        E5LightningArc::spawn(get_parent(), get_global_position() + godot::Vector3(0.0F, 1.1F, 0.0F),
+                              position + godot::Vector3(0.0F, 1.1F, 0.0F), godot::Color(2.4F, 2.4F, 2.8F));
+        set_global_position(position);
+    }
     net_position_ = position;
     net_facing_ = facing;
     net_clip_ = godot::StringName(clip);
@@ -1416,6 +1424,23 @@ godot::Array E5PlayerController::take_net_events() {
 void E5PlayerController::apply_net_event(int kind, int skill, float power, int combo_step, float look_yaw,
                                          float look_pitch) {
     if (!remote_) {
+        return;
+    }
+    if (kind == 5) {
+        // An arrow from her gun: shown, hurting nothing (her own machine counts what it hits).
+        godot::Node3D* const turret = get_turret();
+        if (turret != nullptr && archery_enabled_) {
+            const float x = std::clamp(power, -1.0F, 1.0F);
+            const float z = std::clamp(look_yaw, -1.0F, 1.0F);
+            const float y = std::sqrt(std::max(1.0F - x * x - z * z, 0.0F)) * (combo_step < 0 ? -1.0F : 1.0F);
+            const godot::Vector3 direction = godot::Vector3(x, y, z).normalized();
+            const godot::Vector3 muzzle = turret->call("get_muzzle");
+            turret->call("aim_at", godot::Vector3(muzzle + direction * 30.0F));
+            E5Arrow* const arrow = spawn_arrow(muzzle, direction);
+            arrow->set_damage(0.0F);
+            arrow->launch(direction * arrow_speed_, get_rid());
+            turret->call("fired");
+        }
         return;
     }
     if (kind == 2) {
@@ -1504,6 +1529,12 @@ void E5PlayerController::update_remote(float delta) {
             pending_start_ = false;
             start_channel(skills_.selected());
         }
+        if (pending_start_ && skills_.selected() == gameplay::SkillId::CutInPieces) {
+            // From enemy to enemy: where she is arrives with her place; a leap is seen as one.
+            pending_start_ = false;
+            remote_pieces_left_ = gameplay::pieces_seconds + 0.6F;
+        }
+        remote_pieces_left_ = std::max(remote_pieces_left_ - delta, 0.0F);
         if (pending_start_ && skills_.selected() == gameplay::SkillId::JumpAttack) {
             // Where she flies arrives with her place; what is left to show is where she lands.
             pending_start_ = false;
@@ -3422,6 +3453,20 @@ godot::Variant E5PlayerController::find_bush(float radius) const {
     return bush.mesh.is_valid() ? godot::Variant(bush.transform.origin) : godot::Variant();
 }
 
+void E5PlayerController::set_shown_manning(bool manning) {
+    if (!remote_ || manning == manning_) {
+        return;
+    }
+    godot::Node3D* const turret = get_turret();
+    if (manning && turret == nullptr) {
+        return; // no gun of hers stands here (yet)
+    }
+    manning_ = manning;
+    if (turret != nullptr) {
+        turret->call("set_gunner", manning ? godot::Variant(this) : godot::Variant());
+    }
+}
+
 void E5PlayerController::set_shown_disguised(bool disguised) {
     if (!remote_ || disguised == disguised_) {
         return;
@@ -3553,6 +3598,15 @@ void E5PlayerController::update_gatling(float delta) {
         arrow->set_damage(dealt(gameplay::SkillId::GatlingGun));
         arrow->launch(direction * arrow_speed_, get_rid());
         turret->call("fired");
+        // For the others: an arrow from her gun, this way (kind 5; the way is x, z and whether up).
+        godot::Array shot;
+        shot.push_back(5);
+        shot.push_back(-1);
+        shot.push_back(static_cast<float>(direction.x));
+        shot.push_back(direction.y >= 0.0 ? 1 : -1);
+        shot.push_back(static_cast<float>(direction.z));
+        shot.push_back(0.0F);
+        net_events_.push_back(shot);
         last_skill_ = gameplay::SkillId::GatlingGun;
         ++gatling_arrows_;
     }

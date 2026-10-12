@@ -145,6 +145,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("fling", "velocity"), &E5Enemy::fling);
     ClassDB::bind_method(D_METHOD("stroll", "velocity"), &E5Enemy::stroll);
     ClassDB::bind_method(D_METHOD("drag", "velocity"), &E5Enemy::drag);
+    ClassDB::bind_method(D_METHOD("take_outgoing_effects"), &E5Enemy::take_outgoing_effects);
+    ClassDB::bind_method(D_METHOD("apply_effect", "what", "a", "b"), &E5Enemy::apply_effect);
     ClassDB::bind_method(D_METHOD("spin", "radians"), &E5Enemy::spin);
     ClassDB::bind_method(D_METHOD("get_aim_point"), &E5Enemy::get_aim_point);
     ClassDB::bind_method(D_METHOD("take_damage", "amount", "position"), &E5Enemy::take_damage);
@@ -648,7 +650,64 @@ void E5Enemy::spin(float radians) {
     }
 }
 
+void E5Enemy::note_effect(int what, float a, float b) {
+    if (!remote_ || outgoing_effects_.size() >= 8) {
+        return;
+    }
+    godot::Array effect;
+    effect.push_back(what);
+    effect.push_back(a);
+    effect.push_back(b);
+    outgoing_effects_.push_back(effect);
+}
+
+godot::Array E5Enemy::take_outgoing_effects() {
+    godot::Array effects = outgoing_effects_;
+    outgoing_effects_ = godot::Array();
+    if (has_outgoing_drag_) {
+        godot::Array effect;
+        effect.push_back(effect_drag);
+        effect.push_back(static_cast<float>(outgoing_drag_.x));
+        effect.push_back(static_cast<float>(outgoing_drag_.z));
+        effects.push_back(effect);
+        has_outgoing_drag_ = false;
+    }
+    return effects;
+}
+
+void E5Enemy::apply_effect(int what, float a, float b) {
+    if (remote_ || !is_alive()) {
+        return; // only where it is decided
+    }
+    // Another machine's word: within what any skill of the game does.
+    switch (what) {
+    case effect_stun:
+        stun(std::clamp(a, 0.0F, 10.0F));
+        break;
+    case effect_root:
+        root(std::clamp(a, 0.0F, 15.0F));
+        break;
+    case effect_slow:
+        slow(a, std::clamp(b, 0.0F, 15.0F));
+        break;
+    case effect_drag:
+        drag(godot::Vector3(std::clamp(a, -12.0F, 12.0F), 0.0F, std::clamp(b, -12.0F, 12.0F)));
+        break;
+    case effect_fling:
+        arriving_fling_ = godot::Vector3(std::clamp(a, -30.0F, 30.0F), 0.0F, std::clamp(b, -30.0F, 30.0F));
+        break;
+    case effect_fling_up:
+        arriving_fling_.y = std::clamp(a, 0.0F, 30.0F);
+        fling(arriving_fling_);
+        arriving_fling_ = godot::Vector3();
+        break;
+    default:
+        break;
+    }
+}
+
 void E5Enemy::slow(float share, float seconds) {
+    note_effect(effect_slow, share, seconds);
     const float wanted = std::clamp(share, 0.0F, 0.9F);
     if (slowed_left_ <= 0.0F || wanted >= slowed_share_) {
         slowed_share_ = wanted;
@@ -657,6 +716,12 @@ void E5Enemy::slow(float share, float seconds) {
 }
 
 void E5Enemy::fling(const godot::Vector3& velocity) {
+    if (remote_) {
+        // Where it flies is decided elsewhere: told there, not done here.
+        note_effect(effect_fling, static_cast<float>(velocity.x), static_cast<float>(velocity.z));
+        note_effect(effect_fling_up, static_cast<float>(velocity.y), 0.0F);
+        return;
+    }
     flung_ = true;
     set_velocity(velocity);
 }

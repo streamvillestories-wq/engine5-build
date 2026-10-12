@@ -62,11 +62,20 @@ public:
     void spin(float radians);
     // Holds it where it stands for so many seconds (brambles): it cannot walk or fly on, but
     // it still strikes and casts at what is in its reach, and can be hit.
-    void root(float seconds) { rooted_left_ = std::max(rooted_left_, seconds); }
+    void root(float seconds) {
+        rooted_left_ = std::max(rooted_left_, seconds);
+        note_effect(effect_root, seconds, 0.0F);
+    }
     [[nodiscard]] bool is_rooted() const { return rooted_left_ > 0.0F; }
     // Drawn along by something (a whirlwind) for the next step, on top of where it goes by
     // itself: to be said again every step. Not while it is rooted; only those that walk.
-    void drag(const godot::Vector3& velocity) { dragged_ = velocity; }
+    void drag(const godot::Vector3& velocity) {
+        dragged_ = velocity;
+        if (remote_) {
+            outgoing_drag_ = velocity; // the latest: told to the deciding machine a few times a second
+            has_outgoing_drag_ = true;
+        }
+    }
     // Walks it about while it has noticed nobody (a giant on his rounds; a script says where to,
     // every step: game/creatures/warden_attacks.gd): it goes that way at that pace, looks where it
     // goes and plays its walk. One that strolls never sleeps: its rounds go on with nobody near.
@@ -79,10 +88,26 @@ public:
     void slow(float share, float seconds);
     // Stuns it for so many seconds: it stands, neither walks nor strikes nor casts, and sees
     // nobody. It can be hit meanwhile, and goes for the hero again when it is over.
-    void stun(float seconds) { stunned_left_ = std::max(stunned_left_, seconds); }
+    void stun(float seconds) {
+        stunned_left_ = std::max(stunned_left_, seconds);
+        note_effect(effect_stun, seconds, 0.0F);
+    }
     [[nodiscard]] bool is_stunned() const { return stunned_left_ > 0.0F; }
     // Throws it: it flies under gravity until it lands, then carries on as before.
     void fling(const godot::Vector3& velocity);
+
+    // What skills did to this enemy besides hurting it, on a machine that only shows it: kept
+    // until the network script takes it and tells the machine that decides the enemy
+    // (game/net/net.gd). Each is [what, a, b]; the numbers are those of `apply_effect`.
+    static constexpr int effect_stun = 1;     // a: seconds
+    static constexpr int effect_root = 2;     // a: seconds
+    static constexpr int effect_slow = 3;     // a: share of its pace, b: seconds
+    static constexpr int effect_drag = 4;     // a, b: metres a second along x and z
+    static constexpr int effect_fling = 5;    // a, b: metres a second along x and z ...
+    static constexpr int effect_fling_up = 6; // ... a: and upwards (follows a fling at once)
+    [[nodiscard]] godot::Array take_outgoing_effects();
+    // The same, arriving where the enemy is decided.
+    void apply_effect(int what, float a, float b);
 
     // A boss's great attacks (EnemyPhase::Special): with a `special_range` it does one of
     // `special_count` in turn, plays the clip `special_<n>` for as long as that clip is, and
@@ -310,6 +335,11 @@ private:
 
     // Damage that arrived since the last physics step.
     float pending_damage_ = 0.0F;
+    godot::Array outgoing_effects_;
+    godot::Vector3 outgoing_drag_;
+    bool has_outgoing_drag_ = false;
+    godot::Vector3 arriving_fling_;
+    void note_effect(int what, float a, float b);
     bool asleep_ = false;
     float sleep_check_seconds_ = 0.0F; // until it looks again whether to sleep or wake
     // Whether it should sleep now; looked at a few times a second, not every frame.
