@@ -21,59 +21,6 @@ constexpr std::array<ItemInfo, static_cast<std::size_t>(Count)> items{{
      .max_stack = 10,
      .value = 12,
      .heal = 40.0F},
-    {.key = "greater_health_potion",
-     .name = "Greater Health Potion",
-     .description = "Brewed from glow spores. Brings back the nearly dead.",
-     .kind = ItemKind::Consumable,
-     .rarity = Rarity::Uncommon,
-     .max_stack = 5,
-     .value = 40,
-     .heal = 100.0F},
-    {.key = "shroom_cap",
-     .name = "Shroom Cap",
-     .description = "The cap of a Shroomling. Tough, and it smells of rain.",
-     .kind = ItemKind::Material,
-     .rarity = Rarity::Common,
-     .max_stack = 20,
-     .value = 3},
-    {.key = "glow_spore",
-     .name = "Glow Spore",
-     .description = "It still glows faintly. Alchemists pay well for these.",
-     .kind = ItemKind::Material,
-     .rarity = Rarity::Uncommon,
-     .max_stack = 20,
-     .value = 9},
-    {.key = "crystal_shard",
-     .name = "Crystal Shard",
-     .description = "A splinter of the great tree's crystal. It hums when held.",
-     .kind = ItemKind::Material,
-     .rarity = Rarity::Rare,
-     .max_stack = 10,
-     .value = 35},
-    {.key = "charm_vigor",
-     .name = "Charm of Vigor",
-     .description = "A heart of glass that beats with its wearer's.",
-     .kind = ItemKind::Charm,
-     .rarity = Rarity::Rare,
-     .max_stack = 1,
-     .value = 120,
-     .bonus_health = 30.0F},
-    {.key = "charm_renewal",
-     .name = "Charm of Renewal",
-     .description = "One drop that never dries.",
-     .kind = ItemKind::Charm,
-     .rarity = Rarity::Rare,
-     .max_stack = 1,
-     .value = 120,
-     .bonus_regen = 3.0F},
-    {.key = "charm_swiftness",
-     .name = "Charm of Swiftness",
-     .description = "Feather-light. The ground seems shorter with it.",
-     .kind = ItemKind::Charm,
-     .rarity = Rarity::Epic,
-     .max_stack = 1,
-     .value = 200,
-     .bonus_speed = 0.12F},
     // --- the archer's bows -------------------------------------------------------------------
     // A bow's worth is its level; its rarity says how many things it gives beside damage
     // (common: none, uncommon: one, rare: two, epic: three, legendary: four). Damage is about
@@ -514,24 +461,8 @@ Loot roll_loot(std::uint32_t seed) noexcept {
             loot.items.at(used++) = {.item = item, .count = count};
         }
     };
-    if (chance(state) < 0.7F) {
-        drop(ShroomCap, 1 + static_cast<int>(chance(state) * 2.0F));
-    }
-    if (chance(state) < 0.3F) {
-        drop(GlowSpore, 1);
-    }
-    const float potion = chance(state);
-    if (potion < 0.06F) {
-        drop(GreaterHealthPotion, 1);
-    } else if (potion < 0.3F) {
+    if (chance(state) < 0.25F) {
         drop(HealthPotion, 1);
-    }
-    const float rare = chance(state);
-    if (rare < 0.05F) {
-        const std::array charms{CharmVigor, CharmRenewal, CharmSwiftness};
-        drop(charms.at(next(state) % charms.size()), 1);
-    } else if (rare < 0.15F) {
-        drop(CrystalShard, 1);
     }
     return loot;
 }

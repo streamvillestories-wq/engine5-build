@@ -74,6 +74,7 @@ void E5Inventory::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_weapon_class"), &E5Inventory::get_weapon_class);
     ClassDB::bind_method(D_METHOD("get_slot", "slot"), &E5Inventory::get_slot);
     ClassDB::bind_method(D_METHOD("describe", "item"), &E5Inventory::describe);
+    ClassDB::bind_method(D_METHOD("get_item_count"), &E5Inventory::get_item_count);
     ClassDB::bind_method(D_METHOD("add", "item", "count"), &E5Inventory::add);
     ClassDB::bind_method(D_METHOD("add_gold", "amount"), &E5Inventory::add_gold);
     ClassDB::bind_method(D_METHOD("get_gold"), &E5Inventory::get_gold);
@@ -130,6 +131,11 @@ godot::Dictionary E5Inventory::describe(int item) const {
     result["crit_chance"] = info.crit_chance;
     result["crit_damage"] = info.crit_damage;
     return result;
+}
+
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+int E5Inventory::get_item_count() const {
+    return static_cast<int>(gameplay::ItemId::Count);
 }
 
 int E5Inventory::add(int item, int count) {
@@ -223,13 +229,8 @@ bool E5Inventory::use(int slot) {
 }
 
 bool E5Inventory::use_potion() {
-    for (const gameplay::ItemId potion : {gameplay::ItemId::HealthPotion, gameplay::ItemId::GreaterHealthPotion}) {
-        const int slot = gameplay::find_item(inventory_, potion);
-        if (slot >= 0) {
-            return use(slot);
-        }
-    }
-    return false;
+    const int slot = gameplay::find_item(inventory_, gameplay::ItemId::HealthPotion);
+    return slot >= 0 && use(slot);
 }
 
 bool E5Inventory::drop(int slot) {
@@ -261,8 +262,7 @@ int E5Inventory::count_of(int item) const {
 }
 
 int E5Inventory::get_potion_count() const {
-    return gameplay::count_of(inventory_, gameplay::ItemId::HealthPotion) +
-           gameplay::count_of(inventory_, gameplay::ItemId::GreaterHealthPotion);
+    return gameplay::count_of(inventory_, gameplay::ItemId::HealthPotion);
 }
 
 godot::Dictionary E5Inventory::get_bonuses() const {

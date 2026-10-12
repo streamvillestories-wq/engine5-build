@@ -14,13 +14,9 @@ namespace e5::gameplay {
 enum class ItemId : std::uint8_t {
     None,
     HealthPotion,
-    GreaterHealthPotion,
-    ShroomCap,
-    GlowSpore,
-    CrystalShard,
-    CharmVigor,
-    CharmRenewal,
-    CharmSwiftness,
+    // (Until 2026-10-12 there were also a greater potion, three materials and three charms, made
+    // up when the bag was built. The keeper had them taken out: the weapons and the health
+    // potion stay, and what else there is to find is to be decided anew.)
     // The archer's bows, from plain to precious (docs/ASSET_PIPELINE.md, "Weapons: levels, rarity
     // and what they give"). New items go at the end: the numbers are sent between machines.
     BowWarden,
@@ -95,7 +91,9 @@ struct ItemStack {
 };
 
 inline constexpr int bag_slots = 24;
-inline constexpr int charm_slots = 3;
+// None for now: there are no charms (see ItemId). What follows still knows what a charm slot
+// is, so that things worn can come back by giving it a number again.
+inline constexpr int charm_slots = 0;
 // Slots are numbered through: the bag first, then the charm slots, then the weapon.
 inline constexpr int weapon_slot = bag_slots + charm_slots;
 inline constexpr int slot_count = weapon_slot + 1;
@@ -170,8 +168,8 @@ struct Loot {
     std::array<ItemStack, 3> items{}; // unused entries are empty
 };
 
-// The same seed always gives the same loot. Every kill leaves some gold; the
-// rest is chance: materials often, a potion sometimes, a charm rarely.
+// The same seed always gives the same loot. Every kill leaves some gold, and one in four
+// a health potion. (Weapons are not found yet: every hero starts with all of hers.)
 [[nodiscard]] Loot roll_loot(std::uint32_t seed) noexcept;
 
 } // namespace e5::gameplay

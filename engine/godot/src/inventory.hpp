@@ -36,6 +36,9 @@ public:
     [[nodiscard]] godot::Dictionary get_slot(int slot) const;
     // Everything the interface shows about an item: name, description, kind, rarity, colour, effects.
     [[nodiscard]] godot::Dictionary describe(int item) const;
+    // How many kinds of item there are, None counted: items are numbered 1 .. this - 1 (the
+    // item window shows them all: game/ui/item_book.gd).
+    [[nodiscard]] int get_item_count() const;
 
     // Puts items into the bag and returns how many did not fit.
     int add(int item, int count);
