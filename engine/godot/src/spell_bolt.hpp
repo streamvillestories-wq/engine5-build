@@ -23,6 +23,16 @@ public:
     // All before launch. Effects may be unset.
     void set_trail_effect(const godot::Ref<godot::PackedScene>& effect, float scale = 1.0F);
     void set_impact_effect(const godot::Ref<godot::PackedScene>& effect) { impact_effect_ = effect; }
+    // The enemy it strikes is poisoned: `tick_damage` every `tick_seconds` for `seconds`, with
+    // `visual` on it meanwhile. One poison to an enemy: struck again, it begins anew.
+    void set_poison(float tick_damage, float seconds, float tick_seconds, const godot::Ref<godot::PackedScene>& visual) {
+        poison_tick_damage_ = tick_damage;
+        poison_seconds_ = seconds;
+        poison_tick_seconds_ = tick_seconds;
+        poison_visual_ = visual;
+    }
+    // How large the impact effect is shown, of the size it was made at.
+    void set_impact_scale(float scale) { impact_scale_ = scale; }
     void set_damage(float damage) { damage_ = damage; }
     void set_blast_radius(float radius) { blast_radius_ = radius; }
     // Makes the spell steer towards a place in the world: it may start in any direction and
@@ -48,6 +58,11 @@ private:
     godot::Node3D* trail_ = nullptr; // non-owning child
     float damage_ = 0.0F;
     float blast_radius_ = 0.0F;
+    float impact_scale_ = 1.0F;
+    float poison_tick_damage_ = 0.0F;
+    float poison_seconds_ = 0.0F; // 0: it poisons nobody
+    float poison_tick_seconds_ = 0.5F;
+    godot::Ref<godot::PackedScene> poison_visual_;
     godot::Vector3 homing_target_;
     float homing_speed_ = 0.0F; // 0 = flies straight
     float homing_turn_ = 0.0F;

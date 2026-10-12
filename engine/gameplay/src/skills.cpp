@@ -89,6 +89,24 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Gatling Arrow Gun", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Disguise:
         return {.name = "Disguise", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Firebolt:
+        return {.name = "Firebolt", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::FrostArmor:
+        return {.name = "Frost Armor", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ChainBolt:
+        return {.name = "Chain Lightning", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::PoisonHydra:
+        return {.name = "Poison Hydra", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Teleport:
+        return {.name = "Teleportation", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::RovingHole:
+        return {.name = "Black Whole", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Blizzard:
+        return {.name = "Blizzard", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BearTrap:
+        return {.name = "Bear Trap", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::MirrorImage:
+        return {.name = "Whose Ur Mommy?", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
         break;
     }
@@ -175,13 +193,32 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::NeverGiveUp:
     case SkillId::VineTower:
     case SkillId::Disguise:
+    case SkillId::FrostArmor:
+    case SkillId::Teleport:
+    case SkillId::MirrorImage: // (his copy's spells are his own, at clone_damage_share)
         return 0.0F; // they strike nobody
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
     case SkillId::CutInPieces:
-        return 17.6F; // each of its twelve blows: eight tenths of a sword blow
+        return 8.8F; // each of its twenty-four blows: four tenths of a sword blow
     case SkillId::GatlingGun:
         return 8.0F; // each arrow, four a second: 32 a second while she stands at it and holds the button
+    case SkillId::BearTrap:
+        return 60.0F; // to the one that steps in: more than a fire arrow, less than a fully charged power shot
+    case SkillId::Blizzard:
+        return 4.4F; // every half second to each enemy in it: two fifths of his bolt a second, more the longer it stays
+    case SkillId::RovingHole:
+        return 5.5F; // every half second to all near it: half his bolt a second, 66 to what stays with it to the end
+    case SkillId::PoisonHydra:
+        return 13.2F; // each spit: six tenths of his bolt; its poison adds hydra_poison_damage over five seconds
+    case SkillId::ChainBolt:
+        // The first strike, less than his bolt: it is for a crowd. Each leap a fifth more, so five
+        // enemies in a row take 119 between them; one alone takes this.
+        return 16.0F;
+    case SkillId::Firebolt:
+        // To everything its burst reaches. The full charge doubles it: then it is the first wizard's
+        // meteor, which is ready as often and needs no four seconds of standing still.
+        return 40.0F * (1.0F + std::clamp(power, 0.0F, 1.0F));
     case SkillId::None:
         break;
     }
@@ -242,6 +279,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::ThunderKick:
     case SkillId::Fireball:
     case SkillId::FlameBlade:
+    case SkillId::ChainBolt:
         return 5.0F;
     // In between.
     case SkillId::FireArrow:
@@ -268,13 +306,20 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::BrambleArrow:
     case SkillId::CounterAttack: // from the key: she stands ready for half of it
     case SkillId::Enrage:        // from the key too: the frenzy takes four of them
+    case SkillId::Firebolt:      // from the throw
+    case SkillId::Teleport:
+    case SkillId::BearTrap:      // from when it lies armed
         return 10.0F;
     case SkillId::JumpAttack:
+    case SkillId::FrostArmor: // from the key: it lasts five of them
+    case SkillId::RovingHole: // from the cast: it drifts for six of them
         return 12.0F;
     // Rarely.
     case SkillId::VineTower:
     case SkillId::GatlingGun: // from when it stands: ready again as it falls apart
     case SkillId::Disguise:   // from when it ends
+    case SkillId::PoisonHydra:
+    case SkillId::Blizzard:
         return 30.0F;
     case SkillId::Stampede:
     case SkillId::NeverGiveUp:
@@ -293,6 +338,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::StarWhirl:
     case SkillId::Battlecry:
     case SkillId::CutInPieces:
+    case SkillId::MirrorImage:
         return 0.0F;
     }
     return 0.0F;
@@ -300,7 +346,17 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
 
 bool skill_needs_charge(SkillId skill) noexcept {
     return skill == SkillId::Kingfishers || skill == SkillId::BlackHole || skill == SkillId::StarWhirl ||
-           skill == SkillId::Battlecry || skill == SkillId::CutInPieces;
+           skill == SkillId::Battlecry || skill == SkillId::CutInPieces || skill == SkillId::MirrorImage;
+}
+
+float firebolt_power(float charged_seconds) noexcept {
+    return std::clamp((charged_seconds - firebolt_least_charge_seconds) /
+                          (firebolt_full_charge_seconds - firebolt_least_charge_seconds),
+                      0.0F, 1.0F);
+}
+
+float firebolt_radius(float power) noexcept {
+    return firebolt_least_radius + (firebolt_full_radius - firebolt_least_radius) * std::clamp(power, 0.0F, 1.0F);
 }
 
 float charge_after(float charge, float damage_dealt, bool killed) noexcept {
@@ -435,12 +491,14 @@ SkillBar::SkillBar(SkillSet set) noexcept {
                   SkillId::NeverGiveUp, SkillId::Stampede,      SkillId::CutInPieces};
     } else if (set == SkillSet::Archer) {
         // (The Gatling Arrow Gun was wished for key 6: the slots before it are still to be filled.)
-        slots_ = {SkillId::Shot, SkillId::VineTower, SkillId::Disguise,
-                  SkillId::None, SkillId::None,      SkillId::GatlingGun};
+        slots_ = {SkillId::Shot,     SkillId::VineTower, SkillId::Disguise,
+                  SkillId::BearTrap, SkillId::None,      SkillId::GatlingGun};
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
     } else if (set == SkillSet::Mage) {
-        slots_ = {SkillId::ArcaneBolt};
+        slots_ = {SkillId::ArcaneBolt,  SkillId::Firebolt,    SkillId::FrostArmor,
+                  SkillId::ChainBolt,   SkillId::PoisonHydra, SkillId::Teleport,
+                  SkillId::RovingHole,  SkillId::Blizzard,    SkillId::MirrorImage};
     } else if (set == SkillSet::Wizard) {
         slots_ = {SkillId::ArcaneBolt, SkillId::Fireball,    SkillId::FrostNova, SkillId::ChainLightning,
                   SkillId::Meteor,     SkillId::StarBarrage, SkillId::BlackHole};
@@ -496,9 +554,10 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     // The Archer's: what was made from wishes, then the skills she had before (kept "in the
     // back" since 2026-10-10 and offered again in the book).
     static constexpr std::array archer{
-        SkillId::Shot,       SkillId::VineTower, SkillId::Disguise,   SkillId::GatlingGun,   SkillId::PowerShot,
-        SkillId::ArrowRain,  SkillId::FrostFan,  SkillId::FireArrow,  SkillId::ThunderKick,  SkillId::Kingfishers,
-        SkillId::VenomArrow, SkillId::GaleArrow, SkillId::StormArrow, SkillId::BrambleArrow, SkillId::DaggerCombo,
+        SkillId::Shot,        SkillId::VineTower,  SkillId::Disguise,  SkillId::GatlingGun, SkillId::BearTrap,
+        SkillId::PowerShot,   SkillId::ArrowRain,  SkillId::FrostFan,  SkillId::FireArrow,  SkillId::ThunderKick,
+        SkillId::Kingfishers, SkillId::VenomArrow, SkillId::GaleArrow, SkillId::StormArrow, SkillId::BrambleArrow,
+        SkillId::DaggerCombo,
     };
     static constexpr std::array blade{
         SkillId::Slash,  SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,  SkillId::SeismicSlash,
@@ -511,7 +570,9 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     static constexpr std::array wizard{SkillId::ArcaneBolt,     SkillId::Fireball, SkillId::FrostNova,
                                        SkillId::ChainLightning, SkillId::Meteor,   SkillId::StarBarrage,
                                        SkillId::BlackHole};
-    static constexpr std::array mage{SkillId::ArcaneBolt};
+    static constexpr std::array mage{SkillId::ArcaneBolt, SkillId::Firebolt, SkillId::FrostArmor, SkillId::ChainBolt,
+                                     SkillId::PoisonHydra, SkillId::Teleport,   SkillId::RovingHole, SkillId::Blizzard,
+                                     SkillId::MirrorImage};
     switch (set) {
     case SkillSet::Mage:
         return mage;
@@ -624,12 +685,41 @@ std::string_view skill_description(SkillId skill) noexcept {
                "is hit twice a second.";
     case SkillId::CutInPieces:
         return "Takes a full charge. For a few seconds she is at one enemy after another, picked by chance "
-               "among those near, with a blow for each.";
+               "among those near, with a quick blow for each. Nothing hurts her meanwhile.";
     case SkillId::GatlingGun:
         return "Hold the button: she kneels and builds a turret. Then she mans it and, with the left button "
                "held, shoots arrows very fast where she aims. E leaves it and mans it again. The damage is one arrow.";
     case SkillId::Disguise:
-        return "Standing in a bush, she becomes that bush: enemies do not see her until she shoots or steps out.";
+        return "Standing at a bush or a tree, she becomes it: enemies do not see her until she is hurt or it ends.";
+    case SkillId::Firebolt:
+        return "Hold the button: fire gathers at the tip of his wand, and he stands still meanwhile. Let go and "
+               "he throws it where he aims; it bursts where it strikes and burns everything near. The longer "
+               "it was held, the harder and the wider the burst. Let go too soon and it goes out.";
+    case SkillId::FrostArmor:
+        return "For a few seconds a barrier of frost takes the blows meant for him, until it has taken its fill, "
+               "and enemies near him move slower.";
+    case SkillId::ChainBolt:
+        return "Lightning from his wand strikes the enemy he aims at and leaps on to others near it, one after "
+               "another, harder with every leap. The damage is the first strike.";
+    case SkillId::PoisonHydra:
+        return "A three-headed hydra rises from the ground where he aims and spits venom at the enemies near it "
+               "for a while. What it strikes is poisoned. The damage is one spit; the poison does more over time.";
+    case SkillId::Teleport:
+        return "He is at once where he aims, a short way off: out of a fight, over a gap, up onto a ledge.";
+    case SkillId::RovingHole:
+        return "A small black hole leaves his wand and drifts slowly straight ahead. Enemies near it are drawn "
+               "after it and hurt twice a second for as long as they are near. The damage is one such tick.";
+    case SkillId::Blizzard:
+        return "Ice rains for a while on the place he aims at. Enemies that come into it are held fast for a "
+               "moment, then slowed, and hurt twice a second, more the longer they stay. The damage is one such tick.";
+    case SkillId::BearTrap:
+        return "Hold the button: she kneels and pulls a bear trap open on the ground before her. It lies there "
+               "and waits; the first enemy that steps into it is hurt badly. Only so many lie at a time: with "
+               "one more, the oldest is gone.";
+    case SkillId::MirrorImage:
+        return "Takes a full charge. A copy of him in all the rainbow's colours appears where he aims and casts "
+               "his spells at the enemies near it for a while, weaker than his own. Enemies go for it as they "
+               "go for him, and it does not stand much.";
     }
     return {};
 }

@@ -60,6 +60,15 @@ enum class SkillId : unsigned char {
     CutInPieces,   // the new warrior's, on a full charge: she is at one enemy after another, a blow for each
     GatlingGun,    // the archer's "Gatling Arrow Gun": she builds a turret, mans it and shoots arrows fast
     Disguise,      // the archer's: standing in a bush she becomes that bush; enemies do not see her
+    Firebolt,      // the new wizard's: fire gathers at his wand while he holds; let go, a fireball that bursts
+    FrostArmor,    // the new wizard's: for a few seconds a barrier of frost takes the blows, and what is near is slowed
+    ChainBolt,     // the new wizard's "Chain Lightning": lightning that leaps from enemy to enemy, harder each time
+    PoisonHydra,   // the new wizard's: a three-headed hydra rises where he aims and spits venom at what comes near
+    Teleport,      // the new wizard's "Teleportation": he is at once where the crosshair points
+    RovingHole,    // the new wizard's "Black Whole": a small black hole that drifts ahead, draws enemies in and hurts them
+    Blizzard,      // the new wizard's: ice rains on a place for a while; what stands there is held, then slowed, and hurt
+    BearTrap,      // the archer's: she kneels and sets a trap; the enemy that steps into it is hurt badly
+    MirrorImage,   // the new wizard's "Whose Ur Mommy?", on a full charge: a copy of him that casts his spells for a while
 };
 
 // Which skills a character has on the bar.
@@ -121,7 +130,147 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 // A stance is on at once on its key and stays on for a while: it has no clip that plays
 // through and does not hold her where she stands.
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
-    return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede;
+    return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede ||
+           skill == SkillId::FrostArmor;
+}
+
+// The new wizard's Frost Armor (ticket 42, a player's wish), a stance: for `frost_armor_seconds`
+// a barrier takes what would hurt him, until it has taken `frost_armor_share` of his full health;
+// what is left of a blow after that gets through. For as long as the armour lasts, enemies within
+// `frost_armor_radius` of him go `frost_armor_slow_share` slower. (The wish had half his health
+// every ten seconds: more than the new warrior's Never Give Up keeps from her, for a hero who
+// stands back from the fight. It is two fifths, every twelve.)
+inline constexpr float frost_armor_seconds = 5.0F;
+inline constexpr float frost_armor_share = 0.4F;        // of his full health: what the barrier takes
+inline constexpr float frost_armor_radius = 5.0F;       // metres
+inline constexpr float frost_armor_slow_share = 0.3F;   // of an enemy's pace, taken away while it is near
+inline constexpr float frost_armor_tick_seconds = 0.5F; // how often those near are slowed anew
+// The new wizard's Chain Lightning (ticket 43, a player's wish; `SkillId::ChainBolt`, the first
+// wizard has a Chain Lightning of his own): lightning from his wand strikes the enemy the
+// crosshair covers (the nearest within `chain_first_reach` of where it points) and leaps on,
+// one after another every `chain_leap_seconds`, to up to `chain_leaps` more, each the nearest
+// not yet struck within `chain_leap_reach` of the last. Every leap hits `chain_leap_gain` times
+// as hard as the one before (skill_damage is the first strike), as wished.
+inline constexpr int chain_leaps = 4;
+inline constexpr float chain_first_reach = 2.5F; // metres from where the crosshair points
+inline constexpr float chain_leap_reach = 5.0F;  // metres from one enemy to the next
+inline constexpr float chain_leap_gain = 1.2F;
+inline constexpr float chain_leap_seconds = 0.14F;
+// What the strike after `leaps` leaps does, of the first (leaps beyond the last count as the last).
+[[nodiscard]] constexpr float chain_damage_factor(int leaps) noexcept {
+    float factor = 1.0F;
+    for (int leap = 0; leap < leaps && leap < chain_leaps; ++leap) {
+        factor *= chain_leap_gain;
+    }
+    return factor;
+}
+
+// The new wizard's Poison Hydra (ticket 44, a player's wish): a hydra rises from the ground where
+// the crosshair points, `hydra_place_range` from him at most, and for `hydra_seconds` spits venom
+// every `hydra_spit_seconds` at the nearest enemy within `hydra_range` of it. A spit does
+// skill_damage (six tenths of his bolt, as wished) and poisons what it strikes: `hydra_poison_damage`
+// (his bolt's, as wished) over `hydra_poison_seconds`. A poisoned enemy struck again is poisoned
+// anew, not twice over. One hydra at a time: a new one takes the old one's place.
+inline constexpr float hydra_seconds = 10.0F;
+inline constexpr float hydra_spit_seconds = 1.0F;
+inline constexpr float hydra_range = 14.0F;       // metres from the hydra
+inline constexpr float hydra_place_range = 20.0F; // metres from him
+inline constexpr float hydra_poison_damage = 22.0F;
+inline constexpr float hydra_poison_seconds = 5.0F;
+inline constexpr float hydra_poison_tick_seconds = 0.5F;
+// What the poison does each time it ticks.
+[[nodiscard]] constexpr float hydra_poison_tick_damage() noexcept {
+    return hydra_poison_damage * hydra_poison_tick_seconds / hydra_poison_seconds;
+}
+
+// The new wizard's Teleportation (ticket 45, a player's wish; `SkillId::Teleport`): on the key he
+// is at once on the ground where the crosshair points, `teleport_range` from where he stood at
+// most (further off: that far towards it). With no ground there to stand on nothing happens and
+// nothing is spent.
+inline constexpr float teleport_range = 20.0F; // metres
+// How far along the way to a place `distance` metres off he goes: all of it, or as far as he may.
+[[nodiscard]] constexpr float teleport_share(float distance) noexcept {
+    return distance <= teleport_range || distance <= 0.0F ? 1.0F : teleport_range / distance;
+}
+
+// The new wizard's Black Whole (ticket 46, a player's wish, and its spelling; `SkillId::RovingHole`,
+// the first wizard has a Black Hole of his own): a small black hole leaves his wand and drifts
+// straight ahead, `hole_distance` in `hole_seconds`, and is gone at the end. Enemies within
+// `hole_pull_radius` of it are drawn towards it (slower than it flies: they trail after it), and
+// every `hole_tick_seconds` everything within `hole_radius` takes skill_damage (half his bolt a
+// second, as wished).
+inline constexpr float hole_seconds = 6.0F;
+inline constexpr float hole_distance = 15.0F;    // metres
+inline constexpr float hole_pull_radius = 5.0F;  // metres
+inline constexpr float hole_radius = 3.0F;       // metres: what it hurts
+inline constexpr float hole_pull_speed = 2.0F;   // m/s towards it
+inline constexpr float hole_tick_seconds = 0.5F;
+[[nodiscard]] constexpr float hole_speed() noexcept {
+    return hole_distance / hole_seconds;
+}
+
+// The new wizard's Blizzard (ticket 47, a player's wish): for `blizzard_seconds` ice rains on the
+// place the crosshair points at (`blizzard_range` from him at most), `blizzard_radius` round it
+// ("a 10 m area"). An enemy that comes into it is held for `blizzard_root_seconds` (once: one that
+// leaves and comes back is not held again) and goes `blizzard_slow_share` slower for
+// `blizzard_slow_seconds` after that. Every `blizzard_tick_seconds` each enemy in it takes
+// skill_damage (two fifths of his bolt a second, as wished), a tenth more for every whole second
+// it has stayed in (`blizzard_damage_factor`).
+inline constexpr float blizzard_seconds = 6.0F;
+inline constexpr float blizzard_radius = 5.0F; // metres
+inline constexpr float blizzard_range = 25.0F; // metres from him
+inline constexpr float blizzard_root_seconds = 2.0F;
+inline constexpr float blizzard_slow_share = 0.3F;
+inline constexpr float blizzard_slow_seconds = 2.0F;
+inline constexpr float blizzard_tick_seconds = 0.5F;
+inline constexpr float blizzard_gain = 0.1F; // more damage for every second an enemy has stayed in it
+[[nodiscard]] constexpr float blizzard_damage_factor(float seconds_inside) noexcept {
+    const float capped = seconds_inside < 0.0F ? 0.0F : (seconds_inside > blizzard_seconds ? blizzard_seconds : seconds_inside);
+    return 1.0F + blizzard_gain * static_cast<float>(static_cast<int>(capped));
+}
+
+// The archer's Bear Trap (ticket 48, a player's wish): she kneels with the button held and pulls a
+// trap open on the ground before her; after `bear_trap_set_seconds` it lies armed, whether she
+// lets go or not (let go sooner: it is gone, and nothing is spent). The first enemy on the ground
+// that comes within `bear_trap_radius` of it springs it and takes skill_damage. It waits for as
+// long as it takes. `bear_trap_limit` of them lie at a time: with one more, the oldest is gone.
+// (The wish had thirty: laid out over five minutes, that is more damage ready and waiting than
+// any hero's skills do in a fight.)
+inline constexpr float bear_trap_set_seconds = 2.0F;
+inline constexpr float bear_trap_radius = 0.9F; // metres
+inline constexpr int bear_trap_limit = 10;
+// Which of `lying` traps, the oldest first, must go so that one more may be laid: its place in
+// the row, or -1 if there is room.
+[[nodiscard]] constexpr int bear_trap_to_remove(int lying) noexcept {
+    return lying >= bear_trap_limit ? 0 : -1;
+}
+
+// The new wizard's Whose Ur Mommy? (ticket 49, a player's wish, and its name; `SkillId::MirrorImage`),
+// the skill of his that takes a full charge: a copy of him appears on the ground where the
+// crosshair points, `clone_range` from him at most, and for `clone_seconds` casts his spells at
+// the nearest enemy within `clone_reach` of it, one every `clone_cast_seconds`: his bolt, his
+// chain lightning, his firebolt at its least, in turn. What it casts does `clone_damage_share`
+// of what his own does and does not fill his charge. Enemies go for it as they go for him, and
+// what strikes it counts `clone_damage_taken` times against a life as long as his own: then it
+// is gone before its time. One at a time.
+inline constexpr float clone_seconds = 10.0F;
+inline constexpr float clone_range = 20.0F;        // metres from him
+inline constexpr float clone_reach = 20.0F;        // metres from it
+inline constexpr float clone_cast_seconds = 1.3F;  // from one cast to the next
+inline constexpr float clone_damage_share = 0.5F;  // as wished
+inline constexpr float clone_damage_taken = 3.0F;  // as wished
+inline constexpr int clone_spells = 5;
+// What it casts as its `cast`-th spell (0, 1, 2 ...): two bolts, the chain, a bolt, the firebolt, and again.
+[[nodiscard]] constexpr SkillId clone_spell(int cast) noexcept {
+    const int turn = (cast % clone_spells + clone_spells) % clone_spells;
+    return turn == 2 ? SkillId::ChainBolt : (turn == 4 ? SkillId::Firebolt : SkillId::ArcaneBolt);
+}
+
+// What a barrier with `barrier` left takes of a blow of `amount`.
+[[nodiscard]] constexpr float barrier_takes(float barrier, float amount) noexcept {
+    const float room = barrier > 0.0F ? barrier : 0.0F;
+    const float blow = amount > 0.0F ? amount : 0.0F;
+    return blow < room ? blow : room;
 }
 
 // The new warrior's Never Give Up (bug report 26, a player's wish), a stance too: for
@@ -145,10 +294,13 @@ inline constexpr float stampede_move_share = 1.3F;
 
 // The new warrior's Cut in Pieces (bug report 29, a player's wish), the skill of hers that takes
 // a full charge: for `pieces_seconds` she is, every `pieces_tick_seconds`, beside an enemy picked
-// by chance from those within `pieces_reach` and strikes it (skill_damage: eight tenths of a sword
-// blow, as wished). Nobody steers her meanwhile. With no enemy that near it does not start.
+// by chance from those within `pieces_reach` and strikes it (skill_damage). Nobody steers her
+// meanwhile, and nothing hurts her. With no enemy that near it does not start.
+// (Bug report 38, a change its wisher asked for: four blows a second instead of two, and unhurt
+// while it lasts. Each blow is half of what it was, so that all of it does what it did: the
+// three tenths less that were asked would have made it two fifths stronger, and safe besides.)
 inline constexpr float pieces_seconds = 6.0F;
-inline constexpr float pieces_tick_seconds = 0.5F;
+inline constexpr float pieces_tick_seconds = 0.25F;
 inline constexpr float pieces_reach = 10.0F; // metres
 
 // The new warrior's Whirlwind (bug report 22, a player's wish; `SkillId::BladeWhirl`, the dwarf
@@ -249,13 +401,13 @@ struct GatlingStep {
 };
 [[nodiscard]] GatlingStep step_gatling(float until_next, bool held, float dt) noexcept;
 
-// The archer's Disguise (ticket 36, a player's wish): standing in a bush (its foot within
+// The archer's Disguise (ticket 36, a player's wish; trees too since ticket 41): standing in a bush (its foot within
 // `disguise_reach` of her) she takes its place: the bush is gone from where it grew, she looks
 // like it, and enemies do not see her. She walks and shoots her standard shot as always. It ends
 // with E, when anything hurts her, when she begins another skill, or after `disguise_seconds`
 // (the wish had no end: unseen for ever would outdo everything else she has); the bush is then
 // back where it grew, and the cooldown runs from that moment.
-inline constexpr float disguise_reach = 1.8F; // metres
+inline constexpr float disguise_reach = 2.5F; // metres (1.8 while it was bushes only: a tree's trunk keeps her further off)
 inline constexpr float disguise_seconds = 15.0F;
 
 // A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound
@@ -273,6 +425,23 @@ struct BleedStep {
 
 [[nodiscard]] SkillInfo skill_info(SkillId skill) noexcept;
 
+// The new wizard's Firebolt (ticket 40, a player's wish): fire gathers at the tip of his wand for
+// as long as the button is held, `firebolt_full_charge_seconds` at most; he stands meanwhile. Let
+// go before `firebolt_least_charge_seconds` and it goes out, with nothing spent. Otherwise he
+// throws a fireball at what the crosshair covers; it bursts where it strikes and hurts everything
+// within `firebolt_radius`. Damage (skill_damage with the power) and radius grow with the charge:
+// twice the damage after the full charge, as wished. (The wish had the radius grow by 5 m a
+// second, 20 m in the end: wider than a camp of enemies. It is `firebolt_full_radius`, a little
+// under the first wizard's meteor.)
+inline constexpr float firebolt_least_charge_seconds = 1.0F;
+inline constexpr float firebolt_full_charge_seconds = 4.0F;
+inline constexpr float firebolt_least_radius = 2.5F; // metres, after the least charge
+inline constexpr float firebolt_full_radius = 5.0F;  // metres, after the full one
+// How far a charge of so many seconds has come, 0 (the least that is thrown, or less) to 1 (full).
+[[nodiscard]] float firebolt_power(float charged_seconds) noexcept;
+// How far the burst of a fireball of that power (0..1) reaches.
+[[nodiscard]] float firebolt_radius(float power) noexcept;
+
 // Every skill a hero has, whether it is on her bar or not: what the skill book (F5) shows and
 // what can be put on the bar. Her standard attack is the first. A new skill for a hero is added
 // here, and given a description below, or the book does not know it.
@@ -287,7 +456,7 @@ struct BleedStep {
 }
 
 // Damage of one hit of a skill: one arrow, one explosion, one kick, one peck of
-// one bird. `power` is the charge of a power shot (0..1) and ignored otherwise.
+// one bird. `power` is the charge of a power shot or a firebolt (0..1) and ignored otherwise.
 [[nodiscard]] float skill_damage(SkillId skill, float power = 0.0F) noexcept;
 
 // The warrior's sword combo: how many blows it has, and how much harder than the first

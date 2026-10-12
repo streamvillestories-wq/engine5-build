@@ -281,6 +281,14 @@ constexpr const char* enrage_path = "res://effects/enrage.tscn";
 // The archer's Vine Tower (numbers in e5/gameplay/skills.hpp): what shows round her while she
 // charges, and the tower itself (effects/vine_tower.gd grows it, carries her and takes it away).
 constexpr const char* tower_charge_path = "res://effects/vine_tower_charge.tscn";
+// The new wizard's Firebolt: what burns at his wand while he charges and behind the fireball, and its burst.
+constexpr const char* firebolt_fire_path = "res://effects/fireball_trail.tscn";
+constexpr const char* firebolt_burst_path = "res://effects/firebolt_explosion.tscn";
+constexpr float firebolt_burst_made_radius = 3.5F; // metres the burst's ring runs out to, as the scene is made
+constexpr float firebolt_glow_least = 0.3F;        // the fire at the wand: its size when it begins ...
+constexpr float firebolt_glow_full = 1.25F;        // ... and after the full charge, of the trail as made
+constexpr float firebolt_trail_least = 1.3F;       // the fire behind the fireball, the same
+constexpr float firebolt_trail_full = 2.6F;
 constexpr const char* tower_path = "res://effects/vine_tower.tscn";
 // The archer's Gatling Arrow Gun (numbers in e5/gameplay/skills.hpp; effects/gatling_turret.gd is
 // the turret: it builds itself up, turns where it is aimed, and falls apart).
@@ -297,10 +305,40 @@ constexpr float stampede_burst_size = 0.4F; // of the burst as made
 constexpr float stampede_shake = 0.012F;    // metres
 // The new warrior's Cut in Pieces (numbers in e5/gameplay/skills.hpp).
 constexpr float pieces_stand_off = 1.0F; // metres from an enemy's body to where she appears beside it
-constexpr float pieces_blow_pace = 2.2F; // the combo's clips, so much faster than made
+constexpr float pieces_blow_pace = 3.6F; // the combo's clips, so much faster than made (four blows a second)
 constexpr float pieces_shake = 0.02F;    // metres, with every blow
 // The new warrior's Never Give Up: the cry and the blue round her.
 constexpr const char* resolve_path = "res://effects/never_give_up.tscn";
+constexpr const char* frost_armor_path = "res://effects/frost_armor.tscn";
+constexpr const char* chain_strike_path = "res://effects/lightning_strike.tscn"; // the new wizard's Chain Lightning
+// His Poison Hydra: the hydra, what its venom looks like in the air and where it strikes, and on what it poisoned.
+constexpr const char* hydra_path = "res://effects/poison_hydra.tscn";
+constexpr const char* hydra_spit_trail_path = "res://effects/venom_trail.tscn";
+constexpr const char* hydra_spit_impact_path = "res://effects/venom_impact.tscn";
+constexpr const char* hydra_poisoned_path = "res://effects/poisoned.tscn";
+constexpr float hydra_spit_speed = 26.0F;  // m/s
+constexpr const char* teleport_flash_path = "res://effects/teleport_flash.tscn"; // where he leaves and arrives
+constexpr const char* blizzard_path = "res://effects/blizzard.tscn"; // his Blizzard
+constexpr float clone_first_cast = 0.6F;  // seconds after his copy appears (Whose Ur Mommy?)
+constexpr float clone_look_again = 0.3F;  // with nobody to cast at
+constexpr float clone_firebolt_power = 0.0F; // its firebolt is one at its least
+constexpr const char* bear_trap_path = "res://effects/bear_trap.tscn"; // the archer's Bear Trap
+constexpr float bear_trap_ahead = 0.85F;  // metres before her that it is laid
+constexpr float bear_trap_height = 1.6F;  // metres above or below it an enemy may be and still step in
+constexpr const char* bear_trap_spring_path = "res://effects/counter_strike.tscn"; // steel on flesh, where it bites
+// His Black Whole: the first wizard's black hole, small, and what is heard of it.
+constexpr const char* hole_look_path = "res://effects/black_hole.tscn";
+constexpr const char* hole_sound_path = "res://effects/black_whole_sound.tscn";
+constexpr float hole_look_scale = 0.42F;  // of the first wizard's
+constexpr float hole_height = 1.1F;       // metres above the ground he stands on
+constexpr float hole_ahead = 1.0F;        // metres before him where it opens
+constexpr float hole_grow_seconds = 0.4F; // it opens over so long ...
+constexpr float hole_fade_seconds = 0.8F; // ... and fades over its last
+constexpr float hole_turn_speed = 2.6F;   // rad/s: it whirls
+constexpr float teleport_keep_off = 0.6F;      // metres back from a wall or a body the crosshair struck
+constexpr float teleport_remote_seconds = 0.2F; // another player's hero has glided there by then
+constexpr float hydra_first_spit = 0.7F;   // seconds after it was called: it has risen by then
+constexpr float hydra_trail_scale = 0.7F;
 constexpr float enrage_strike_gap = 0.5F;      // metres beyond her blow's middle at which she starts to strike
 constexpr float enrage_blow_fade = 0.06F;      // seconds from one blow's clip to the next: they are short
 constexpr float enrage_shake_share = 0.5F;     // of the combo's jolts: there are three times as many
@@ -413,6 +451,11 @@ constexpr float palm_from_wrist = 0.1F;            // metres           // metres
 const SpellTiming* timing_of(gameplay::SkillId skill) {
     switch (skill) {
     case gameplay::SkillId::ArcaneBolt:
+    case gameplay::SkillId::Firebolt: // the same throw of the wand
+    case gameplay::SkillId::ChainBolt:
+    case gameplay::SkillId::PoisonHydra:
+    case gameplay::SkillId::RovingHole:
+    case gameplay::SkillId::Blizzard:
         return &bolt_timing;
     case gameplay::SkillId::Fireball:
         return &fireball_timing;
@@ -638,8 +681,31 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("end_disguise"), &E5PlayerController::end_disguise);
     ClassDB::bind_method(D_METHOD("set_shown_disguised", "disguised"), &E5PlayerController::set_shown_disguised);
     ClassDB::bind_method(D_METHOD("set_shown_manning", "manning"), &E5PlayerController::set_shown_manning);
-    ClassDB::bind_method(D_METHOD("find_bush", "radius"), &E5PlayerController::find_bush);
+    ClassDB::bind_method(D_METHOD("find_bush", "radius", "kind"), &E5PlayerController::find_bush, DEFVAL(godot::String()));
     ClassDB::bind_method(D_METHOD("get_pieces_blows"), &E5PlayerController::get_pieces_blows);
+    ClassDB::bind_method(D_METHOD("get_pieces_spared"), &E5PlayerController::get_pieces_spared);
+    ClassDB::bind_method(D_METHOD("get_firebolts_thrown"), &E5PlayerController::get_firebolts_thrown);
+    ClassDB::bind_method(D_METHOD("get_chain_strikes"), &E5PlayerController::get_chain_strikes);
+    ClassDB::bind_method(D_METHOD("get_hydras"), &E5PlayerController::get_hydras);
+    ClassDB::bind_method(D_METHOD("get_teleports"), &E5PlayerController::get_teleports);
+    ClassDB::bind_method(D_METHOD("get_hole_ticks"), &E5PlayerController::get_hole_ticks);
+    ClassDB::bind_method(D_METHOD("get_blizzard_ticks"), &E5PlayerController::get_blizzard_ticks);
+    ClassDB::bind_method(D_METHOD("get_traps_set"), &E5PlayerController::get_traps_set);
+    ClassDB::bind_method(D_METHOD("is_clone"), &E5PlayerController::is_clone);
+    ClassDB::bind_method(D_METHOD("get_clones"), &E5PlayerController::get_clones);
+    ClassDB::bind_method(D_METHOD("get_clone_casts"), &E5PlayerController::get_clone_casts);
+    ClassDB::bind_method(D_METHOD("get_clone_struck"), &E5PlayerController::get_clone_struck);
+    ClassDB::bind_method(D_METHOD("get_traps_sprung"), &E5PlayerController::get_traps_sprung);
+    ClassDB::bind_method(D_METHOD("get_traps_lying"), &E5PlayerController::get_traps_lying);
+    ClassDB::bind_method(D_METHOD("get_blizzard_held"), &E5PlayerController::get_blizzard_held);
+    ClassDB::bind_method(D_METHOD("get_hole_pulls"), &E5PlayerController::get_hole_pulls);
+    ClassDB::bind_method(D_METHOD("get_teleported_metres"), &E5PlayerController::get_teleported_metres);
+    ClassDB::bind_method(D_METHOD("get_hydra_spits"), &E5PlayerController::get_hydra_spits);
+    ClassDB::bind_method(D_METHOD("get_armor_seconds"), &E5PlayerController::get_armor_seconds);
+    ClassDB::bind_method(D_METHOD("get_armor_barrier"), &E5PlayerController::get_armor_barrier);
+    ClassDB::bind_method(D_METHOD("get_armor_absorbed"), &E5PlayerController::get_armor_absorbed);
+    ClassDB::bind_method(D_METHOD("get_armor_slowed"), &E5PlayerController::get_armor_slowed);
+    ClassDB::bind_method(D_METHOD("get_firebolt_power"), &E5PlayerController::get_firebolt_power);
     ClassDB::bind_method(D_METHOD("get_stampede_seconds"), &E5PlayerController::get_stampede_seconds);
     ClassDB::bind_method(D_METHOD("get_stampede_ticks"), &E5PlayerController::get_stampede_ticks);
     ClassDB::bind_method(D_METHOD("get_resolve_spared"), &E5PlayerController::get_resolve_spared);
@@ -953,18 +1019,22 @@ godot::Ref<godot::PackedScene> E5PlayerController::cast_glow(gameplay::SkillId s
     switch (spell) {
     case gameplay::SkillId::Fireball:
     case gameplay::SkillId::Meteor:
+    case gameplay::SkillId::Firebolt:
         index = 0;
         break;
     case gameplay::SkillId::FrostNova:
+    case gameplay::SkillId::Blizzard:
         index = 1;
         break;
     case gameplay::SkillId::ChainLightning:
+    case gameplay::SkillId::ChainBolt:
         index = 2;
         break;
     case gameplay::SkillId::StarBarrage:
         index = 3;
         break;
     case gameplay::SkillId::BlackHole:
+    case gameplay::SkillId::RovingHole:
     case gameplay::SkillId::Slash:
     case gameplay::SkillId::FlameBlade:
     case gameplay::SkillId::FrostEdge:
@@ -1096,6 +1166,12 @@ void E5PlayerController::_physics_process(double delta) {
     update_counter(static_cast<float>(delta));
     update_whirl(static_cast<float>(delta));
     update_eruptions(static_cast<float>(delta));
+    update_chain(static_cast<float>(delta));
+    update_hydra(static_cast<float>(delta));
+    update_hole(static_cast<float>(delta));
+    update_blizzard(static_cast<float>(delta));
+    update_traps();
+    update_clone(static_cast<float>(delta));
     if (is_leaping()) {
         // In the air, and for a moment after she lands, the leap is all that moves her.
         update_leap(static_cast<float>(delta));
@@ -1109,6 +1185,7 @@ void E5PlayerController::_physics_process(double delta) {
         return; // from one enemy to the next: nobody steers her
     }
     update_tower_charge(aim_pressed, static_cast<float>(delta));
+    update_firebolt_charge(aim_pressed, static_cast<float>(delta));
     update_gatling(static_cast<float>(delta));
     update_disguise(static_cast<float>(delta));
     // The shield: up while the key is held, as long as it lasts.
@@ -1189,6 +1266,7 @@ void E5PlayerController::_physics_process(double delta) {
         // The Vine Tower is charged for as long as the button is held, from the next step on. The
         // Gatling Arrow Gun is built the same way (one at a time).
         const bool charged = skills_.selected() == gameplay::SkillId::VineTower ||
+                             skills_.selected() == gameplay::SkillId::BearTrap ||
                              (skills_.selected() == gameplay::SkillId::GatlingGun && get_turret() == nullptr);
         if (aim_just_pressed && charged && !mounted_ && !is_busy() && is_on_floor() &&
             animator_.has_clip(clip_kneel_) && skill_ready(skills_.selected())) {
@@ -1198,6 +1276,16 @@ void E5PlayerController::_physics_process(double delta) {
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Disguise && !mounted_ && !is_busy() &&
             !disguised_ && skill_ready(skills_.selected())) {
             start_disguise(gameplay::disguise_reach);
+        }
+        // Whose Ur Mommy?: his copy appears at once on the key, where he aims, and takes his charge.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::MirrorImage && !mounted_ && !is_busy() &&
+            skill_ready(skills_.selected())) {
+            start_clone();
+        }
+        // Teleportation: at once on the key, if there is ground to stand on where he aims.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Teleport && !mounted_ && !is_busy() &&
+            skill_ready(skills_.selected())) {
+            start_teleport();
         }
         // Cut in Pieces takes her charge and begins, if there is anyone to cut.
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::CutInPieces && !mounted_ && !is_busy() &&
@@ -1216,7 +1304,18 @@ void E5PlayerController::_physics_process(double delta) {
             leap_aiming_ = true;
         }
         update_leap_aim(aim_pressed);
-        const bool start = instant && aim_just_pressed && !block_.raised && can_start_instant_skill(skills_.selected());
+        // The Firebolt is charged for as long as its button is held and thrown when it is let go
+        // (update_firebolt_charge says when): its throw begins then, not on the press.
+        const bool firebolt = skills_.selected() == gameplay::SkillId::Firebolt;
+        if (aim_just_pressed && firebolt && !is_busy() && !block_.raised && can_start_instant_skill(skills_.selected())) {
+            start_firebolt_charge();
+        }
+        const bool wanted = firebolt ? firebolt_release_ : aim_just_pressed;
+        firebolt_release_ = false;
+        const bool start = instant && wanted && !block_.raised && can_start_instant_skill(skills_.selected());
+        if (firebolt && wanted && !start) {
+            end_firebolt_glow(); // (he left the ground meanwhile, or the like: it goes out)
+        }
         // A combo is one movement, not three clicks timed to the frame: a press during a blow
         // counts for the next one, and so does a button that is still held when the blow ends.
         const bool combo = instant && is_combo(skills_.selected());
@@ -1298,7 +1397,8 @@ void E5PlayerController::_physics_process(double delta) {
     const gameplay::MotorParams params = motor_params();
     // She stands still for the length of a kick.
     const bool dodging = dodge_left_ > 0.0F;
-    const bool rooted = action_.active || input_blocked_ || block_.raised || dodging || tower_charging_ || manning_;
+    const bool rooted = action_.active || input_blocked_ || block_.raised || dodging || tower_charging_ ||
+                        firebolt_charging_ || manning_;
     const gameplay::MotorInput motor_input{
         .move_right = rooted ? 0.0F : input->get_axis(action_left_, action_right_),
         .move_forward = rooted ? 0.0F : input->get_axis(action_back_, action_forward_),
@@ -1471,6 +1571,9 @@ void E5PlayerController::apply_net_event(int kind, int skill, float power, int c
         return; // she begins to draw: her clips show it, this said for which skill
     }
     if (kind == 0) {
+        if (*named == gameplay::SkillId::Firebolt) {
+            firebolt_power_ = std::clamp(power, 0.0F, 1.0F); // how far it was charged where he is played
+        }
         // Started in the next frame of hers, as on the machine that plays her.
         pending_start_ = true;
         pending_combo_step_ = combo_step;
@@ -1515,6 +1618,10 @@ void E5PlayerController::update_remote(float delta) {
     update_counter(delta);
     update_whirl(delta);
     update_eruptions(delta);
+    update_chain(delta);
+    update_hydra(delta);
+    update_hole(delta);
+    update_traps();
     update_enrage(delta);
     if ((archery_enabled_ || spells_enabled_) && animator_.is_ready()) {
         if (pending_start_ && skills_.selected() == gameplay::SkillId::Enrage) {
@@ -1536,6 +1643,18 @@ void E5PlayerController::update_remote(float delta) {
             remote_pieces_left_ = gameplay::pieces_seconds + 0.6F;
         }
         remote_pieces_left_ = std::max(remote_pieces_left_ - delta, 0.0F);
+        if (pending_start_ && skills_.selected() == gameplay::SkillId::Teleport) {
+            // Where he is now arrives with his place: light where he left, and where he comes to.
+            pending_start_ = false;
+            E5Effect::spawn(effect_scene(teleport_flash_path), get_parent(), get_global_position());
+            remote_blink_left_ = teleport_remote_seconds;
+        }
+        if (remote_blink_left_ > 0.0F) {
+            remote_blink_left_ -= delta;
+            if (remote_blink_left_ <= 0.0F) {
+                E5Effect::spawn(effect_scene(teleport_flash_path), get_parent(), get_global_position());
+            }
+        }
         if (pending_start_ && skills_.selected() == gameplay::SkillId::JumpAttack) {
             // Where she flies arrives with her place; what is left to show is where she lands.
             pending_start_ = false;
@@ -1633,7 +1752,12 @@ void E5PlayerController::credit_damage(float damage, bool killed) {
 
 float E5PlayerController::get_cast_progress() const {
     if (tower_charging_) {
-        return std::clamp(tower_charge_ / gameplay::tower_full_charge_seconds, 0.0F, 1.0F);
+        const float full = action_skill_ == gameplay::SkillId::BearTrap ? gameplay::bear_trap_set_seconds
+                                                                        : gameplay::tower_full_charge_seconds;
+        return std::clamp(tower_charge_ / full, 0.0F, 1.0F);
+    }
+    if (firebolt_charging_) {
+        return std::clamp(firebolt_charge_ / gameplay::firebolt_full_charge_seconds, 0.0F, 1.0F);
     }
     const float seconds = get_cast_seconds();
     if (seconds <= 0.0F) {
@@ -1648,7 +1772,11 @@ float E5PlayerController::get_cast_progress() const {
 
 float E5PlayerController::get_cast_seconds() const {
     if (tower_charging_) {
-        return gameplay::tower_full_charge_seconds;
+        return action_skill_ == gameplay::SkillId::BearTrap ? gameplay::bear_trap_set_seconds
+                                                            : gameplay::tower_full_charge_seconds;
+    }
+    if (firebolt_charging_) {
+        return gameplay::firebolt_full_charge_seconds;
     }
     if (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming) {
         return bow_timings().draw_seconds;
@@ -1688,8 +1816,16 @@ bool E5PlayerController::is_skill_ready(int slot) const {
 }
 
 void E5PlayerController::take_damage_from(float amount, const godot::Vector3& from) {
+    if (clone_) {
+        take_damage(amount); // his copy: see there
+        return;
+    }
     if (remote_ || amount <= 0.0F || vitals_.dead || dodge_left_ > 0.0F) {
         return; // (a dodge is not hit)
+    }
+    if (is_cutting()) {
+        pieces_spared_ += amount; // Cut in Pieces: nothing reaches her while it lasts
+        return;
     }
     if (counter_left_ > 0.0F) {
         answer_blow(from); // she is hit all the same, unless her shield is in the way
@@ -1708,6 +1844,11 @@ void E5PlayerController::take_damage_from(float amount, const godot::Vector3& fr
 }
 
 void E5PlayerController::take_damage(float amount) {
+    if (clone_) {
+        // His copy has a life of its own, and what strikes it counts for more (Whose Ur Mommy?).
+        clone_health_ -= std::max(amount, 0.0F) * gameplay::clone_damage_taken;
+        return;
+    }
     if (remote_) {
         return; // decided on its own machine
     }
@@ -1715,10 +1856,21 @@ void E5PlayerController::take_damage(float amount) {
         end_disguise(); // whatever hurts a bush finds her in it
     }
     if (amount > 0.0F && !vitals_.dead && dodge_left_ <= 0.0F) {
+        if (is_cutting()) {
+            pieces_spared_ += amount; // (what hurts without saying where from: the same)
+            return;
+        }
         if (resolve_left_ > 0.0F) {
             // Never Give Up: only a share of it gets through.
             resolve_spared_ += amount * (1.0F - gameplay::resolve_damage_share);
             amount *= gameplay::resolve_damage_share;
+        }
+        if (armor_left_ > 0.0F) {
+            // Frost Armor: the barrier takes it, as far as it goes.
+            const float taken = gameplay::barrier_takes(armor_barrier_, amount);
+            armor_barrier_ -= taken;
+            armor_absorbed_ += taken;
+            amount -= taken;
         }
         pending_damage_ += amount;
     }
@@ -1964,6 +2116,9 @@ gameplay::VitalsParams E5PlayerController::effective_vitals() const {
 }
 
 float E5PlayerController::dealt(gameplay::SkillId skill, float power) const {
+    if (clone_) {
+        return gameplay::skill_damage(skill, power) * clone_share_; // his copy's spells: a share of his
+    }
     if (remote_) {
         return 0.0F; // shown here for another player: her own machine counts what she does
     }
@@ -2033,11 +2188,17 @@ bool E5PlayerController::update_vitals(float delta) {
             leap_marker_->set_visible(false);
         }
         resolve_left_ = 0.0F;
+        armor_left_ = 0.0F;
+        armor_barrier_ = 0.0F;
+        end_clone();
         pieces_ = {};
         stampede_ = {};
         tower_charge_ = 0.0F; // (whatever she charged is lost: nothing grows, a gun half built falls apart)
         update_tower_charge(false, 0.0F);
         tower_charging_ = false;
+        firebolt_charging_ = false;
+        firebolt_release_ = false;
+        end_firebolt_glow();
         leave_turret();
         end_disguise();
         enrage_left_ = 0.0F;
@@ -2632,6 +2793,9 @@ void E5PlayerController::use_skill(float power) {
     case gameplay::SkillId::GatlingGun:
         raise_gatling();
         break;
+    case gameplay::SkillId::BearTrap:
+        lay_trap();
+        break;
     case gameplay::SkillId::ArrowRain:
         fire_rain();
         break;
@@ -2737,7 +2901,9 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
         clip = &clip_kick_;
     } else if (skill == gameplay::SkillId::Kingfishers) {
         clip = &clip_summon_;
-    } else if (skill == gameplay::SkillId::ArcaneBolt) {
+    } else if (skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::Firebolt ||
+               skill == gameplay::SkillId::ChainBolt || skill == gameplay::SkillId::PoisonHydra ||
+               skill == gameplay::SkillId::RovingHole || skill == gameplay::SkillId::Blizzard) {
         clip = &clip_bolt_;
     } else if (skill == gameplay::SkillId::Fireball) {
         clip = &clip_fireball_;
@@ -2815,7 +2981,8 @@ const SpellTiming* E5PlayerController::advance_combo(gameplay::SkillId skill) {
 }
 
 godot::String E5PlayerController::get_action_skill_name() const {
-    if (!action_.active && !is_whirling() && !is_leaping() && !is_enraged() && !tower_charging_ && !is_cutting()) {
+    if (!action_.active && !is_whirling() && !is_leaping() && !is_enraged() && !tower_charging_ && !is_cutting() &&
+        !firebolt_charging_) {
         return {};
     }
     const std::string_view name = gameplay::skill_info(action_skill_).name;
@@ -2861,7 +3028,10 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
         if (right_hand_ != nullptr && !melee) {
             E5Effect::spawn(cast_glow(skill), right_hand_, casting_point(false));
         }
-        const bool one_handed = skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::ChainLightning;
+        const bool one_handed = skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::ChainLightning ||
+                                skill == gameplay::SkillId::Firebolt || skill == gameplay::SkillId::ChainBolt ||
+                                skill == gameplay::SkillId::PoisonHydra || skill == gameplay::SkillId::RovingHole ||
+                                skill == gameplay::SkillId::Blizzard;
         if (!one_handed && !melee && left_hand_ != nullptr) {
             E5Effect::spawn(cast_glow(skill), left_hand_,
                             left_hand_->get_global_transform().xform(godot::Vector3(0.0F, palm_from_wrist, 0.0F)));
@@ -2887,7 +3057,8 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
             }
         }
     }
-    note_net_event(0, 0.0F);
+    // (A firebolt's power goes with it: the others see a fireball of the same size.)
+    note_net_event(0, skill == gameplay::SkillId::Firebolt ? firebolt_power_ : 0.0F);
 }
 
 godot::Vector3 E5PlayerController::casting_point(bool both_hands) const {
@@ -2937,6 +3108,26 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
     }
     if (spell == gameplay::SkillId::SeismicSlash) {
         strike_seismic();
+        return;
+    }
+    if (spell == gameplay::SkillId::Firebolt) {
+        throw_firebolt();
+        return;
+    }
+    if (spell == gameplay::SkillId::ChainBolt) {
+        cast_chain();
+        return;
+    }
+    if (spell == gameplay::SkillId::PoisonHydra) {
+        summon_hydra();
+        return;
+    }
+    if (spell == gameplay::SkillId::RovingHole) {
+        cast_hole();
+        return;
+    }
+    if (spell == gameplay::SkillId::Blizzard) {
+        cast_blizzard();
         return;
     }
     if (is_melee(spell)) {
@@ -2997,6 +3188,584 @@ void E5PlayerController::cast_lightning() {
         current = body;
         untouched.erase(nearest);
     }
+}
+
+E5Enemy* E5PlayerController::chain_next(const godot::Vector3& place, float reach) const {
+    E5Enemy* found = nullptr;
+    float nearest = reach;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() ||
+            std::ranges::find(chain_.struck, enemy->get_instance_id()) != chain_.struck.end()) {
+            continue;
+        }
+        const float distance =
+            static_cast<float>(enemy->get_aim_point().distance_to(place)) - enemy->get_body_radius();
+        if (distance <= nearest) {
+            nearest = distance;
+            found = enemy;
+        }
+    }
+    return found;
+}
+
+void E5PlayerController::cast_chain() {
+    // From the wand's tip to what the crosshair covers. An enemy there is struck, and the
+    // lightning leaps on from it (update_chain); with nobody there it strikes the ground.
+    const godot::Color colour(0.5F, 0.9F, 3.0F);
+    const godot::Vector3 origin = casting_point(false);
+    const godot::Vector3 aimed = find_aim_point(origin).position;
+    chain_ = {};
+    E5Enemy* const first = chain_next(aimed, gameplay::chain_first_reach);
+    const godot::Vector3 struck = first != nullptr ? first->get_aim_point() : aimed;
+    E5LightningArc::spawn(get_parent(), origin, struck, colour);
+    E5Effect::spawn(effect_scene(chain_strike_path), get_parent(), struck);
+    if (first == nullptr) {
+        return;
+    }
+    combat::hit(first, struck, dealt(gameplay::SkillId::ChainBolt));
+    ++chain_strikes_;
+    chain_ = {.at = struck, .leaps = 0, .until_next = gameplay::chain_leap_seconds, .active = true, .struck = {}};
+    chain_.struck.push_back(first->get_instance_id());
+}
+
+void E5PlayerController::update_chain(float delta) {
+    if (!chain_.active) {
+        return;
+    }
+    chain_.until_next -= delta;
+    while (chain_.active && chain_.until_next <= 0.0F) {
+        E5Enemy* const next =
+            chain_.leaps < gameplay::chain_leaps ? chain_next(chain_.at, gameplay::chain_leap_reach) : nullptr;
+        if (next == nullptr) {
+            chain_ = {}; // nobody near enough, or it has leapt as often as it does
+            return;
+        }
+        ++chain_.leaps;
+        const godot::Vector3 body = next->get_aim_point();
+        E5LightningArc::spawn(get_parent(), chain_.at, body, godot::Color(0.5F, 0.9F, 3.0F));
+        E5Effect::spawn(effect_scene(chain_strike_path), get_parent(), body);
+        combat::hit(next, body,
+                    dealt(gameplay::SkillId::ChainBolt) * gameplay::chain_damage_factor(chain_.leaps));
+        ++chain_strikes_;
+        chain_.at = body;
+        chain_.struck.push_back(next->get_instance_id());
+        chain_.until_next += gameplay::chain_leap_seconds;
+    }
+}
+
+godot::Vector3 E5PlayerController::ground_under(const godot::Vector3& point) const {
+    return ground_at(point).value_or(point);
+}
+
+bool E5PlayerController::start_teleport() {
+    // Where the crosshair points, on the ground there; no further from him than he may go.
+    const godot::Vector3 here = get_global_position();
+    godot::Vector3 place = find_aim_point(here + godot::Vector3(0.0F, 1.3F, 0.0F)).position;
+    godot::Vector3 away = place - here;
+    away.y = 0.0F;
+    const auto distance = static_cast<float>(away.length());
+    if (distance < 0.5F) {
+        return false; // at his own feet: he is there already
+    }
+    const float share = gameplay::teleport_share(distance);
+    if (share < 1.0F) {
+        place = here + away * share;
+        place.y = here.y;
+    } else {
+        place -= away / distance * std::min(teleport_keep_off, distance * 0.5F);
+    }
+    const std::optional<godot::Vector3> ground = ground_at(place);
+    if (!ground) {
+        return false; // nothing to stand on there: he stays, and nothing is spent
+    }
+    spend(gameplay::SkillId::Teleport);
+    last_skill_ = gameplay::SkillId::Teleport;
+    ++skills_used_;
+    emote_left_ = 0.0F;
+    E5Effect::spawn(effect_scene(teleport_flash_path), get_parent(), here);
+    set_global_position(*ground + godot::Vector3(0.0F, 0.05F, 0.0F));
+    set_velocity(godot::Vector3());
+    E5Effect::spawn(effect_scene(teleport_flash_path), get_parent(), *ground);
+    godot::Vector3 gone = *ground - here;
+    gone.y = 0.0F;
+    teleported_metres_ += static_cast<float>(gone.length());
+    ++teleports_;
+    note_net_event(0, 0.0F);
+    return true;
+}
+
+std::optional<godot::Vector3> E5PlayerController::ground_at(const godot::Vector3& point) const {
+    godot::TypedArray<godot::RID> excluded;
+    excluded.push_back(get_rid());
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        if (const auto* const enemy = godot::Object::cast_to<E5Enemy>(node)) {
+            excluded.push_back(enemy->get_rid());
+        }
+    }
+    const godot::Ref<godot::PhysicsRayQueryParameters3D> query = godot::PhysicsRayQueryParameters3D::create(
+        point + godot::Vector3(0.0F, 2.0F, 0.0F), point - godot::Vector3(0.0F, 40.0F, 0.0F), 0xFFFFFFFF, excluded);
+    const godot::Dictionary hit = get_world_3d()->get_direct_space_state()->intersect_ray(query);
+    if (hit.is_empty()) {
+        return std::nullopt;
+    }
+    return godot::Vector3(hit["position"]);
+}
+
+void E5PlayerController::summon_hydra() {
+    const godot::Ref<godot::PackedScene> scene = effect_scene(hydra_path);
+    auto* const hydra = scene.is_valid() ? godot::Object::cast_to<godot::Node3D>(scene->instantiate()) : nullptr;
+    if (hydra == nullptr) {
+        return;
+    }
+    // Where the crosshair points, on the ground there; no further from him than it may be.
+    const godot::Vector3 here = get_global_position();
+    godot::Vector3 place = find_aim_point(casting_point(false)).position;
+    godot::Vector3 away = place - here;
+    away.y = 0.0F;
+    if (static_cast<float>(away.length()) > gameplay::hydra_place_range) {
+        place = here + away.normalized() * gameplay::hydra_place_range;
+        place.y = here.y;
+    } else if (static_cast<float>(away.length()) > 0.5F) {
+        place -= away.normalized() * 0.3F; // (a step back from a wall or a body the crosshair struck)
+    }
+    place = ground_under(place);
+    // One at a time: the one that stood goes back into the ground.
+    if (auto* const old = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(hydra_id_))) {
+        old->call("sink");
+    }
+    get_parent()->add_child(hydra);
+    // It looks back at him as it rises: its heads lean over towards the fight between them.
+    godot::Vector3 to_him = here - place;
+    to_him.y = 0.0F;
+    const float turn = to_him.length() > 0.1F
+                           ? gameplay::facing_yaw(static_cast<float>(to_him.x), static_cast<float>(to_him.z))
+                           : model_yaw_;
+    hydra->set_global_transform(godot::Transform3D(
+        godot::Basis(godot::Vector3(0.0F, 1.0F, 0.0F), turn + std::numbers::pi_v<float>), place));
+    E5Effect::spawn(effect_scene(hydra_spit_impact_path), get_parent(), place + godot::Vector3(0.0F, 0.2F, 0.0F));
+    hydra_id_ = hydra->get_instance_id();
+    hydra_left_ = gameplay::hydra_seconds;
+    hydra_until_spit_ = hydra_first_spit;
+    ++hydras_;
+}
+
+void E5PlayerController::update_hydra(float delta) {
+    auto* const hydra = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(hydra_id_));
+    if (hydra == nullptr) {
+        hydra_id_ = 0;
+        return;
+    }
+    hydra_left_ -= delta;
+    if (hydra_left_ <= 0.0F || vitals_.dead) {
+        hydra->call("sink");
+        hydra_id_ = 0;
+        return;
+    }
+    hydra_until_spit_ -= delta;
+    if (hydra_until_spit_ > 0.0F) {
+        return;
+    }
+    // At the nearest enemy within its reach, where that one will be when the venom gets there.
+    const godot::Vector3 muzzle = hydra->call("get_muzzle");
+    E5Enemy* target = nullptr;
+    float nearest = gameplay::hydra_range;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+            continue;
+        }
+        const float distance = static_cast<float>(enemy->get_aim_point().distance_to(hydra->get_global_position())) -
+                               enemy->get_body_radius();
+        if (distance <= nearest) {
+            nearest = distance;
+            target = enemy;
+        }
+    }
+    if (target == nullptr) {
+        hydra->call("rest");
+        hydra_until_spit_ = 0.2F; // it looks again shortly
+        return;
+    }
+    hydra_until_spit_ = gameplay::hydra_spit_seconds;
+    const float flight = static_cast<float>(target->get_aim_point().distance_to(muzzle)) / hydra_spit_speed;
+    const godot::Vector3 at = target->get_aim_point() + target->get_velocity() * flight;
+    hydra->call("spit_at", at);
+    auto* const spit = memnew(E5SpellBolt);
+    get_parent()->add_child(spit);
+    spit->set_global_position(muzzle);
+    const float damage = dealt(gameplay::SkillId::PoisonHydra);
+    spit->set_damage(damage);
+    spit->set_trail_effect(effect_scene(hydra_spit_trail_path), hydra_trail_scale);
+    spit->set_impact_effect(effect_scene(hydra_spit_impact_path));
+    spit->set_impact_scale(0.6F);
+    // (A hero shown here for another player does no damage; neither does his hydra's poison.)
+    spit->set_poison(damage > 0.0F ? gameplay::hydra_poison_tick_damage() : 0.0F, gameplay::hydra_poison_seconds,
+                     gameplay::hydra_poison_tick_seconds, effect_scene(hydra_poisoned_path));
+    spit->launch((at - muzzle).normalized() * hydra_spit_speed, get_rid());
+    ++hydra_spits_;
+}
+
+void E5PlayerController::cast_hole() {
+    // Straight ahead, level, the way the crosshair points over the ground.
+    const godot::Vector3 origin = casting_point(false);
+    godot::Vector3 way = find_aim_point(origin).position - origin;
+    way.y = 0.0F;
+    way = way.length() > 0.1F ? way.normalized() : godot::Vector3(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    // One at a time: the one that still drifts is gone.
+    if (auto* const old = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(hole_.look))) {
+        old->queue_free();
+    }
+    const godot::Vector3 start = get_global_position() + way * hole_ahead + godot::Vector3(0.0F, hole_height, 0.0F);
+    godot::Node3D* const look = E5Effect::spawn(effect_scene(hole_look_path), get_parent(), start);
+    if (look == nullptr) {
+        hole_ = {};
+        return;
+    }
+    look->set_scale(godot::Vector3(0.01F, 0.01F, 0.01F));
+    E5Effect::spawn(effect_scene(hole_sound_path), get_parent(), start);
+    hole_ = {.look = look->get_instance_id(),
+             .at = start,
+             .way = way,
+             .left = gameplay::hole_seconds,
+             .until_tick = gameplay::hole_tick_seconds};
+}
+
+void E5PlayerController::update_hole(float delta) {
+    auto* const look = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(hole_.look));
+    if (look == nullptr) {
+        hole_.look = 0;
+        return;
+    }
+    hole_.left -= delta;
+    if (hole_.left <= 0.0F) {
+        look->queue_free(); // it has gone its way
+        hole_ = {};
+        return;
+    }
+    hole_.at += hole_.way * (gameplay::hole_speed() * delta);
+    // It opens, whirls and, at the end of its way, fades.
+    const float age = gameplay::hole_seconds - hole_.left;
+    const float size = hole_look_scale * std::clamp(age / hole_grow_seconds, 0.02F, 1.0F) *
+                       std::clamp(hole_.left / hole_fade_seconds, 0.02F, 1.0F);
+    look->set_global_transform(godot::Transform3D(
+        godot::Basis(godot::Vector3(0.0F, 1.0F, 0.0F), age * hole_turn_speed).scaled(godot::Vector3(size, size, size)),
+        hole_.at));
+    if (remote_) {
+        return; // shown here for another player: what it draws and hurts is his own machine's business
+    }
+    // What is near is drawn after it (said anew every step: see E5Enemy::drag).
+    bool pulled = false;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+            continue;
+        }
+        godot::Vector3 towards = hole_.at - enemy->get_global_position();
+        towards.y = 0.0F;
+        const auto distance = static_cast<float>(towards.length());
+        if (distance > 0.4F && distance - enemy->get_body_radius() <= gameplay::hole_pull_radius) {
+            enemy->drag(towards / distance * gameplay::hole_pull_speed);
+            pulled = true;
+        }
+    }
+    hole_pulls_ += pulled ? 1 : 0;
+    hole_.until_tick -= delta;
+    if (hole_.until_tick <= 0.0F) {
+        hole_.until_tick += gameplay::hole_tick_seconds;
+        combat::blast(this, hole_.at, gameplay::hole_radius, dealt(gameplay::SkillId::RovingHole));
+        ++hole_ticks_;
+    }
+}
+
+void E5PlayerController::cast_blizzard() {
+    // Over the place the crosshair points at, on the ground there; no further from him than it may be.
+    const godot::Vector3 here = get_global_position();
+    godot::Vector3 place = find_aim_point(casting_point(false)).position;
+    godot::Vector3 away = place - here;
+    away.y = 0.0F;
+    if (static_cast<float>(away.length()) > gameplay::blizzard_range) {
+        place = here + away.normalized() * gameplay::blizzard_range;
+        place.y = here.y;
+    }
+    place = ground_under(place);
+    E5Effect::spawn(effect_scene(blizzard_path), get_parent(), place);
+    blizzard_ = {.at = place,
+                 .left = gameplay::blizzard_seconds,
+                 .until_tick = gameplay::blizzard_tick_seconds,
+                 .inside = {},
+                 .held = {}};
+}
+
+void E5PlayerController::update_blizzard(float delta) {
+    if (blizzard_.left <= 0.0F) {
+        return;
+    }
+    blizzard_.left -= delta;
+    // Who stands in it now, and for how long: one that has left begins anew when it comes back.
+    std::vector<Blizzard::Inside> now;
+    std::vector<E5Enemy*> bodies;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive()) {
+            continue;
+        }
+        godot::Vector3 away = enemy->get_global_position() - blizzard_.at;
+        away.y = 0.0F;
+        if (static_cast<float>(away.length()) - enemy->get_body_radius() > gameplay::blizzard_radius) {
+            continue;
+        }
+        const std::uint64_t id = enemy->get_instance_id();
+        const auto before = std::ranges::find(blizzard_.inside, id, &Blizzard::Inside::enemy);
+        now.push_back({.enemy = id, .seconds = before != blizzard_.inside.end() ? before->seconds + delta : 0.0F});
+        bodies.push_back(enemy);
+        if (std::ranges::find(blizzard_.held, id) == blizzard_.held.end()) {
+            // Held where it stands, and slower for a while after that. (Not by a hero shown here
+            // for another player: his own machine holds them, and says so to the one that decides them.)
+            blizzard_.held.push_back(id);
+            if (!remote_) {
+                enemy->root(gameplay::blizzard_root_seconds);
+                enemy->slow(gameplay::blizzard_slow_share,
+                            gameplay::blizzard_root_seconds + gameplay::blizzard_slow_seconds);
+                ++blizzard_held_;
+            }
+        }
+    }
+    blizzard_.inside = now;
+    blizzard_.until_tick -= delta;
+    if (blizzard_.until_tick <= 0.0F) {
+        blizzard_.until_tick += gameplay::blizzard_tick_seconds;
+        if (!remote_) {
+            for (std::size_t index = 0; index < bodies.size(); ++index) {
+                combat::hit(bodies[index], bodies[index]->get_aim_point(),
+                            dealt(gameplay::SkillId::Blizzard) *
+                                gameplay::blizzard_damage_factor(blizzard_.inside[index].seconds));
+            }
+            ++blizzard_ticks_;
+        }
+    }
+    if (blizzard_.left <= 0.0F) {
+        blizzard_ = {};
+    }
+}
+
+godot::Node3D* E5PlayerController::place_trap(bool open) {
+    const godot::Ref<godot::PackedScene> scene = effect_scene(bear_trap_path);
+    auto* const trap = scene.is_valid() ? godot::Object::cast_to<godot::Node3D>(scene->instantiate()) : nullptr;
+    if (trap == nullptr) {
+        return nullptr;
+    }
+    get_parent()->add_child(trap);
+    // On the ground before her, its jaws to her left and right.
+    const godot::Vector3 forward(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    trap->set_global_transform(godot::Transform3D(godot::Basis(godot::Vector3(0.0F, 1.0F, 0.0F), model_yaw_),
+                                                  ground_under(get_global_position() + forward * bear_trap_ahead)));
+    if (open) {
+        trap->call("set_open", 1.0F);
+    }
+    return trap;
+}
+
+void E5PlayerController::lay_trap() {
+    auto* trap = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(trap_setting_));
+    trap_setting_ = 0;
+    if (trap == nullptr) {
+        // Another player's hero: nothing was seen being set here. It lies open at once.
+        trap = place_trap(true);
+    }
+    if (trap == nullptr) {
+        return;
+    }
+    trap->call("arm");
+    // Only so many lie at a time: with one more, the oldest is gone.
+    const int oldest = gameplay::bear_trap_to_remove(static_cast<int>(traps_.size()));
+    if (oldest >= 0) {
+        if (auto* const old = godot::Object::cast_to<godot::Node>(
+                godot::ObjectDB::get_instance(traps_.at(static_cast<std::size_t>(oldest))))) {
+            old->call("scrap");
+        }
+        traps_.erase(traps_.begin() + oldest);
+    }
+    traps_.push_back(trap->get_instance_id());
+    ++traps_set_;
+}
+
+void E5PlayerController::update_traps() {
+    if (traps_.empty()) {
+        return;
+    }
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (auto lying = traps_.begin(); lying != traps_.end();) {
+        auto* const trap = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(*lying));
+        if (trap == nullptr) {
+            lying = traps_.erase(lying);
+            continue;
+        }
+        // The first enemy on the ground that has come into it. (One that flies over does not step in.)
+        E5Enemy* caught = nullptr;
+        const godot::Vector3 place = trap->get_global_position();
+        for (const godot::Variant& node : enemies) {
+            auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+            if (enemy == nullptr || !enemy->is_alive() || enemy->is_held() || !enemy->is_on_floor()) {
+                continue;
+            }
+            const godot::Vector3 away = enemy->get_global_position() - place;
+            if (std::abs(static_cast<float>(away.y)) <= bear_trap_height &&
+                std::hypot(static_cast<float>(away.x), static_cast<float>(away.z)) - enemy->get_body_radius() <=
+                    gameplay::bear_trap_radius) {
+                caught = enemy;
+                break;
+            }
+        }
+        if (caught == nullptr) {
+            ++lying;
+            continue;
+        }
+        // (A hero shown here for another player does no damage: his trap shuts here for show.)
+        combat::hit(caught, caught->get_aim_point(), dealt(gameplay::SkillId::BearTrap));
+        E5Effect::spawn(effect_scene(bear_trap_spring_path), get_parent(), caught->get_aim_point());
+        trap->call("snap");
+        ++traps_sprung_;
+        lying = traps_.erase(lying);
+    }
+}
+
+bool E5PlayerController::start_clone() {
+    // Where the crosshair points, on the ground there; no further from him than it may be.
+    const godot::Vector3 here = get_global_position();
+    godot::Vector3 place = find_aim_point(here + godot::Vector3(0.0F, 1.3F, 0.0F)).position;
+    godot::Vector3 away = place - here;
+    away.y = 0.0F;
+    const auto distance = static_cast<float>(away.length());
+    if (distance > gameplay::clone_range) {
+        place = here + away / distance * gameplay::clone_range;
+        place.y = here.y;
+    } else if (distance > 1.0F) {
+        place -= away / distance * teleport_keep_off;
+    }
+    const std::optional<godot::Vector3> ground = ground_at(place);
+    const godot::Ref<godot::PackedScene> scene =
+        godot::ResourceLoader::get_singleton()->exists(get_scene_file_path())
+            ? godot::Ref<godot::PackedScene>(godot::ResourceLoader::get_singleton()->load(get_scene_file_path()))
+            : godot::Ref<godot::PackedScene>();
+    if (!ground || scene.is_null()) {
+        return false; // nowhere for it to stand: nothing happens, and the charge stays
+    }
+    godot::Node* const made = scene->instantiate();
+    auto* const copy = godot::Object::cast_to<E5PlayerController>(made);
+    if (copy == nullptr) {
+        if (made != nullptr) {
+            made->queue_free();
+        }
+        return false;
+    }
+    end_clone(); // one at a time
+    // A hero that nobody plays: shown as another player's hero is, driven from here. Its camera
+    // says where it aims, and must not take the view (switched off before it enters the tree).
+    copy->set_remote(true);
+    copy->clone_ = true;
+    copy->clone_share_ = gameplay::clone_damage_share;
+    copy->clone_health_ = effective_vitals().max_health;
+    const godot::TypedArray<godot::Node> cameras = copy->find_children("*", "Camera3D", true, false);
+    for (const godot::Variant& node : cameras) {
+        if (auto* const camera = godot::Object::cast_to<godot::Camera3D>(node)) {
+            camera->set_current(false);
+        }
+    }
+    copy->set_name("Clone");
+    get_parent()->add_child(copy);
+    spend(gameplay::SkillId::MirrorImage);
+    last_skill_ = gameplay::SkillId::MirrorImage;
+    ++skills_used_;
+    emote_left_ = 0.0F;
+    clone_id_ = copy->get_instance_id();
+    clone_place_ = *ground;
+    // It looks the way he looked when he called it, until it finds someone to cast at.
+    clone_facing_ = gameplay::facing_yaw(static_cast<float>(away.x), static_cast<float>(away.z));
+    clone_yaw_ = look_.yaw;
+    clone_pitch_ = 0.0F;
+    clone_left_ = gameplay::clone_seconds;
+    clone_until_cast_ = clone_first_cast;
+    clone_cast_ = 0;
+    copy->apply_net_state(clone_place_, clone_facing_, godot::String(clip_idle_), 0.0F, clone_yaw_, clone_pitch_);
+    E5Effect::spawn(effect_scene(teleport_flash_path), get_parent(), clone_place_);
+    ++clones_;
+    note_net_event(0, 0.0F);
+    return true;
+}
+
+void E5PlayerController::end_clone() {
+    if (auto* const copy = godot::Object::cast_to<E5PlayerController>(godot::ObjectDB::get_instance(clone_id_))) {
+        E5Effect::spawn(effect_scene(teleport_flash_path), get_parent(), copy->get_global_position());
+        copy->queue_free();
+    }
+    clone_id_ = 0;
+    clone_left_ = 0.0F;
+}
+
+void E5PlayerController::update_clone(float delta) {
+    auto* const copy = godot::Object::cast_to<E5PlayerController>(godot::ObjectDB::get_instance(clone_id_));
+    if (copy == nullptr) {
+        clone_id_ = 0;
+        return;
+    }
+    clone_left_ -= delta;
+    if (clone_left_ <= 0.0F || copy->clone_health_ <= 0.0F || vitals_.dead) {
+        clone_struck_ += effective_vitals().max_health - std::max(copy->clone_health_, 0.0F);
+        end_clone(); // its time is over, or it was struck down
+        return;
+    }
+    clone_until_cast_ -= delta;
+    if (clone_until_cast_ <= 0.0F) {
+        // At the nearest enemy within its reach: it turns to it and aims as a hero aims, with its
+        // own camera (looked through by nobody) pointed at it.
+        E5Enemy* target = nullptr;
+        float nearest = gameplay::clone_reach;
+        const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+        for (const godot::Variant& node : enemies) {
+            auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+            if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+                continue;
+            }
+            const float distance =
+                static_cast<float>(enemy->get_aim_point().distance_to(clone_place_)) - enemy->get_body_radius();
+            if (distance <= nearest) {
+                nearest = distance;
+                target = enemy;
+            }
+        }
+        if (target == nullptr || copy->camera_ == nullptr) {
+            clone_until_cast_ = clone_look_again;
+        } else {
+            const godot::Vector3 at = target->get_aim_point();
+            const godot::Vector3 flat = at - clone_place_;
+            clone_facing_ = gameplay::facing_yaw(static_cast<float>(flat.x), static_cast<float>(flat.z));
+            // The camera stands behind its shoulder and moves as it turns: aim from where the body
+            // is first, then twice from where that puts the camera.
+            godot::Vector3 eye = clone_place_ + godot::Vector3(0.0F, 1.5F, 0.0F);
+            for (int pass = 0; pass < 3; ++pass) {
+                const godot::Vector3 line = at - eye;
+                clone_yaw_ = std::atan2(-static_cast<float>(line.x), -static_cast<float>(line.z));
+                clone_pitch_ = std::atan2(static_cast<float>(line.y),
+                                          std::hypot(static_cast<float>(line.x), static_cast<float>(line.z)));
+                copy->look_.yaw = clone_yaw_;
+                copy->look_.pitch = clone_pitch_;
+                copy->apply_look_to_nodes();
+                eye = copy->camera_->get_global_position();
+            }
+            const gameplay::SkillId spell = gameplay::clone_spell(clone_cast_);
+            copy->apply_net_event(0, static_cast<int>(spell), clone_firebolt_power, 0, clone_yaw_, clone_pitch_);
+            ++clone_cast_;
+            ++clone_casts_;
+            clone_until_cast_ = gameplay::clone_cast_seconds;
+        }
+    }
+    copy->apply_net_state(clone_place_, clone_facing_, godot::String(clip_idle_), 0.0F, clone_yaw_, clone_pitch_);
 }
 
 void E5PlayerController::cast_meteor() {
@@ -3162,6 +3931,11 @@ void E5PlayerController::start_stance(gameplay::SkillId skill) {
     } else if (skill == gameplay::SkillId::Stampede) {
         stampede_ = gameplay::open_wound({}, gameplay::stampede_seconds, gameplay::stampede_tick_seconds);
         E5Effect::spawn(effect_scene(stampede_path), this, get_global_position());
+    } else if (skill == gameplay::SkillId::FrostArmor) {
+        armor_left_ = gameplay::frost_armor_seconds;
+        armor_barrier_ = effective_vitals().max_health * gameplay::frost_armor_share;
+        armor_tick_ = 0.0F; // those near are slowed at once
+        E5Effect::spawn(effect_scene(frost_armor_path), this, get_global_position());
     } else {
         counter_left_ = gameplay::counter_seconds;
         E5Effect::spawn(effect_scene(counter_stance_path), this, get_global_position());
@@ -3247,6 +4021,32 @@ void E5PlayerController::update_counter(float delta) {
                                                godot::Vector3(std::cos(angle) * away, 0.05F, std::sin(angle) * away),
                                       .size = stampede_burst_size});
             }
+        }
+    }
+    if (armor_left_ > 0.0F) {
+        // Frost Armor: what is near him goes slower, for as long as it lasts and stays near. (Said
+        // anew twice a second, for a little longer than that. Not by a hero shown here for another
+        // player: his own machine slows them, and says so to the one that decides them.)
+        armor_left_ = std::max(armor_left_ - delta, 0.0F);
+        armor_tick_ -= delta;
+        if (armor_tick_ <= 0.0F && !remote_ && !vitals_.dead) {
+            armor_tick_ = gameplay::frost_armor_tick_seconds;
+            const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+            for (const godot::Variant& node : enemies) {
+                auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+                if (enemy == nullptr || !enemy->is_alive()) {
+                    continue;
+                }
+                godot::Vector3 away = enemy->get_global_position() - get_global_position();
+                away.y = 0.0F;
+                if (static_cast<float>(away.length()) - enemy->get_body_radius() <= gameplay::frost_armor_radius) {
+                    enemy->slow(gameplay::frost_armor_slow_share, gameplay::frost_armor_tick_seconds + 0.2F);
+                    ++armor_slowed_;
+                }
+            }
+        }
+        if (armor_left_ <= 0.0F) {
+            armor_barrier_ = 0.0F;
         }
     }
     if (resolve_left_ > 0.0F) {
@@ -3335,6 +4135,12 @@ void E5PlayerController::start_tower_charge(gameplay::SkillId skill) {
         place_turret(false);
         return;
     }
+    if (skill == gameplay::SkillId::BearTrap) {
+        // The trap lies before her from the first moment, shut: she pulls it open.
+        const godot::Node3D* const trap = place_trap(false);
+        trap_setting_ = trap != nullptr ? trap->get_instance_id() : 0;
+        return;
+    }
     // The green that runs from her hand into the ground and out round her, while she charges.
     const godot::Node3D* const effect = E5Effect::spawn(effect_scene(tower_charge_path), this, get_global_position());
     tower_charge_effect_ = effect != nullptr ? effect->get_instance_id() : 0;
@@ -3345,14 +4151,34 @@ void E5PlayerController::update_tower_charge(bool held, float delta) {
         return;
     }
     const bool gun = action_skill_ == gameplay::SkillId::GatlingGun;
+    const bool trap = action_skill_ == gameplay::SkillId::BearTrap;
     if (held && is_on_floor()) {
         tower_charge_ = std::min(tower_charge_ + delta, gameplay::tower_full_charge_seconds);
-        if (!gun || tower_charge_ < gameplay::gatling_build_seconds) {
+        if (trap) {
+            if (auto* const setting = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(trap_setting_))) {
+                setting->call("set_open", tower_charge_ / gameplay::bear_trap_set_seconds);
+            }
+        }
+        const bool done = (gun && tower_charge_ >= gameplay::gatling_build_seconds) ||
+                          (trap && tower_charge_ >= gameplay::bear_trap_set_seconds);
+        if (!done) {
             return;
         }
-        // The gun is done: it stands, whether she lets go or not.
+        // The gun is done, the trap is open: it stands or lies, whether she lets go or not.
     }
     tower_charging_ = false;
+    if (trap) {
+        if (tower_charge_ < gameplay::bear_trap_set_seconds || !is_on_floor()) {
+            // Let go too soon: it is gone, and nothing is spent.
+            if (auto* const setting = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(trap_setting_))) {
+                setting->call("scrap");
+            }
+            trap_setting_ = 0;
+            return;
+        }
+        use_skill(1.0F); // (the cooldown, the count, the word to the other players; then lay_trap)
+        return;
+    }
     if (auto* const effect = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(tower_charge_effect_))) {
         effect->queue_free();
     }
@@ -3385,6 +4211,77 @@ void E5PlayerController::update_tower_charge(bool held, float delta) {
     use_skill(power); // (the cooldown, the count, the word to the other players; then grow_tower)
 }
 
+void E5PlayerController::start_firebolt_charge() {
+    last_skill_ = gameplay::SkillId::Firebolt;
+    action_skill_ = gameplay::SkillId::Firebolt;
+    emote_left_ = 0.0F;
+    firebolt_charging_ = true;
+    firebolt_charge_ = 0.0F;
+    set_velocity(godot::Vector3());
+    // The fire that gathers at the tip of his wand (in his hand, for a hero without one): the
+    // fireball's own, small at first.
+    end_firebolt_glow();
+    godot::Node* holder = get_node_or_null(godot::NodePath("RightHandAttachment/WeaponHolder"));
+    if (holder == nullptr) {
+        holder = right_hand_;
+    }
+    if (godot::Node3D* const glow = E5Effect::spawn(effect_scene(firebolt_fire_path), holder, casting_point(false))) {
+        glow->set_scale(godot::Vector3(firebolt_glow_least, firebolt_glow_least, firebolt_glow_least));
+        firebolt_glow_ = glow->get_instance_id();
+    }
+}
+
+void E5PlayerController::update_firebolt_charge(bool held, float delta) {
+    if (!firebolt_charging_) {
+        return;
+    }
+    if (held && is_on_floor() && !vitals_.dead) {
+        firebolt_charge_ = std::min(firebolt_charge_ + delta, gameplay::firebolt_full_charge_seconds);
+        if (auto* const glow = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(firebolt_glow_))) {
+            // It grows with the charge. (Sized in the world: the wand's holder has a scale of its own.)
+            const float size =
+                firebolt_glow_least + (firebolt_glow_full - firebolt_glow_least) * firebolt_charge_ /
+                                          gameplay::firebolt_full_charge_seconds;
+            glow->set_global_transform(
+                godot::Transform3D(godot::Basis().scaled(godot::Vector3(size, size, size)), casting_point(false)));
+        }
+        return;
+    }
+    firebolt_charging_ = false;
+    if (firebolt_charge_ < gameplay::firebolt_least_charge_seconds || vitals_.dead) {
+        end_firebolt_glow(); // let go too soon: it goes out, and nothing is spent
+        return;
+    }
+    firebolt_power_ = gameplay::firebolt_power(firebolt_charge_);
+    firebolt_release_ = true; // the throw begins in this step (_physics_process)
+}
+
+void E5PlayerController::end_firebolt_glow() {
+    if (auto* const glow = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(firebolt_glow_))) {
+        glow->queue_free();
+    }
+    firebolt_glow_ = 0;
+}
+
+void E5PlayerController::throw_firebolt() {
+    end_firebolt_glow(); // it leaves the wand as the fireball
+    const float power = std::clamp(firebolt_power_, 0.0F, 1.0F);
+    const godot::Vector3 origin = casting_point(false);
+    const godot::Vector3 direction = (find_aim_point(origin).position - origin).normalized();
+    auto* const bolt = memnew(E5SpellBolt);
+    get_parent()->add_child(bolt);
+    bolt->set_global_position(origin);
+    bolt->set_damage(dealt(gameplay::SkillId::Firebolt, power));
+    bolt->set_trail_effect(effect_scene(firebolt_fire_path),
+                           firebolt_trail_least + (firebolt_trail_full - firebolt_trail_least) * power);
+    bolt->set_impact_effect(effect_scene(firebolt_burst_path));
+    const float radius = gameplay::firebolt_radius(power);
+    bolt->set_blast_radius(radius);
+    bolt->set_impact_scale(radius / firebolt_burst_made_radius);
+    bolt->launch(direction * fireball_speed, get_rid());
+    ++firebolts_thrown_;
+}
+
 void E5PlayerController::grow_tower(float power) {
     const float height = gameplay::tower_height(power * gameplay::tower_full_charge_seconds);
     const godot::Ref<godot::PackedScene> scene = effect_scene(tower_path);
@@ -3402,7 +4299,9 @@ void E5PlayerController::grow_tower(float power) {
     ++towers_grown_;
 }
 
-E5PlayerController::Bush E5PlayerController::nearest_bush(float radius) const {
+E5PlayerController::Bush E5PlayerController::nearest_bush(float radius, const godot::String& kind) const {
+    // Any plant will do since ticket 41: a bush, a tree. (`kind`: only plants whose scene's name
+    // has that in it, for tests.)
     Bush best;
     float nearest = radius;
     const godot::Vector3 here = get_global_position();
@@ -3415,7 +4314,7 @@ E5PlayerController::Bush E5PlayerController::nearest_bush(float radius) const {
         if (forest == nullptr) {
             continue;
         }
-        const E5Forest::Plant plant = forest->plant_near(here, nearest, "bush");
+        const E5Forest::Plant plant = forest->plant_near(here, nearest, kind);
         if (plant.mesh.is_valid()) {
             nearest = over_ground(plant.transform.origin);
             best = {.forest = forest->get_instance_id(),
@@ -3426,12 +4325,16 @@ E5PlayerController::Bush E5PlayerController::nearest_bush(float radius) const {
                     .material = plant.material};
         }
     }
-    // And the bushes that stand by themselves beside her in the scene (the arena's).
+    // And the plants that stand by themselves beside her in the scene (the arena's).
     const godot::TypedArray<godot::Node> beside = get_parent()->get_children();
     for (const godot::Variant& item : beside) {
         auto* const node = godot::Object::cast_to<godot::Node3D>(item);
-        if (node == nullptr || !node->is_visible() || !node->get_scene_file_path().contains("bush") ||
-            over_ground(node->get_global_position()) > nearest) {
+        if (node == nullptr || !node->is_visible() || over_ground(node->get_global_position()) > nearest) {
+            continue;
+        }
+        const godot::String path = node->get_scene_file_path();
+        if (!path.begins_with("res://environment/") || !(path.contains("bush") || path.contains("tree")) ||
+            (!kind.is_empty() && !path.contains(kind))) {
             continue;
         }
         const E5Forest::Plant plant =
@@ -3449,8 +4352,8 @@ E5PlayerController::Bush E5PlayerController::nearest_bush(float radius) const {
     return best;
 }
 
-godot::Variant E5PlayerController::find_bush(float radius) const {
-    const Bush bush = nearest_bush(radius);
+godot::Variant E5PlayerController::find_bush(float radius, const godot::String& kind) const {
+    const Bush bush = nearest_bush(radius, kind);
     return bush.mesh.is_valid() ? godot::Variant(bush.transform.origin) : godot::Variant();
 }
 
@@ -3640,7 +4543,7 @@ void E5PlayerController::start_pieces(gameplay::SkillId skill) {
     ++skills_used_;
     action_skill_ = skill;
     emote_left_ = 0.0F;
-    // The first blow at once, the others every half second after it.
+    // The first blow at once, the others every quarter of a second after it.
     pieces_ = {.seconds_left = gameplay::pieces_seconds, .until_tick = 0.0F};
     note_net_event(0, 0.0F);
 }

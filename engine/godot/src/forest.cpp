@@ -268,7 +268,9 @@ E5Forest::Plant E5Forest::plant_near(const godot::Vector3& position, float radiu
         const Drawn& plant = drawn_[index];
         const float distance = std::hypot(static_cast<float>(plant.position.x - position.x),
                                           static_cast<float>(plant.position.z - position.z));
-        if (plant.hidden || distance > nearest || !species_.at(plant.species).path.contains(kind)) {
+        // (No kind named: any plant.)
+        if (plant.hidden || distance > nearest ||
+            (!kind.is_empty() && !species_.at(plant.species).path.contains(kind))) {
             continue;
         }
         nearest = distance;
@@ -282,7 +284,12 @@ E5Forest::Plant E5Forest::plant_near(const godot::Vector3& position, float radiu
 
 void E5Forest::set_plant_hidden(int index, bool hidden) {
     if (index >= 0 && static_cast<std::size_t>(index) < drawn_.size()) {
-        drawn_[static_cast<std::size_t>(index)].hidden = hidden; // _process shows or hides its meshes
+        Drawn& plant = drawn_[static_cast<std::size_t>(index)];
+        plant.hidden = hidden; // _process shows or hides its meshes
+        // Its trunk is not in the way while it is gone. (Deferred: this is asked in a physics step.)
+        if (auto* const trunk = godot::Object::cast_to<godot::CollisionShape3D>(godot::ObjectDB::get_instance(plant.trunk))) {
+            trunk->set_deferred("disabled", hidden);
+        }
     }
 }
 
@@ -516,6 +523,7 @@ void E5Forest::_ready() {
             offset.y = species.trunk_offset.y;
             trunk->set_position(position + offset);
             trunks->add_child(trunk);
+            drawn_.back().trunk = trunk->get_instance_id();
         }
     }
     build_cells(planted);

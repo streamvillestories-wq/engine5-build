@@ -4,6 +4,7 @@
 #include "e5/core/profiling.hpp"
 #include "effect.hpp"
 #include "enemy.hpp"
+#include "lingering.hpp"
 #include "player_controller.hpp"
 
 #include <godot_cpp/classes/scene_tree.hpp>
@@ -17,12 +18,21 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <cmath>
+#include <cstdint>
+#include <unordered_map>
 
 namespace e5::bridge {
 namespace {
 
 constexpr double flight_lifetime = 4.0; // seconds after which a spell that has hit nothing is gone
 constexpr double fade_seconds = 1.0;    // the trail's last sparks die out before the node is removed
+
+// Which poison is on which enemy (ids: either may be gone), so that one struck again is poisoned
+// anew and not twice over.
+std::unordered_map<std::uint64_t, std::uint64_t>& poisons() {
+    static std::unordered_map<std::uint64_t, std::uint64_t> on;
+    return on;
+}
 
 } // namespace
 
@@ -113,7 +123,10 @@ void E5SpellBolt::burst(const godot::Vector3& position, godot::Object* collider)
         // Let the sparks already in the air fade out; switch off the glow.
         E5Effect::set_active(trail_, false);
     }
-    E5Effect::spawn(impact_effect_, get_parent(), position);
+    godot::Node3D* const impact = E5Effect::spawn(impact_effect_, get_parent(), position);
+    if (impact != nullptr && impact_scale_ != 1.0F) {
+        impact->set_scale(godot::Vector3(impact_scale_, impact_scale_, impact_scale_));
+    }
     if (hostile_) {
         if (auto* const player = godot::Object::cast_to<E5PlayerController>(collider)) {
             // From where it came: back along its flight.
@@ -125,6 +138,24 @@ void E5SpellBolt::burst(const godot::Vector3& position, godot::Object* collider)
         combat::blast(this, position, blast_radius_, damage_);
     } else {
         combat::hit(collider, position, damage_);
+    }
+    auto* const struck = godot::Object::cast_to<E5Enemy>(collider);
+    if (poison_seconds_ > 0.0F && struck != nullptr && struck->is_alive()) {
+        // (A small circle that goes with it: it hurts that one, and whoever stands right against it.)
+        std::uint64_t& on = poisons()[struck->get_instance_id()];
+        if (auto* const old = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(on))) {
+            old->queue_free();
+        }
+        const E5Lingering* const poison = E5Lingering::spawn(get_parent(), struck->get_aim_point(),
+                                                             {.radius = 0.25F,
+                                                              .seconds = poison_seconds_,
+                                                              .tick_damage = poison_tick_damage_,
+                                                              .tick_seconds = poison_tick_seconds_,
+                                                              .root_seconds = 0.0F,
+                                                              .visual = poison_visual_,
+                                                              .cage = {}},
+                                                             struck);
+        on = poison != nullptr ? poison->get_instance_id() : 0;
     }
 }
 

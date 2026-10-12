@@ -14,13 +14,14 @@ TEST_CASE("the archer has her shot, the skills wished for her and slots to fill"
     CHECK(bar.slot(0) == SkillId::Shot);
     CHECK(bar.slot(1) == SkillId::VineTower);
     CHECK(bar.slot(2) == SkillId::Disguise);   // "the first free slot"
+    CHECK(bar.slot(3) == SkillId::BearTrap);   // "the first free slot" too
     CHECK(bar.slot(5) == SkillId::GatlingGun); // wished for key 6
-    for (std::size_t slot = 3; slot < SkillBar::slot_count; ++slot) {
+    for (std::size_t slot = 4; slot < SkillBar::slot_count; ++slot) {
         if (slot != 5) {
             CHECK(bar.slot(slot) == SkillId::None);
         }
     }
-    CHECK_FALSE(bar.select(3));
+    CHECK_FALSE(bar.select(4)); // an empty slot is not chosen
     CHECK(bar.select(5));
     CHECK(open_slot_count(SkillSet::Archer) == 11);
     CHECK(open_slot_count(SkillSet::ArcherFull) == 0);
@@ -356,7 +357,7 @@ TEST_CASE("the vine tower grows by how long it was charged", "[skills]") {
     CHECK(e5::gameplay::skill_info(SkillId::VineTower).kind == e5::gameplay::SkillKind::Instant);
     // The players' archer has it beside her shot; the bar kept for tests is as it was.
     CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(1) == SkillId::VineTower);
-    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(3) == SkillId::None);
+    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(4) == SkillId::None);
     CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::ArcherFull).slot(1) == SkillId::PowerShot);
     // "Rarely"; let go too soon, sooner.
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::VineTower) >= 20.0F);
@@ -380,7 +381,7 @@ TEST_CASE("the archer's disguise strikes nobody, ends by itself and is used rare
     // She is unseen for less time than she then waits; and she must really stand in the bush.
     CHECK(e5::gameplay::disguise_seconds > 0.0F);
     CHECK(e5::gameplay::disguise_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::Disguise));
-    CHECK(e5::gameplay::disguise_reach <= 2.0F);
+    CHECK(e5::gameplay::disguise_reach <= 3.0F);
 }
 
 TEST_CASE("the gatling arrow gun shoots four arrows a second while the button is held", "[skills]") {
@@ -451,13 +452,13 @@ TEST_CASE("cut in pieces is the new warrior's skill for a full charge", "[skills
         charged += e5::gameplay::skill_needs_charge(bar.slot(slot)) ? 1 : 0;
     }
     CHECK(charged == 1);
-    // Each blow eight tenths of a sword blow; twelve of them.
+    // Each blow four tenths of a sword blow; twenty-four of them, four a second.
     CHECK(e5::gameplay::skill_damage(SkillId::CutInPieces) ==
-          Catch::Approx(0.8F * e5::gameplay::skill_damage(SkillId::Slash)));
+          Catch::Approx(0.4F * e5::gameplay::skill_damage(SkillId::Slash)));
     CHECK(e5::gameplay::step_bleed(
               e5::gameplay::open_wound({}, e5::gameplay::pieces_seconds, e5::gameplay::pieces_tick_seconds),
               e5::gameplay::pieces_tick_seconds, 60.0F)
-              .ticks == 12);
+              .ticks == 24);
 }
 
 TEST_CASE("the seismic slash catches what is in its wedge", "[skills]") {
@@ -761,10 +762,268 @@ TEST_CASE("the bar can be rearranged, but not its standard attack", "[skills]") 
 TEST_CASE("the new wizard has his arcane bolt and slots to fill", "[skills]") {
     const SkillBar bar(SkillSet::Mage);
     CHECK(bar.slot(0) == SkillId::ArcaneBolt);
-    for (std::size_t slot = 1; slot < SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(1) == SkillId::Firebolt);   // key 2, as wished
+    CHECK(bar.slot(2) == SkillId::FrostArmor); // key 3, as wished
+    CHECK(bar.slot(3) == SkillId::ChainBolt);   // key 4, as wished
+    CHECK(bar.slot(4) == SkillId::PoisonHydra); // key 5, as wished
+    CHECK(bar.slot(5) == SkillId::Teleport);    // key 6, as wished
+    CHECK(bar.slot(6) == SkillId::RovingHole);  // key 7, as wished
+    CHECK(bar.slot(7) == SkillId::Blizzard);    // key 8, as wished
+    CHECK(bar.slot(8) == SkillId::MirrorImage); // key 9, as wished
+    for (std::size_t slot = 9; slot < SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
     CHECK(open_slot_count(SkillSet::Mage) == open_slots);
     // The first wizard keeps all of his.
     CHECK(SkillBar(SkillSet::Wizard).slot(6) == SkillId::BlackHole);
+}
+
+TEST_CASE("the new wizard's firebolt grows with its charge, within his range", "[skills]") {
+    using e5::gameplay::firebolt_power;
+    using e5::gameplay::firebolt_radius;
+    using e5::gameplay::skill_damage;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::Firebolt).name == "Firebolt");
+    CHECK(e5::gameplay::skill_info(SkillId::Firebolt).kind == e5::gameplay::SkillKind::Instant);
+    CHECK(e5::gameplay::skill_from_wish(SkillId::Firebolt));
+    CHECK_FALSE(e5::gameplay::skill_needs_charge(SkillId::Firebolt));
+    // "Now and then": 8 to 12 seconds.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Firebolt) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Firebolt) <= 12.0F);
+    // Nothing under a second; all of it after four; evenly in between.
+    CHECK(firebolt_power(0.0F) == 0.0F);
+    CHECK(firebolt_power(e5::gameplay::firebolt_least_charge_seconds) == 0.0F);
+    CHECK(firebolt_power(2.5F) == Catch::Approx(0.5F));
+    CHECK(firebolt_power(e5::gameplay::firebolt_full_charge_seconds) == 1.0F);
+    CHECK(firebolt_power(60.0F) == 1.0F);
+    // Twice the damage after the full charge, as wished.
+    CHECK(skill_damage(SkillId::Firebolt, 1.0F) == Catch::Approx(2.0F * skill_damage(SkillId::Firebolt, 0.0F)));
+    CHECK(skill_damage(SkillId::Firebolt, 7.0F) == Catch::Approx(skill_damage(SkillId::Firebolt, 1.0F)));
+    // More than his bolt even at its least, and at its most no more than the first wizard's meteor.
+    CHECK(skill_damage(SkillId::Firebolt, 0.0F) > skill_damage(SkillId::ArcaneBolt));
+    CHECK(skill_damage(SkillId::Firebolt, 1.0F) <= skill_damage(SkillId::Meteor));
+    // What the bolts he could have thrown while he stood and charged would have done is more
+    // than the charge adds: the firebolt is for a crowd, not for one enemy.
+    CHECK(skill_damage(SkillId::Firebolt, 1.0F) - skill_damage(SkillId::Firebolt, 0.0F) <
+          3.0F * skill_damage(SkillId::ArcaneBolt));
+    CHECK(firebolt_radius(0.0F) == Catch::Approx(e5::gameplay::firebolt_least_radius));
+    CHECK(firebolt_radius(1.0F) == Catch::Approx(e5::gameplay::firebolt_full_radius));
+    CHECK(firebolt_radius(0.5F) > firebolt_radius(0.0F));
+    CHECK(firebolt_radius(9.0F) == Catch::Approx(e5::gameplay::firebolt_full_radius));
+}
+
+TEST_CASE("the new wizard's frost armor is a stance whose barrier takes so much and no more", "[skills]") {
+    using e5::gameplay::barrier_takes;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::FrostArmor).name == "Frost Armor");
+    CHECK(e5::gameplay::skill_is_stance(SkillId::FrostArmor));
+    CHECK_FALSE(e5::gameplay::skill_is_channel(SkillId::FrostArmor));
+    CHECK(e5::gameplay::skill_damage(SkillId::FrostArmor) == 0.0F);
+    CHECK_FALSE(e5::gameplay::skill_needs_charge(SkillId::FrostArmor));
+    // "Now and then": 8 to 12 seconds, and it is over before it is ready again.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::FrostArmor) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::FrostArmor) <= 12.0F);
+    CHECK(e5::gameplay::frost_armor_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::FrostArmor));
+    // Less than half his health, and no more of it a second than Never Give Up keeps from a hero
+    // who loses all of hers while it lasts (what it spares and what it heals).
+    CHECK(e5::gameplay::frost_armor_share > 0.0F);
+    CHECK(e5::gameplay::frost_armor_share < 0.5F);
+    const float resolve = (1.0F - e5::gameplay::resolve_damage_share) +
+                          e5::gameplay::resolve_heal_share * e5::gameplay::resolve_seconds;
+    CHECK(e5::gameplay::frost_armor_share / e5::gameplay::skill_cooldown_seconds(SkillId::FrostArmor) <=
+          resolve / e5::gameplay::skill_cooldown_seconds(SkillId::NeverGiveUp));
+    CHECK(e5::gameplay::frost_armor_slow_share == Catch::Approx(0.3F)); // as wished
+    CHECK(e5::gameplay::frost_armor_radius == Catch::Approx(5.0F));     // as wished
+    // A blow smaller than what is left is taken whole; a larger one only as far as the barrier goes.
+    CHECK(barrier_takes(40.0F, 12.0F) == 12.0F);
+    CHECK(barrier_takes(8.0F, 12.0F) == 8.0F);
+    CHECK(barrier_takes(0.0F, 12.0F) == 0.0F);
+    CHECK(barrier_takes(-3.0F, 12.0F) == 0.0F);
+    CHECK(barrier_takes(40.0F, -5.0F) == 0.0F);
+}
+
+TEST_CASE("the new wizard's chain lightning hits harder with every leap", "[skills]") {
+    using e5::gameplay::chain_damage_factor;
+    using e5::gameplay::skill_damage;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::ChainBolt).name == "Chain Lightning");
+    CHECK(e5::gameplay::skill_info(SkillId::ChainBolt).kind == e5::gameplay::SkillKind::Instant);
+    CHECK(e5::gameplay::skill_from_wish(SkillId::ChainBolt));
+    CHECK_FALSE(e5::gameplay::skill_from_wish(SkillId::ChainLightning)); // the first wizard's is the game's own
+    // "Often": 3 to 5 seconds.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::ChainBolt) >= 3.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::ChainBolt) <= 5.0F);
+    // One enemy and four more, five metres apart at most, a fifth more each time: as wished.
+    CHECK(e5::gameplay::chain_leaps == 4);
+    CHECK(e5::gameplay::chain_leap_reach == Catch::Approx(5.0F));
+    CHECK(chain_damage_factor(0) == 1.0F);
+    CHECK(chain_damage_factor(1) == Catch::Approx(1.2F));
+    CHECK(chain_damage_factor(4) == Catch::Approx(2.0736F));
+    CHECK(chain_damage_factor(9) == Catch::Approx(chain_damage_factor(4)));
+    CHECK(chain_damage_factor(-2) == 1.0F);
+    // Against one enemy it is less than his bolt; against five, all of it is no more than a
+    // fully charged firebolt does to five.
+    CHECK(skill_damage(SkillId::ChainBolt) < skill_damage(SkillId::ArcaneBolt));
+    float in_all = 0.0F;
+    for (int leap = 0; leap <= e5::gameplay::chain_leaps; ++leap) {
+        in_all += skill_damage(SkillId::ChainBolt) * chain_damage_factor(leap);
+    }
+    CHECK(in_all > 2.0F * skill_damage(SkillId::ArcaneBolt));
+    CHECK(in_all < 5.0F * skill_damage(SkillId::Firebolt, 1.0F));
+}
+
+TEST_CASE("the new wizard's poison hydra spits for a while and poisons, within his range", "[skills]") {
+    using e5::gameplay::skill_damage;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::PoisonHydra).name == "Poison Hydra");
+    CHECK(e5::gameplay::skill_from_wish(SkillId::PoisonHydra));
+    // "Rarely": 20 to 30 seconds, and it is gone long before it is ready again.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::PoisonHydra) >= 20.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::PoisonHydra) <= 30.0F);
+    CHECK(e5::gameplay::hydra_seconds < 0.5F * e5::gameplay::skill_cooldown_seconds(SkillId::PoisonHydra));
+    // A spit is six tenths of his bolt, and the poison all of one over its five seconds: as wished.
+    CHECK(skill_damage(SkillId::PoisonHydra) == Catch::Approx(0.6F * skill_damage(SkillId::ArcaneBolt)));
+    CHECK(e5::gameplay::hydra_poison_damage == Catch::Approx(skill_damage(SkillId::ArcaneBolt)));
+    CHECK(e5::gameplay::hydra_poison_tick_damage() * e5::gameplay::hydra_poison_seconds /
+              e5::gameplay::hydra_poison_tick_seconds ==
+          Catch::Approx(e5::gameplay::hydra_poison_damage));
+    // All of one hydra on one enemy (its spits, and poison that never lapses while it stands and
+    // for its five seconds after): less a second than his bolt does while he throws it.
+    const float spits = e5::gameplay::hydra_seconds / e5::gameplay::hydra_spit_seconds;
+    const float poison = e5::gameplay::hydra_poison_damage / e5::gameplay::hydra_poison_seconds *
+                         (e5::gameplay::hydra_seconds + e5::gameplay::hydra_poison_seconds);
+    const float in_all = spits * skill_damage(SkillId::PoisonHydra) + poison;
+    CHECK(in_all / e5::gameplay::skill_cooldown_seconds(SkillId::PoisonHydra) < skill_damage(SkillId::ArcaneBolt));
+    CHECK(e5::gameplay::hydra_range < e5::gameplay::hydra_place_range);
+}
+
+TEST_CASE("the new wizard's teleportation takes him so far and no further", "[skills]") {
+    using e5::gameplay::SkillId;
+    using e5::gameplay::teleport_share;
+    CHECK(e5::gameplay::skill_info(SkillId::Teleport).name == "Teleportation");
+    CHECK(e5::gameplay::skill_from_wish(SkillId::Teleport));
+    CHECK(e5::gameplay::skill_damage(SkillId::Teleport) == 0.0F);
+    CHECK_FALSE(e5::gameplay::skill_is_stance(SkillId::Teleport));
+    // "Now and then": 8 to 12 seconds.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Teleport) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Teleport) <= 12.0F);
+    CHECK(e5::gameplay::teleport_range == Catch::Approx(20.0F)); // as wished
+    CHECK(teleport_share(0.0F) == 1.0F);
+    CHECK(teleport_share(12.0F) == 1.0F);
+    CHECK(teleport_share(20.0F) == 1.0F);
+    CHECK(teleport_share(40.0F) == Catch::Approx(0.5F));
+    CHECK(teleport_share(-3.0F) == 1.0F);
+}
+
+TEST_CASE("the new wizard's black whole drifts, draws in and hurts, within his range", "[skills]") {
+    using e5::gameplay::skill_damage;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::RovingHole).name == "Black Whole"); // as its wisher spelt it
+    CHECK(e5::gameplay::skill_from_wish(SkillId::RovingHole));
+    CHECK_FALSE(e5::gameplay::skill_from_wish(SkillId::BlackHole)); // the first wizard's is the game's own
+    CHECK_FALSE(e5::gameplay::skill_needs_charge(SkillId::RovingHole));
+    // "Now and then": 8 to 12 seconds, and it is gone before it is ready again.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::RovingHole) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::RovingHole) <= 12.0F);
+    CHECK(e5::gameplay::hole_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::RovingHole));
+    // Fifteen metres in six seconds, as wished; what it draws along is slower than it is.
+    CHECK(e5::gameplay::hole_speed() == Catch::Approx(2.5F));
+    CHECK(e5::gameplay::hole_pull_speed < e5::gameplay::hole_speed());
+    CHECK(e5::gameplay::hole_radius < e5::gameplay::hole_pull_radius);
+    // Half his bolt a second, as wished: to one enemy that stays with it to the end, less than a
+    // fully charged firebolt.
+    CHECK(skill_damage(SkillId::RovingHole) / e5::gameplay::hole_tick_seconds ==
+          Catch::Approx(0.5F * skill_damage(SkillId::ArcaneBolt)));
+    CHECK(skill_damage(SkillId::RovingHole) * e5::gameplay::hole_seconds / e5::gameplay::hole_tick_seconds <
+          skill_damage(SkillId::Firebolt, 1.0F));
+}
+
+TEST_CASE("the new wizard's blizzard holds, slows and hurts more the longer an enemy stays", "[skills]") {
+    using e5::gameplay::blizzard_damage_factor;
+    using e5::gameplay::skill_damage;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::Blizzard).name == "Blizzard");
+    CHECK(e5::gameplay::skill_from_wish(SkillId::Blizzard));
+    // "Rarely": 20 to 30 seconds.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Blizzard) >= 20.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::Blizzard) <= 30.0F);
+    // Six seconds on ten metres, held for two and slowed by three tenths for two more: as wished.
+    CHECK(e5::gameplay::blizzard_seconds == Catch::Approx(6.0F));
+    CHECK(2.0F * e5::gameplay::blizzard_radius == Catch::Approx(10.0F));
+    CHECK(e5::gameplay::blizzard_root_seconds == Catch::Approx(2.0F));
+    CHECK(e5::gameplay::blizzard_slow_share == Catch::Approx(0.3F));
+    CHECK(e5::gameplay::blizzard_slow_seconds == Catch::Approx(2.0F));
+    // Two fifths of his bolt a second, a tenth more for every whole second inside: as wished.
+    CHECK(skill_damage(SkillId::Blizzard) / e5::gameplay::blizzard_tick_seconds ==
+          Catch::Approx(0.4F * skill_damage(SkillId::ArcaneBolt)));
+    CHECK(blizzard_damage_factor(0.0F) == 1.0F);
+    CHECK(blizzard_damage_factor(0.9F) == 1.0F);
+    CHECK(blizzard_damage_factor(1.0F) == Catch::Approx(1.1F));
+    CHECK(blizzard_damage_factor(5.5F) == Catch::Approx(1.5F));
+    CHECK(blizzard_damage_factor(60.0F) == Catch::Approx(1.6F));
+    CHECK(blizzard_damage_factor(-1.0F) == 1.0F);
+    // All of it on one enemy that never leaves: less than a fully charged firebolt.
+    float in_all = 0.0F;
+    for (float inside = 0.0F; inside < e5::gameplay::blizzard_seconds; inside += e5::gameplay::blizzard_tick_seconds) {
+        in_all += skill_damage(SkillId::Blizzard) * blizzard_damage_factor(inside);
+    }
+    CHECK(in_all == Catch::Approx(66.0F));
+    CHECK(in_all < skill_damage(SkillId::Firebolt, 1.0F));
+}
+
+TEST_CASE("the archer's bear trap hurts the one that steps in, and only so many lie at a time", "[skills]") {
+    using e5::gameplay::bear_trap_to_remove;
+    using e5::gameplay::skill_damage;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::BearTrap).name == "Bear Trap");
+    CHECK(e5::gameplay::skill_info(SkillId::BearTrap).kind == e5::gameplay::SkillKind::Instant);
+    CHECK(e5::gameplay::skill_from_wish(SkillId::BearTrap));
+    // "Now and then": 8 to 12 seconds; set in two, as wished.
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BearTrap) >= 8.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BearTrap) <= 12.0F);
+    CHECK(e5::gameplay::bear_trap_set_seconds == Catch::Approx(2.0F));
+    // "A lot": more than her fire arrow, no more than a power shot at its fullest.
+    CHECK(skill_damage(SkillId::BearTrap) > skill_damage(SkillId::FireArrow));
+    CHECK(skill_damage(SkillId::BearTrap) <= skill_damage(SkillId::PowerShot, 1.0F));
+    // Room for so many; with one more the oldest goes.
+    CHECK(bear_trap_to_remove(0) == -1);
+    CHECK(bear_trap_to_remove(e5::gameplay::bear_trap_limit - 1) == -1);
+    CHECK(bear_trap_to_remove(e5::gameplay::bear_trap_limit) == 0);
+    // All of them sprung at once: less than the Mole-Rat Queen's life by far (the wish's thirty were not).
+    CHECK(static_cast<float>(e5::gameplay::bear_trap_limit) * skill_damage(SkillId::BearTrap) <= 600.0F);
+}
+
+TEST_CASE("whose ur mommy is the new wizard's skill for a full charge", "[skills]") {
+    using e5::gameplay::clone_spell;
+    using e5::gameplay::SkillId;
+    CHECK(e5::gameplay::skill_info(SkillId::MirrorImage).name == "Whose Ur Mommy?"); // as its wisher named it
+    CHECK(e5::gameplay::skill_from_wish(SkillId::MirrorImage));
+    CHECK(e5::gameplay::skill_needs_charge(SkillId::MirrorImage));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::MirrorImage) == 0.0F);
+    CHECK(e5::gameplay::skill_damage(SkillId::MirrorImage) == 0.0F);
+    // The only one of his that takes a charge.
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Mage);
+    int charged = 0;
+    for (std::size_t slot = 0; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
+        charged += e5::gameplay::skill_needs_charge(bar.slot(slot)) ? 1 : 0;
+    }
+    CHECK(charged == 1);
+    // Ten seconds, half his damage, three times what strikes it: as wished.
+    CHECK(e5::gameplay::clone_seconds == Catch::Approx(10.0F));
+    CHECK(e5::gameplay::clone_damage_share == Catch::Approx(0.5F));
+    CHECK(e5::gameplay::clone_damage_taken == Catch::Approx(3.0F));
+    // What it casts, in turn: spells of his that do damage, and never itself.
+    CHECK(clone_spell(0) == SkillId::ArcaneBolt);
+    CHECK(clone_spell(1) == SkillId::ArcaneBolt);
+    CHECK(clone_spell(2) == SkillId::ChainBolt);
+    CHECK(clone_spell(3) == SkillId::ArcaneBolt);
+    CHECK(clone_spell(4) == SkillId::Firebolt);
+    CHECK(clone_spell(5) == SkillId::ArcaneBolt);
+    CHECK(clone_spell(-1) == SkillId::Firebolt);
+    const auto his = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Mage);
+    for (int cast = 0; cast < 2 * e5::gameplay::clone_spells; ++cast) {
+        CHECK(std::ranges::find(his, clone_spell(cast)) != his.end());
+        CHECK(e5::gameplay::skill_damage(clone_spell(cast)) > 0.0F);
+        CHECK(clone_spell(cast) != SkillId::MirrorImage);
+    }
 }

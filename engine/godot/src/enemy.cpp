@@ -800,6 +800,17 @@ void E5Enemy::update_blow(bool attack_started, float dt, float distance_to_playe
             target->take_damage_from(attack_damage_, get_global_position());
         }
     }
+    // A hero's copy (the new wizard's Whose Ur Mommy?) is struck like the hero played here: it
+    // exists on this machine only, and is in the other heroes' group.
+    const godot::TypedArray<godot::Node> others = get_tree()->get_nodes_in_group(E5PlayerController::remote_group_name);
+    for (const godot::Variant& node : others) {
+        auto* const copy = godot::Object::cast_to<E5PlayerController>(node);
+        if (copy != nullptr && copy->is_clone() &&
+            static_cast<float>(get_global_position().distance_to(copy->get_global_position())) <=
+                params_.attack_range * blow_reach_share) {
+            copy->take_damage_from(attack_damage_, get_global_position());
+        }
+    }
 }
 
 // Dead: a flyer drops to the ground; then it waits to come back.

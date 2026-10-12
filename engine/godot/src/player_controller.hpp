@@ -18,6 +18,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace godot {
@@ -266,6 +267,33 @@ public:
     [[nodiscard]] int get_stampede_ticks() const { return stampede_ticks_; }
     // Cut in Pieces (the new warrior's): how many of its blows have landed (for tests).
     [[nodiscard]] int get_pieces_blows() const { return pieces_blows_; }
+    [[nodiscard]] float get_pieces_spared() const { return pieces_spared_; }
+    [[nodiscard]] int get_firebolts_thrown() const { return firebolts_thrown_; }
+    [[nodiscard]] int get_chain_strikes() const { return chain_strikes_; }
+    [[nodiscard]] int get_hydras() const { return hydras_; }
+    [[nodiscard]] int get_teleports() const { return teleports_; }
+    [[nodiscard]] int get_hole_ticks() const { return hole_ticks_; }
+    [[nodiscard]] int get_blizzard_ticks() const { return blizzard_ticks_; }
+    [[nodiscard]] int get_traps_set() const { return traps_set_; }
+    // The new wizard's Whose Ur Mommy?: whether this hero is such a copy (his scene's CloneGlow
+    // asks), and for the one who called copies: how many, how often they cast, what struck them.
+    [[nodiscard]] bool is_clone() const { return clone_; }
+    [[nodiscard]] int get_clones() const { return clones_; }
+    [[nodiscard]] int get_clone_casts() const { return clone_casts_; }
+    [[nodiscard]] float get_clone_struck() const { return clone_struck_; }
+    [[nodiscard]] int get_traps_sprung() const { return traps_sprung_; }
+    [[nodiscard]] int get_traps_lying() const { return static_cast<int>(traps_.size()); }
+    [[nodiscard]] int get_blizzard_held() const { return blizzard_held_; }
+    [[nodiscard]] int get_hole_pulls() const { return hole_pulls_; }
+    [[nodiscard]] float get_teleported_metres() const { return teleported_metres_; }
+    [[nodiscard]] int get_hydra_spits() const { return hydra_spits_; }
+    // The new wizard's Frost Armor: how long his body still shows it (while the barrier holds),
+    // what the barrier can still take, and what it has taken in all.
+    [[nodiscard]] float get_armor_seconds() const { return armor_barrier_ > 0.0F ? armor_left_ : 0.0F; }
+    [[nodiscard]] float get_armor_barrier() const { return armor_left_ > 0.0F ? armor_barrier_ : 0.0F; }
+    [[nodiscard]] float get_armor_absorbed() const { return armor_absorbed_; }
+    [[nodiscard]] int get_armor_slowed() const { return armor_slowed_; }
+    [[nodiscard]] float get_firebolt_power() const { return firebolt_power_; }
     // The Archer's Vine Tower: how many have grown under her (for tests).
     [[nodiscard]] int get_towers_grown() const { return towers_grown_; }
     // The Archer's Gatling Arrow Gun: the turret she built or is building, if it is still there;
@@ -291,7 +319,7 @@ public:
     void set_shown_disguised(bool disguised);
     /// ... and stands at her arrow gun or does not.
     void set_shown_manning(bool manning);
-    [[nodiscard]] godot::Variant find_bush(float radius) const;
+    [[nodiscard]] godot::Variant find_bush(float radius, const godot::String& kind = godot::String()) const;
     [[nodiscard]] float get_resolve_spared() const { return resolve_spared_; }
     [[nodiscard]] float get_resolve_healed() const { return resolve_healed_; }
 
@@ -430,6 +458,10 @@ private:
     // under her (or, let go too soon, nothing does).
     void start_tower_charge(gameplay::SkillId skill);
     void update_tower_charge(bool held, float delta);
+    void start_firebolt_charge();
+    void update_firebolt_charge(bool held, float delta);
+    void end_firebolt_glow();
+    void throw_firebolt();
     void grow_tower(float power);
     [[nodiscard]] bool is_charging_tower() const { return tower_charging_; }
     // The Gatling Arrow Gun is built the way the tower is charged (the same kneeling, the same
@@ -448,7 +480,7 @@ private:
         godot::Ref<godot::Mesh> mesh; // empty: no bush
         godot::Ref<godot::Material> material;
     };
-    [[nodiscard]] Bush nearest_bush(float radius) const;
+    [[nodiscard]] Bush nearest_bush(float radius, const godot::String& kind = godot::String()) const;
     void start_disguise(float reach);
     void update_disguise(float delta);
     // Cut in Pieces: it begins if an enemy is near; while it lasts it is what moves her (from one
@@ -460,6 +492,32 @@ private:
     // The Seismic Slash: her blow lands; the ground breaks open ahead of her, row after row.
     void strike_seismic();
     void update_eruptions(float delta);
+    void cast_chain();
+    void summon_hydra();
+    void cast_hole();
+    void cast_blizzard();
+    // Whose Ur Mommy?: true if the copy appeared (there was ground for it to stand on).
+    bool start_clone();
+    void update_clone(float delta);
+    void end_clone();
+    // The archer's Bear Trap: one put on the ground before her (shut or open), the one she has
+    // pulled open laid armed, and the watch for what steps into those that lie.
+    godot::Node3D* place_trap(bool open);
+    void lay_trap();
+    void update_traps();
+    void update_blizzard(float delta);
+    void update_hole(float delta);
+    // The new wizard's Teleportation: true if he went (there was ground to stand on).
+    bool start_teleport();
+    // The ground under `point`, if there is any within reach below it.
+    [[nodiscard]] std::optional<godot::Vector3> ground_at(const godot::Vector3& point) const;
+    void update_hydra(float delta);
+    // The ground under `point` (what is neither a hero nor an enemy), or `point` itself.
+    [[nodiscard]] godot::Vector3 ground_under(const godot::Vector3& point) const;
+    void update_chain(float delta);
+    // The living enemy nearest to `place`, within `reach` of it (its body's width allowed for),
+    // that the chain under way has not struck yet.
+    [[nodiscard]] E5Enemy* chain_next(const godot::Vector3& place, float reach) const;
     // The glow in his hand for a spell: the cast effect's variant for the spell's element
     // (<cast effect>_fire.tscn, _frost, _lightning, _star, _void), or the cast effect itself.
     [[nodiscard]] godot::Ref<godot::PackedScene> cast_glow(gameplay::SkillId spell) const;
@@ -511,7 +569,7 @@ private:
     // In the middle of using a skill: the selection must not change now.
     [[nodiscard]] bool is_busy() const {
         return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling() || is_leaping() ||
-               enrage_driving_ || tower_charging_ || is_cutting() || manning_;
+               enrage_driving_ || tower_charging_ || firebolt_charging_ || is_cutting() || manning_;
     }
 
     gameplay::MotorParams params_;
@@ -641,6 +699,86 @@ private:
     int stampede_ticks_ = 0;
     gameplay::BleedState pieces_; // her Cut in Pieces under way: the time it still has and until its next blow
     int pieces_blows_ = 0;
+    float pieces_spared_ = 0.0F; // damage that did not reach her while she cut
+    bool firebolt_charging_ = false;  // the new wizard's Firebolt: fire gathers at his wand while the button is held
+    bool firebolt_release_ = false;   // let go with enough gathered: the throw begins in this step
+    float firebolt_charge_ = 0.0F;    // seconds gathered
+    float firebolt_power_ = 0.0F;     // 0..1: how far the fireball he is throwing was charged
+    std::uint64_t firebolt_glow_ = 0; // the fire at the wand's tip meanwhile: an id, it may be gone
+    int firebolts_thrown_ = 0;
+    // The new wizard's Chain Lightning under way: where it struck last, how many leaps it has
+    // made, when the next is due, and whom it has struck (ids: they may be gone).
+    struct Chain {
+        godot::Vector3 at;
+        int leaps = 0;
+        float until_next = 0.0F;
+        bool active = false;
+        std::vector<std::uint64_t> struck;
+    };
+    Chain chain_;
+    std::uint64_t hydra_id_ = 0;     // the new wizard's Poison Hydra that stands: an id, it may be gone
+    float hydra_left_ = 0.0F;        // seconds it still stands
+    float hydra_until_spit_ = 0.0F;  // until it spits again
+    int hydras_ = 0;
+    int teleports_ = 0;
+    // The new wizard's Black Whole that drifts: what is seen of it (an id: it may be gone), where
+    // it is and which way it goes, how long it still lasts and until it hurts again.
+    struct Hole {
+        std::uint64_t look = 0;
+        godot::Vector3 at;
+        godot::Vector3 way;
+        float left = 0.0F;
+        float until_tick = 0.0F;
+    };
+    Hole hole_;
+    // The new wizard's Blizzard that rages: where, how long yet, until it hurts again, who stands
+    // in it and for how long, and whom it has held already (ids: they may be gone).
+    struct Blizzard {
+        struct Inside {
+            std::uint64_t enemy = 0;
+            float seconds = 0.0F;
+        };
+        godot::Vector3 at;
+        float left = 0.0F;
+        float until_tick = 0.0F;
+        std::vector<Inside> inside;
+        std::vector<std::uint64_t> held;
+    };
+    Blizzard blizzard_;
+    // Whose Ur Mommy?. For the copy itself: that it is one, what its spells do of his, and the
+    // life it has left. For him: his copy (an id: it may be gone), where it stands, how long it
+    // still lasts, until it casts again, and how many spells it has cast.
+    bool clone_ = false;
+    float clone_share_ = 0.0F;
+    float clone_health_ = 0.0F;
+    std::uint64_t clone_id_ = 0;
+    godot::Vector3 clone_place_;
+    float clone_facing_ = 0.0F;
+    float clone_yaw_ = 0.0F;
+    float clone_pitch_ = 0.0F;
+    float clone_left_ = 0.0F;
+    float clone_until_cast_ = 0.0F;
+    int clone_cast_ = 0;
+    int clones_ = 0;
+    int clone_casts_ = 0;
+    float clone_struck_ = 0.0F; // what struck his copies, as it counted against them
+    std::uint64_t trap_setting_ = 0;    // the bear trap she is pulling open: an id, it may be gone
+    std::vector<std::uint64_t> traps_;  // those that lie armed, the oldest first (ids)
+    int traps_set_ = 0;
+    int traps_sprung_ = 0;
+    int blizzard_ticks_ = 0;
+    int blizzard_held_ = 0;
+    int hole_ticks_ = 0;
+    int hole_pulls_ = 0; // steps in which it drew an enemy along
+    float teleported_metres_ = 0.0F;   // over the ground, all of them together
+    float remote_blink_left_ = 0.0F;   // another player's hero: until the light where he arrives is shown
+    int hydra_spits_ = 0;
+    int chain_strikes_ = 0;
+    float armor_left_ = 0.0F;     // seconds the new wizard's Frost Armor still lasts
+    float armor_barrier_ = 0.0F;  // what its barrier can still take
+    float armor_tick_ = 0.0F;     // until those near him are slowed anew
+    float armor_absorbed_ = 0.0F; // damage it has taken in his place
+    int armor_slowed_ = 0;        // how often it slowed an enemy
     float resolve_left_ = 0.0F;   // seconds her Never Give Up still lasts
     float resolve_spared_ = 0.0F; // damage it has kept from her
     float resolve_healed_ = 0.0F; // health it has given back

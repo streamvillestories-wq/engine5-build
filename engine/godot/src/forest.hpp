@@ -142,6 +142,7 @@ private:
         std::size_t species = 0;
         godot::Basis basis;  // its turn and size
         bool hidden = false; // someone has taken it (set_plant_hidden)
+        std::uint64_t trunk = 0; // its trunk's collision shape, if it has one: an id
     };
 
     [[nodiscard]] static bool read_species(const godot::Ref<godot::PackedScene>& scene, Species& species);
