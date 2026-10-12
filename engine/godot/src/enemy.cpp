@@ -146,6 +146,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("stroll", "velocity"), &E5Enemy::stroll);
     ClassDB::bind_method(D_METHOD("drag", "velocity"), &E5Enemy::drag);
     ClassDB::bind_method(D_METHOD("take_outgoing_effects"), &E5Enemy::take_outgoing_effects);
+    ClassDB::bind_method(D_METHOD("take_dropped_seed"), &E5Enemy::take_dropped_seed);
+    ClassDB::bind_method(D_METHOD("drop_loot_seeded", "seed"), &E5Enemy::drop_loot_seeded);
     ClassDB::bind_method(D_METHOD("apply_effect", "what", "a", "b"), &E5Enemy::apply_effect);
     ClassDB::bind_method(D_METHOD("spin", "radians"), &E5Enemy::spin);
     ClassDB::bind_method(D_METHOD("get_aim_point"), &E5Enemy::get_aim_point);
@@ -1008,7 +1010,8 @@ void E5Enemy::die() {
             arrow->queue_free();
         }
     }
-    if (drops_loot_) {
+    if (drops_loot_ && !remote_) {
+        // (Where it is only shown, its loot comes when the deciding machine says what it was.)
         drop_loot();
     }
 }
@@ -1084,13 +1087,32 @@ void E5Enemy::drop_loot() {
     if (parent == nullptr) {
         return;
     }
-    const gameplay::Loot loot = gameplay::roll_loot(static_cast<std::uint32_t>(godot::UtilityFunctions::randi()));
+    // Never 0, which says "nothing dropped", and within what an int carries between machines.
+    const int seed = static_cast<int>((godot::UtilityFunctions::randi() & 0x3FFFFFFFU) | 1U);
+    dropped_seed_ = seed;
+    drop_loot_seeded(seed);
+}
+
+int E5Enemy::take_dropped_seed() {
+    const int seed = dropped_seed_;
+    dropped_seed_ = 0;
+    return seed;
+}
+
+void E5Enemy::drop_loot_seeded(int seed) {
+    godot::Node* const parent = get_parent();
+    if (parent == nullptr || seed == 0) {
+        return;
+    }
+    const gameplay::Loot loot = gameplay::roll_loot(static_cast<std::uint32_t>(seed));
+    // Where the pieces land comes from the same number, so they lie alike on every machine.
+    const float turn = static_cast<float>(static_cast<std::uint32_t>(seed) % 6283U) * 0.001F;
     const godot::Vector3 feet = get_global_position();
     const godot::Vector3 from = feet + godot::Vector3(0.0F, body_height_ * 0.5F, 0.0F);
     int index = 0;
-    const auto place = [&feet, &index] {
+    const auto place = [&feet, &index, turn] {
         // Spread around it by the golden angle, so no two land on each other.
-        const float angle = static_cast<float>(index) * 2.4F + static_cast<float>(godot::UtilityFunctions::randf());
+        const float angle = static_cast<float>(index) * 2.4F + turn;
         const float distance = 0.9F + 0.25F * static_cast<float>(index);
         ++index;
         return feet + godot::Vector3(std::cos(angle) * distance, 0.0F, std::sin(angle) * distance);

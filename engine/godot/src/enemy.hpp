@@ -106,6 +106,11 @@ public:
     static constexpr int effect_fling = 5;    // a, b: metres a second along x and z ...
     static constexpr int effect_fling_up = 6; // ... a: and upwards (follows a fling at once)
     [[nodiscard]] godot::Array take_outgoing_effects();
+    // Its loot is rolled where it is decided; the number it was rolled from is kept until the
+    // network script takes it (0: nothing dropped since) and tells the others, who drop the
+    // same there (`drop_loot_seeded`). Every player picks up their own copy.
+    [[nodiscard]] int take_dropped_seed();
+    void drop_loot_seeded(int seed);
     // The same, arriving where the enemy is decided.
     void apply_effect(int what, float a, float b);
 
@@ -336,6 +341,7 @@ private:
     // Damage that arrived since the last physics step.
     float pending_damage_ = 0.0F;
     godot::Array outgoing_effects_;
+    int dropped_seed_ = 0;
     godot::Vector3 outgoing_drag_;
     bool has_outgoing_drag_ = false;
     godot::Vector3 arriving_fling_;
