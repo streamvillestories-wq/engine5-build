@@ -114,7 +114,7 @@ TEST_CASE("finding items", "[inventory]") {
     CHECK(find_item(inventory, ItemId::BowHunter) == -1);
 }
 
-TEST_CASE("loot is repeatable, always has gold, and a soul turns up four times in ten", "[inventory]") {
+TEST_CASE("loot: always gold, a soul four times in ten, a health potion eight times in ten", "[inventory]") {
     const ItemId soul = soul_item("shroomling");
     REQUIRE(soul != ItemId::None);
     CHECK(item_info(soul).name == "Soul of the Shroomling");
@@ -126,28 +126,38 @@ TEST_CASE("loot is repeatable, always has gold, and a soul turns up four times i
     CHECK(roll_loot(1234, soul).items == roll_loot(1234, soul).items);
 
     int souls = 0;
+    int potions = 0;
     const int kills = 4000;
     for (std::uint32_t seed = 0; seed < static_cast<std::uint32_t>(kills); ++seed) {
         const Loot loot = roll_loot(seed, soul);
         REQUIRE(loot.gold >= 3);
         REQUIRE(loot.gold <= 8);
-        // The same kill leaves the same gold whatever its soul is, and nothing else without one.
-        REQUIRE(roll_loot(seed).gold == loot.gold);
-        for (const ItemStack& stack : roll_loot(seed).items) {
-            REQUIRE(stack.empty());
+        // The same kill leaves the same gold and the same potion whatever its soul is, and no soul without one.
+        const Loot plain = roll_loot(seed);
+        REQUIRE(plain.gold == loot.gold);
+        int plain_potions = 0;
+        for (const ItemStack& stack : plain.items) {
+            REQUIRE((stack.empty() || stack.item == ItemId::HealthPotion));
+            plain_potions += stack.empty() ? 0 : 1;
         }
+        int here = 0;
         for (const ItemStack& stack : loot.items) {
             if (stack.empty()) {
                 continue;
             }
-            REQUIRE(stack.item == soul);
             REQUIRE(stack.count == 1);
-            ++souls;
+            REQUIRE((stack.item == soul || stack.item == ItemId::HealthPotion));
+            souls += stack.item == soul ? 1 : 0;
+            here += stack.item == ItemId::HealthPotion ? 1 : 0;
         }
+        REQUIRE(here == plain_potions);
+        potions += here;
     }
-    // The chance is 40 %; the bounds leave room for the generator's noise.
+    // The chances are 40 % and 80 %; the bounds leave room for the generator's noise.
     CHECK(souls > kills * 34 / 100);
     CHECK(souls < kills * 46 / 100);
+    CHECK(potions > kills * 75 / 100);
+    CHECK(potions < kills * 85 / 100);
 }
 
 TEST_CASE("a weapon goes into the weapon slot and is only ever changed for another", "[inventory][weapon]") {

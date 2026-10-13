@@ -183,8 +183,10 @@ struct Loot {
 
 // The same seed always gives the same loot. Every kill leaves some gold and, `soul_chance` of the
 // times, the soul of what was killed (`soul`: the enemy's own, or None for one that has none).
-// Nothing else for now (the keeper, 2026-10-13). Weapons are not found: every hero starts with hers.
+// And, `potion_chance` of the times, a health potion (the keeper, the same day: 80 %).
+// Nothing else for now. Weapons are not found: every hero starts with hers.
 inline constexpr float soul_chance = 0.4F;
+inline constexpr float potion_chance = 0.8F;
 [[nodiscard]] Loot roll_loot(std::uint32_t seed, ItemId soul = ItemId::None) noexcept;
 
 // The soul of a family of enemies ("shroomling", "hydra" ...: the item whose key is "soul_" and

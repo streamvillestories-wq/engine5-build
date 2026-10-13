@@ -543,8 +543,16 @@ Loot roll_loot(std::uint32_t seed, ItemId soul) noexcept {
 
     Loot loot;
     loot.gold = 3 + static_cast<int>(chance(state) * 6.0F);
-    if (soul != ItemId::None && chance(state) < soul_chance) {
-        loot.items.at(0) = {.item = soul, .count = 1};
+    // (Each asked in turn, whether there is a soul or not: so the same kill leaves the same potion
+    // whatever fell.)
+    const bool leaves_soul = chance(state) < soul_chance;
+    const bool leaves_potion = chance(state) < potion_chance;
+    std::size_t used = 0;
+    if (soul != ItemId::None && leaves_soul) {
+        loot.items.at(used++) = {.item = soul, .count = 1};
+    }
+    if (leaves_potion) {
+        loot.items.at(used++) = {.item = HealthPotion, .count = 1};
     }
     return loot;
 }
