@@ -140,8 +140,8 @@ private:
         godot::Vector3 position;
         std::array<Form, 3> forms; // full, mid, coarse
         std::size_t species = 0;
-        godot::Basis basis;  // its turn and size
-        bool hidden = false; // someone has taken it (set_plant_hidden)
+        godot::Basis basis;      // its turn and size
+        bool hidden = false;     // someone has taken it (set_plant_hidden)
         std::uint64_t trunk = 0; // its trunk's collision shape, if it has one: an id
     };
 

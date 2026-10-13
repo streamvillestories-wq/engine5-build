@@ -287,7 +287,8 @@ void E5Forest::set_plant_hidden(int index, bool hidden) {
         Drawn& plant = drawn_[static_cast<std::size_t>(index)];
         plant.hidden = hidden; // _process shows or hides its meshes
         // Its trunk is not in the way while it is gone. (Deferred: this is asked in a physics step.)
-        if (auto* const trunk = godot::Object::cast_to<godot::CollisionShape3D>(godot::ObjectDB::get_instance(plant.trunk))) {
+        if (auto* const trunk =
+                godot::Object::cast_to<godot::CollisionShape3D>(godot::ObjectDB::get_instance(plant.trunk))) {
             trunk->set_deferred("disabled", hidden);
         }
     }

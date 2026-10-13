@@ -321,6 +321,9 @@ public:
     void set_shown_manning(bool manning);
     [[nodiscard]] godot::Variant find_bush(float radius, const godot::String& kind = godot::String()) const;
     [[nodiscard]] float get_resolve_spared() const { return resolve_spared_; }
+    /// Damage a Dome of Protection has kept from her, and whether she stands in one now.
+    [[nodiscard]] float get_dome_spared() const { return dome_spared_; }
+    [[nodiscard]] bool in_dome() const;
     [[nodiscard]] float get_resolve_healed() const { return resolve_healed_; }
 
     // A remote hero is another player's, shown here: it takes no input, has no camera and no
@@ -699,7 +702,7 @@ private:
     int stampede_ticks_ = 0;
     gameplay::BleedState pieces_; // her Cut in Pieces under way: the time it still has and until its next blow
     int pieces_blows_ = 0;
-    float pieces_spared_ = 0.0F; // damage that did not reach her while she cut
+    float pieces_spared_ = 0.0F;      // damage that did not reach her while she cut
     bool firebolt_charging_ = false;  // the new wizard's Firebolt: fire gathers at his wand while the button is held
     bool firebolt_release_ = false;   // let go with enough gathered: the throw begins in this step
     float firebolt_charge_ = 0.0F;    // seconds gathered
@@ -716,9 +719,9 @@ private:
         std::vector<std::uint64_t> struck;
     };
     Chain chain_;
-    std::uint64_t hydra_id_ = 0;     // the new wizard's Poison Hydra that stands: an id, it may be gone
-    float hydra_left_ = 0.0F;        // seconds it still stands
-    float hydra_until_spit_ = 0.0F;  // until it spits again
+    std::uint64_t hydra_id_ = 0;    // the new wizard's Poison Hydra that stands: an id, it may be gone
+    float hydra_left_ = 0.0F;       // seconds it still stands
+    float hydra_until_spit_ = 0.0F; // until it spits again
     int hydras_ = 0;
     int teleports_ = 0;
     // The new wizard's Black Whole that drifts: what is seen of it (an id: it may be gone), where
@@ -760,17 +763,17 @@ private:
     int clone_cast_ = 0;
     int clones_ = 0;
     int clone_casts_ = 0;
-    float clone_struck_ = 0.0F; // what struck his copies, as it counted against them
-    std::uint64_t trap_setting_ = 0;    // the bear trap she is pulling open: an id, it may be gone
-    std::vector<std::uint64_t> traps_;  // those that lie armed, the oldest first (ids)
+    float clone_struck_ = 0.0F;        // what struck his copies, as it counted against them
+    std::uint64_t trap_setting_ = 0;   // the bear trap she is pulling open: an id, it may be gone
+    std::vector<std::uint64_t> traps_; // those that lie armed, the oldest first (ids)
     int traps_set_ = 0;
     int traps_sprung_ = 0;
     int blizzard_ticks_ = 0;
     int blizzard_held_ = 0;
     int hole_ticks_ = 0;
-    int hole_pulls_ = 0; // steps in which it drew an enemy along
-    float teleported_metres_ = 0.0F;   // over the ground, all of them together
-    float remote_blink_left_ = 0.0F;   // another player's hero: until the light where he arrives is shown
+    int hole_pulls_ = 0;             // steps in which it drew an enemy along
+    float teleported_metres_ = 0.0F; // over the ground, all of them together
+    float remote_blink_left_ = 0.0F; // another player's hero: until the light where he arrives is shown
     int hydra_spits_ = 0;
     int chain_strikes_ = 0;
     float armor_left_ = 0.0F;     // seconds the new wizard's Frost Armor still lasts
@@ -780,6 +783,7 @@ private:
     int armor_slowed_ = 0;        // how often it slowed an enemy
     float resolve_left_ = 0.0F;   // seconds her Never Give Up still lasts
     float resolve_spared_ = 0.0F; // damage it has kept from her
+    float dome_spared_ = 0.0F;    // damage a Dome of Protection has kept from her
     float resolve_healed_ = 0.0F; // health it has given back
     float enrage_left_ = 0.0F;    // seconds her frenzy still lasts
     bool enrage_driving_ = false; // it moved her in this step: the player did not

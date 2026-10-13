@@ -25,7 +25,8 @@ public:
     void set_impact_effect(const godot::Ref<godot::PackedScene>& effect) { impact_effect_ = effect; }
     // The enemy it strikes is poisoned: `tick_damage` every `tick_seconds` for `seconds`, with
     // `visual` on it meanwhile. One poison to an enemy: struck again, it begins anew.
-    void set_poison(float tick_damage, float seconds, float tick_seconds, const godot::Ref<godot::PackedScene>& visual) {
+    void set_poison(float tick_damage, float seconds, float tick_seconds,
+                    const godot::Ref<godot::PackedScene>& visual) {
         poison_tick_damage_ = tick_damage;
         poison_seconds_ = seconds;
         poison_tick_seconds_ = tick_seconds;

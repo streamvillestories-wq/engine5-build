@@ -105,6 +105,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Blizzard", .charges = false, .kind = SkillKind::Instant};
     case SkillId::BearTrap:
         return {.name = "Bear Trap", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ProtectionDome:
+        return {.name = "Dome of Protection", .charges = false, .kind = SkillKind::Instant};
     case SkillId::MirrorImage:
         return {.name = "Whose Ur Mommy?", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
@@ -196,6 +198,7 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::FrostArmor:
     case SkillId::Teleport:
     case SkillId::MirrorImage: // (his copy's spells are his own, at clone_damage_share)
+    case SkillId::ProtectionDome:
         return 0.0F; // they strike nobody
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
@@ -326,6 +329,8 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::NeverGiveUp:
     case SkillId::SeismicSlash:
         return 20.0F;
+    case SkillId::ProtectionDome:
+        return 28.0F; // from the key: it stands six of them
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
     case SkillId::Shot:
@@ -496,9 +501,9 @@ SkillBar::SkillBar(SkillSet set) noexcept {
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
     } else if (set == SkillSet::Mage) {
-        slots_ = {SkillId::ArcaneBolt,  SkillId::Firebolt,    SkillId::FrostArmor,
-                  SkillId::ChainBolt,   SkillId::PoisonHydra, SkillId::Teleport,
-                  SkillId::RovingHole,  SkillId::Blizzard,    SkillId::MirrorImage};
+        slots_ = {SkillId::ArcaneBolt,  SkillId::Firebolt,      SkillId::FrostArmor, SkillId::ChainBolt,
+                  SkillId::PoisonHydra, SkillId::Teleport,      SkillId::RovingHole, SkillId::Blizzard,
+                  SkillId::MirrorImage, SkillId::ProtectionDome};
     } else if (set == SkillSet::Wizard) {
         slots_ = {SkillId::ArcaneBolt, SkillId::Fireball,    SkillId::FrostNova, SkillId::ChainLightning,
                   SkillId::Meteor,     SkillId::StarBarrage, SkillId::BlackHole};
@@ -554,10 +559,10 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     // The Archer's: what was made from wishes, then the skills she had before (kept "in the
     // back" since 2026-10-10 and offered again in the book).
     static constexpr std::array archer{
-        SkillId::Shot,        SkillId::VineTower,  SkillId::Disguise,  SkillId::GatlingGun, SkillId::BearTrap,
-        SkillId::PowerShot,   SkillId::ArrowRain,  SkillId::FrostFan,  SkillId::FireArrow,  SkillId::ThunderKick,
-        SkillId::Kingfishers, SkillId::VenomArrow, SkillId::GaleArrow, SkillId::StormArrow, SkillId::BrambleArrow,
-        SkillId::DaggerCombo,
+        SkillId::Shot,      SkillId::VineTower,   SkillId::Disguise,     SkillId::GatlingGun,
+        SkillId::BearTrap,  SkillId::PowerShot,   SkillId::ArrowRain,    SkillId::FrostFan,
+        SkillId::FireArrow, SkillId::ThunderKick, SkillId::Kingfishers,  SkillId::VenomArrow,
+        SkillId::GaleArrow, SkillId::StormArrow,  SkillId::BrambleArrow, SkillId::DaggerCombo,
     };
     static constexpr std::array blade{
         SkillId::Slash,  SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,  SkillId::SeismicSlash,
@@ -570,9 +575,9 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     static constexpr std::array wizard{SkillId::ArcaneBolt,     SkillId::Fireball, SkillId::FrostNova,
                                        SkillId::ChainLightning, SkillId::Meteor,   SkillId::StarBarrage,
                                        SkillId::BlackHole};
-    static constexpr std::array mage{SkillId::ArcaneBolt, SkillId::Firebolt, SkillId::FrostArmor, SkillId::ChainBolt,
-                                     SkillId::PoisonHydra, SkillId::Teleport,   SkillId::RovingHole, SkillId::Blizzard,
-                                     SkillId::MirrorImage};
+    static constexpr std::array mage{
+        SkillId::ArcaneBolt, SkillId::Firebolt,   SkillId::FrostArmor, SkillId::ChainBolt,   SkillId::PoisonHydra,
+        SkillId::Teleport,   SkillId::RovingHole, SkillId::Blizzard,   SkillId::MirrorImage, SkillId::ProtectionDome};
     switch (set) {
     case SkillSet::Mage:
         return mage;
@@ -716,6 +721,9 @@ std::string_view skill_description(SkillId skill) noexcept {
         return "Hold the button: she kneels and pulls a bear trap open on the ground before her. It lies there "
                "and waits; the first enemy that steps into it is hurt badly. Only so many lie at a time: with "
                "one more, the oldest is gone.";
+    case SkillId::ProtectionDome:
+        return "A dome of pink light rises where he stands and stays for six seconds. Nothing hurts a hero "
+               "who is inside it, him or a friend. Step out and it protects no longer.";
     case SkillId::MirrorImage:
         return "Takes a full charge. A copy of him in all the rainbow's colours appears where he aims and casts "
                "those of his spells that do damage at the enemies near it for a while, weaker than his own. "

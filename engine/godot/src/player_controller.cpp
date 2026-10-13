@@ -309,6 +309,8 @@ constexpr float pieces_blow_pace = 3.6F; // the combo's clips, so much faster th
 constexpr float pieces_shake = 0.02F;    // metres, with every blow
 // The new warrior's Never Give Up: the cry and the blue round her.
 constexpr const char* resolve_path = "res://effects/never_give_up.tscn";
+constexpr const char* dome_path = "res://effects/protection_dome.tscn";
+constexpr const char* dome_group = "e5_dome"; // every dome that stands (effects/protection_dome.gd)
 constexpr const char* frost_armor_path = "res://effects/frost_armor.tscn";
 constexpr const char* chain_strike_path = "res://effects/lightning_strike.tscn"; // the new wizard's Chain Lightning
 // Where it first strikes: a bolt out of the sky and its thunder (ticket 51), all of it the scene's own scripts.
@@ -318,28 +320,28 @@ constexpr const char* hydra_path = "res://effects/poison_hydra.tscn";
 constexpr const char* hydra_spit_trail_path = "res://effects/venom_trail.tscn";
 constexpr const char* hydra_spit_impact_path = "res://effects/venom_impact.tscn";
 constexpr const char* hydra_poisoned_path = "res://effects/poisoned.tscn";
-constexpr float hydra_spit_speed = 26.0F;  // m/s
+constexpr float hydra_spit_speed = 26.0F;                                        // m/s
 constexpr const char* teleport_flash_path = "res://effects/teleport_flash.tscn"; // where he leaves and arrives
-constexpr const char* blizzard_path = "res://effects/blizzard.tscn"; // his Blizzard
-constexpr float clone_first_cast = 0.6F;  // seconds after his copy appears (Whose Ur Mommy?)
-constexpr float clone_look_again = 0.3F;  // with nobody to cast at
+constexpr const char* blizzard_path = "res://effects/blizzard.tscn";             // his Blizzard
+constexpr float clone_first_cast = 0.6F;     // seconds after his copy appears (Whose Ur Mommy?)
+constexpr float clone_look_again = 0.3F;     // with nobody to cast at
 constexpr float clone_firebolt_power = 0.0F; // its firebolt is one at its least
 constexpr const char* bear_trap_path = "res://effects/bear_trap.tscn"; // the archer's Bear Trap
-constexpr float bear_trap_ahead = 0.85F;  // metres before her that it is laid
-constexpr float bear_trap_height = 1.6F;  // metres above or below it an enemy may be and still step in
+constexpr float bear_trap_ahead = 0.85F;                               // metres before her that it is laid
+constexpr float bear_trap_height = 1.6F; // metres above or below it an enemy may be and still step in
 constexpr const char* bear_trap_spring_path = "res://effects/counter_strike.tscn"; // steel on flesh, where it bites
 // His Black Whole: the first wizard's black hole, small, and what is heard of it.
 constexpr const char* hole_look_path = "res://effects/black_hole.tscn";
 constexpr const char* hole_sound_path = "res://effects/black_whole_sound.tscn";
-constexpr float hole_look_scale = 0.42F;  // of the first wizard's
-constexpr float hole_height = 1.1F;       // metres above the ground he stands on
-constexpr float hole_ahead = 1.0F;        // metres before him where it opens
-constexpr float hole_grow_seconds = 0.4F; // it opens over so long ...
-constexpr float hole_fade_seconds = 0.8F; // ... and fades over its last
-constexpr float hole_turn_speed = 2.6F;   // rad/s: it whirls
-constexpr float teleport_keep_off = 0.6F;      // metres back from a wall or a body the crosshair struck
+constexpr float hole_look_scale = 0.42F;        // of the first wizard's
+constexpr float hole_height = 1.1F;             // metres above the ground he stands on
+constexpr float hole_ahead = 1.0F;              // metres before him where it opens
+constexpr float hole_grow_seconds = 0.4F;       // it opens over so long ...
+constexpr float hole_fade_seconds = 0.8F;       // ... and fades over its last
+constexpr float hole_turn_speed = 2.6F;         // rad/s: it whirls
+constexpr float teleport_keep_off = 0.6F;       // metres back from a wall or a body the crosshair struck
 constexpr float teleport_remote_seconds = 0.2F; // another player's hero has glided there by then
-constexpr float hydra_first_spit = 0.7F;   // seconds after it was called: it has risen by then
+constexpr float hydra_first_spit = 0.7F;        // seconds after it was called: it has risen by then
 constexpr float hydra_trail_scale = 0.7F;
 constexpr float enrage_strike_gap = 0.5F;      // metres beyond her blow's middle at which she starts to strike
 constexpr float enrage_blow_fade = 0.06F;      // seconds from one blow's clip to the next: they are short
@@ -683,7 +685,8 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("end_disguise"), &E5PlayerController::end_disguise);
     ClassDB::bind_method(D_METHOD("set_shown_disguised", "disguised"), &E5PlayerController::set_shown_disguised);
     ClassDB::bind_method(D_METHOD("set_shown_manning", "manning"), &E5PlayerController::set_shown_manning);
-    ClassDB::bind_method(D_METHOD("find_bush", "radius", "kind"), &E5PlayerController::find_bush, DEFVAL(godot::String()));
+    ClassDB::bind_method(D_METHOD("find_bush", "radius", "kind"), &E5PlayerController::find_bush,
+                         DEFVAL(godot::String()));
     ClassDB::bind_method(D_METHOD("get_pieces_blows"), &E5PlayerController::get_pieces_blows);
     ClassDB::bind_method(D_METHOD("get_pieces_spared"), &E5PlayerController::get_pieces_spared);
     ClassDB::bind_method(D_METHOD("get_firebolts_thrown"), &E5PlayerController::get_firebolts_thrown);
@@ -711,6 +714,8 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_stampede_seconds"), &E5PlayerController::get_stampede_seconds);
     ClassDB::bind_method(D_METHOD("get_stampede_ticks"), &E5PlayerController::get_stampede_ticks);
     ClassDB::bind_method(D_METHOD("get_resolve_spared"), &E5PlayerController::get_resolve_spared);
+    ClassDB::bind_method(D_METHOD("get_dome_spared"), &E5PlayerController::get_dome_spared);
+    ClassDB::bind_method(D_METHOD("is_in_dome"), &E5PlayerController::in_dome);
     ClassDB::bind_method(D_METHOD("get_resolve_healed"), &E5PlayerController::get_resolve_healed);
     ClassDB::bind_method(D_METHOD("get_health"), &E5PlayerController::get_health);
     ClassDB::bind_method(D_METHOD("is_dead"), &E5PlayerController::is_dead);
@@ -1309,7 +1314,8 @@ void E5PlayerController::_physics_process(double delta) {
         // The Firebolt is charged for as long as its button is held and thrown when it is let go
         // (update_firebolt_charge says when): its throw begins then, not on the press.
         const bool firebolt = skills_.selected() == gameplay::SkillId::Firebolt;
-        if (aim_just_pressed && firebolt && !is_busy() && !block_.raised && can_start_instant_skill(skills_.selected())) {
+        if (aim_just_pressed && firebolt && !is_busy() && !block_.raised &&
+            can_start_instant_skill(skills_.selected())) {
             start_firebolt_charge();
         }
         const bool wanted = firebolt ? firebolt_release_ : aim_just_pressed;
@@ -1863,6 +1869,10 @@ void E5PlayerController::take_damage(float amount) {
     if (amount > 0.0F && !vitals_.dead && dodge_left_ <= 0.0F) {
         if (is_cutting()) {
             pieces_spared_ += amount; // (what hurts without saying where from: the same)
+            return;
+        }
+        if (in_dome()) {
+            dome_spared_ += amount; // a Dome of Protection: nothing gets through to who is inside
             return;
         }
         if (resolve_left_ > 0.0F) {
@@ -2689,7 +2699,7 @@ void E5PlayerController::prewarm_effects() {
         }
         for (const char* const path :
              {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path, leap_impact_path,
-              seismic_burst_path, seismic_stun_path, enrage_path, resolve_path, stampede_path}) {
+              seismic_burst_path, seismic_stun_path, enrage_path, resolve_path, stampede_path, dome_path}) {
             if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                 prewarm_ids_.push_back(instance->get_instance_id());
             }
@@ -3205,8 +3215,7 @@ E5Enemy* E5PlayerController::chain_next(const godot::Vector3& place, float reach
             std::ranges::find(chain_.struck, enemy->get_instance_id()) != chain_.struck.end()) {
             continue;
         }
-        const float distance =
-            static_cast<float>(enemy->get_aim_point().distance_to(place)) - enemy->get_body_radius();
+        const float distance = static_cast<float>(enemy->get_aim_point().distance_to(place)) - enemy->get_body_radius();
         if (distance <= nearest) {
             nearest = distance;
             found = enemy;
@@ -3252,8 +3261,7 @@ void E5PlayerController::update_chain(float delta) {
         const godot::Vector3 body = next->get_aim_point();
         E5LightningArc::spawn(get_parent(), chain_.at, body, godot::Color(0.5F, 0.9F, 3.0F));
         E5Effect::spawn(effect_scene(chain_strike_path), get_parent(), body);
-        combat::hit(next, body,
-                    dealt(gameplay::SkillId::ChainBolt) * gameplay::chain_damage_factor(chain_.leaps));
+        combat::hit(next, body, dealt(gameplay::SkillId::ChainBolt) * gameplay::chain_damage_factor(chain_.leaps));
         ++chain_strikes_;
         chain_.at = body;
         chain_.struck.push_back(next->get_instance_id());
@@ -3349,8 +3357,8 @@ void E5PlayerController::summon_hydra() {
     const float turn = to_him.length() > 0.1F
                            ? gameplay::facing_yaw(static_cast<float>(to_him.x), static_cast<float>(to_him.z))
                            : model_yaw_;
-    hydra->set_global_transform(godot::Transform3D(
-        godot::Basis(godot::Vector3(0.0F, 1.0F, 0.0F), turn + std::numbers::pi_v<float>), place));
+    hydra->set_global_transform(
+        godot::Transform3D(godot::Basis(godot::Vector3(0.0F, 1.0F, 0.0F), turn + std::numbers::pi_v<float>), place));
     E5Effect::spawn(effect_scene(hydra_spit_impact_path), get_parent(), place + godot::Vector3(0.0F, 0.2F, 0.0F));
     hydra_id_ = hydra->get_instance_id();
     hydra_left_ = gameplay::hydra_seconds;
@@ -3411,8 +3419,8 @@ void E5PlayerController::update_hydra(float delta) {
     // (A hero shown here for another player does no damage; neither does his hydra's poison.)
     // (His copy's hydra poisons by the share its spells do.)
     spit->set_poison(damage > 0.0F ? gameplay::hydra_poison_tick_damage() * (clone_ ? clone_share_ : 1.0F) : 0.0F,
-                     gameplay::hydra_poison_seconds,
-                     gameplay::hydra_poison_tick_seconds, effect_scene(hydra_poisoned_path));
+                     gameplay::hydra_poison_seconds, gameplay::hydra_poison_tick_seconds,
+                     effect_scene(hydra_poisoned_path));
     spit->launch((at - muzzle).normalized() * hydra_spit_speed, get_rid());
     ++hydra_spits_;
 }
@@ -3934,12 +3942,35 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
     }
 }
 
+// Inside a dome that stands: any hero's, not only her own (each machine asks for the hero it plays).
+bool E5PlayerController::in_dome() const {
+    if (!is_inside_tree()) {
+        return false;
+    }
+    const godot::TypedArray<godot::Node> domes = get_tree()->get_nodes_in_group(dome_group);
+    for (const godot::Variant& node : domes) {
+        const auto* const dome = godot::Object::cast_to<godot::Node3D>(node);
+        if (dome == nullptr || !static_cast<bool>(dome->get_meta("shields", false))) {
+            continue;
+        }
+        const godot::Vector3 away = get_global_position() - dome->get_global_position();
+        if (godot::Vector2(away.x, away.z).length() <= gameplay::dome_radius &&
+            std::abs(away.y) < gameplay::dome_radius + 2.0F) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void E5PlayerController::start_stance(gameplay::SkillId skill) {
     spend(skill);
     last_skill_ = skill;
     ++skills_used_;
     // Round her and with her for as long as it lasts: the effect's own lifetime is the stance's.
-    if (skill == gameplay::SkillId::NeverGiveUp) {
+    if (skill == gameplay::SkillId::ProtectionDome) {
+        // It stands where he stood, in the world, not on him: its own script counts its seconds.
+        E5Effect::spawn(effect_scene(dome_path), get_parent(), get_global_position());
+    } else if (skill == gameplay::SkillId::NeverGiveUp) {
         resolve_left_ = gameplay::resolve_seconds;
         E5Effect::spawn(effect_scene(resolve_path), this, get_global_position());
     } else if (skill == gameplay::SkillId::Stampede) {
@@ -4169,7 +4200,8 @@ void E5PlayerController::update_tower_charge(bool held, float delta) {
     if (held && is_on_floor()) {
         tower_charge_ = std::min(tower_charge_ + delta, gameplay::tower_full_charge_seconds);
         if (trap) {
-            if (auto* const setting = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(trap_setting_))) {
+            if (auto* const setting =
+                    godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(trap_setting_))) {
                 setting->call("set_open", tower_charge_ / gameplay::bear_trap_set_seconds);
             }
         }
@@ -4184,7 +4216,8 @@ void E5PlayerController::update_tower_charge(bool held, float delta) {
     if (trap) {
         if (tower_charge_ < gameplay::bear_trap_set_seconds || !is_on_floor()) {
             // Let go too soon: it is gone, and nothing is spent.
-            if (auto* const setting = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(trap_setting_))) {
+            if (auto* const setting =
+                    godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(trap_setting_))) {
                 setting->call("scrap");
             }
             trap_setting_ = 0;
@@ -4253,9 +4286,8 @@ void E5PlayerController::update_firebolt_charge(bool held, float delta) {
         firebolt_charge_ = std::min(firebolt_charge_ + delta, gameplay::firebolt_full_charge_seconds);
         if (auto* const glow = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(firebolt_glow_))) {
             // It grows with the charge. (Sized in the world: the wand's holder has a scale of its own.)
-            const float size =
-                firebolt_glow_least + (firebolt_glow_full - firebolt_glow_least) * firebolt_charge_ /
-                                          gameplay::firebolt_full_charge_seconds;
+            const float size = firebolt_glow_least + (firebolt_glow_full - firebolt_glow_least) * firebolt_charge_ /
+                                                         gameplay::firebolt_full_charge_seconds;
             glow->set_global_transform(
                 godot::Transform3D(godot::Basis().scaled(godot::Vector3(size, size, size)), casting_point(false)));
         }

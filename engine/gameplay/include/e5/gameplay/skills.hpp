@@ -65,10 +65,13 @@ enum class SkillId : unsigned char {
     ChainBolt,     // the new wizard's "Chain Lightning": lightning that leaps from enemy to enemy, harder each time
     PoisonHydra,   // the new wizard's: a three-headed hydra rises where he aims and spits venom at what comes near
     Teleport,      // the new wizard's "Teleportation": he is at once where the crosshair points
-    RovingHole,    // the new wizard's "Black Whole": a small black hole that drifts ahead, draws enemies in and hurts them
-    Blizzard,      // the new wizard's: ice rains on a place for a while; what stands there is held, then slowed, and hurt
-    BearTrap,      // the archer's: she kneels and sets a trap; the enemy that steps into it is hurt badly
-    MirrorImage,   // the new wizard's "Whose Ur Mommy?", on a full charge: a copy of him that casts his spells for a while
+    RovingHole, // the new wizard's "Black Whole": a small black hole that drifts ahead, draws enemies in and hurts them
+    Blizzard,   // the new wizard's: ice rains on a place for a while; what stands there is held, then slowed, and hurt
+    BearTrap,   // the archer's: she kneels and sets a trap; the enemy that steps into it is hurt badly
+    MirrorImage,    // the new wizard's "Whose Ur Mommy?", on a full charge: a copy of him that casts his spells for a
+                    // while
+    ProtectionDome, // the new wizard's "Dome of Protection": a pink dome where he stands; nothing hurts a hero inside
+                    // it
 };
 
 // Which skills a character has on the bar.
@@ -131,8 +134,15 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 // through and does not hold her where she stands.
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
     return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede ||
-           skill == SkillId::FrostArmor;
+           skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome;
 }
+
+// The new wizard's Dome of Protection (the keeper's own wish, 2026-10-13: "he summons a pink dome
+// of protection around him ... lasts for 6 seconds"), a stance: a dome rises where he stands and
+// stays there for `dome_seconds`. Nothing hurts a hero who is inside it, him or a friend; step
+// out and it protects no longer. Enemies walk in and out as they like.
+inline constexpr float dome_seconds = 6.0F;
+inline constexpr float dome_radius = 5.0F;
 
 // The new wizard's Frost Armor (ticket 42, a player's wish), a stance: for `frost_armor_seconds`
 // a barrier takes what would hurt him, until it has taken `frost_armor_share` of his full health;
@@ -200,10 +210,10 @@ inline constexpr float teleport_range = 20.0F; // metres
 // every `hole_tick_seconds` everything within `hole_radius` takes skill_damage (half his bolt a
 // second, as wished).
 inline constexpr float hole_seconds = 6.0F;
-inline constexpr float hole_distance = 15.0F;    // metres
-inline constexpr float hole_pull_radius = 5.0F;  // metres
-inline constexpr float hole_radius = 3.0F;       // metres: what it hurts
-inline constexpr float hole_pull_speed = 2.0F;   // m/s towards it
+inline constexpr float hole_distance = 15.0F;   // metres
+inline constexpr float hole_pull_radius = 5.0F; // metres
+inline constexpr float hole_radius = 3.0F;      // metres: what it hurts
+inline constexpr float hole_pull_speed = 2.0F;  // m/s towards it
 inline constexpr float hole_tick_seconds = 0.5F;
 [[nodiscard]] constexpr float hole_speed() noexcept {
     return hole_distance / hole_seconds;
@@ -225,7 +235,8 @@ inline constexpr float blizzard_slow_seconds = 2.0F;
 inline constexpr float blizzard_tick_seconds = 0.5F;
 inline constexpr float blizzard_gain = 0.1F; // more damage for every second an enemy has stayed in it
 [[nodiscard]] constexpr float blizzard_damage_factor(float seconds_inside) noexcept {
-    const float capped = seconds_inside < 0.0F ? 0.0F : (seconds_inside > blizzard_seconds ? blizzard_seconds : seconds_inside);
+    const float capped =
+        seconds_inside < 0.0F ? 0.0F : (seconds_inside > blizzard_seconds ? blizzard_seconds : seconds_inside);
     return 1.0F + blizzard_gain * static_cast<float>(static_cast<int>(capped));
 }
 
@@ -256,17 +267,17 @@ inline constexpr int bear_trap_limit = 10;
 // stands 8 seconds and not 10, does three tenths and not half, and casts only his spells that
 // are there to do damage: not his bolt, his Frost Armor or his Teleportation.
 inline constexpr float clone_seconds = 8.0F;
-inline constexpr float clone_range = 20.0F;        // metres from him
-inline constexpr float clone_reach = 20.0F;        // metres from it
-inline constexpr float clone_cast_seconds = 1.3F;  // from one cast to the next
-inline constexpr float clone_damage_share = 0.3F;  // as its wisher asked
+inline constexpr float clone_range = 20.0F;       // metres from him
+inline constexpr float clone_reach = 20.0F;       // metres from it
+inline constexpr float clone_cast_seconds = 1.3F; // from one cast to the next
+inline constexpr float clone_damage_share = 0.3F; // as its wisher asked
 inline constexpr int clone_spells = 6;
 // What it casts as its `cast`-th spell (0, 1, 2 ...): the blizzard (which holds what it is cast
 // at), the hydra, the firebolt (at its least), the chain lightning, the black hole, the firebolt;
 // six casts are what its eight seconds hold.
 [[nodiscard]] constexpr SkillId clone_spell(int cast) noexcept {
-    constexpr std::array<SkillId, clone_spells> spells{SkillId::Blizzard, SkillId::PoisonHydra, SkillId::Firebolt,
-                                                       SkillId::ChainBolt, SkillId::RovingHole, SkillId::Firebolt};
+    constexpr std::array<SkillId, clone_spells> spells{SkillId::Blizzard,  SkillId::PoisonHydra, SkillId::Firebolt,
+                                                       SkillId::ChainBolt, SkillId::RovingHole,  SkillId::Firebolt};
     return spells.at(static_cast<std::size_t>((cast % clone_spells + clone_spells) % clone_spells));
 }
 
@@ -411,7 +422,8 @@ struct GatlingStep {
 // with E, when anything hurts her, when she begins another skill, or after `disguise_seconds`
 // (the wish had no end: unseen for ever would outdo everything else she has); the bush is then
 // back where it grew, and the cooldown runs from that moment.
-inline constexpr float disguise_reach = 2.5F; // metres (1.8 while it was bushes only: a tree's trunk keeps her further off)
+inline constexpr float disguise_reach =
+    2.5F; // metres (1.8 while it was bushes only: a tree's trunk keeps her further off)
 inline constexpr float disguise_seconds = 15.0F;
 
 // A wound that bleeds: it hurts once every `tick_seconds` until its time is up. A new wound

@@ -768,15 +768,20 @@ TEST_CASE("the bar can be rearranged, but not its standard attack", "[skills]") 
 TEST_CASE("the new wizard has his arcane bolt and slots to fill", "[skills]") {
     const SkillBar bar(SkillSet::Mage);
     CHECK(bar.slot(0) == SkillId::ArcaneBolt);
-    CHECK(bar.slot(1) == SkillId::Firebolt);   // key 2, as wished
-    CHECK(bar.slot(2) == SkillId::FrostArmor); // key 3, as wished
-    CHECK(bar.slot(3) == SkillId::ChainBolt);   // key 4, as wished
-    CHECK(bar.slot(4) == SkillId::PoisonHydra); // key 5, as wished
-    CHECK(bar.slot(5) == SkillId::Teleport);    // key 6, as wished
-    CHECK(bar.slot(6) == SkillId::RovingHole);  // key 7, as wished
-    CHECK(bar.slot(7) == SkillId::Blizzard);    // key 8, as wished
-    CHECK(bar.slot(8) == SkillId::MirrorImage); // key 9, as wished
-    for (std::size_t slot = 9; slot < SkillBar::slot_count; ++slot) {
+    CHECK(bar.slot(1) == SkillId::Firebolt);       // key 2, as wished
+    CHECK(bar.slot(2) == SkillId::FrostArmor);     // key 3, as wished
+    CHECK(bar.slot(3) == SkillId::ChainBolt);      // key 4, as wished
+    CHECK(bar.slot(4) == SkillId::PoisonHydra);    // key 5, as wished
+    CHECK(bar.slot(5) == SkillId::Teleport);       // key 6, as wished
+    CHECK(bar.slot(6) == SkillId::RovingHole);     // key 7, as wished
+    CHECK(bar.slot(7) == SkillId::Blizzard);       // key 8, as wished
+    CHECK(bar.slot(8) == SkillId::MirrorImage);    // key 9, as wished
+    CHECK(bar.slot(9) == SkillId::ProtectionDome); // key 0: the keeper's Dome of Protection
+    CHECK(e5::gameplay::skill_is_stance(SkillId::ProtectionDome));
+    CHECK(e5::gameplay::skill_damage(SkillId::ProtectionDome) == 0.0F);
+    CHECK(e5::gameplay::dome_seconds == 6.0F); // as the keeper said
+    CHECK(e5::gameplay::dome_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::ProtectionDome));
+    for (std::size_t slot = 10; slot < SkillBar::slot_count; ++slot) {
         CHECK(bar.slot(slot) == SkillId::None);
     }
     CHECK(open_slot_count(SkillSet::Mage) == open_slots);
@@ -834,8 +839,8 @@ TEST_CASE("the new wizard's frost armor is a stance whose barrier takes so much 
     // who loses all of hers while it lasts (what it spares and what it heals).
     CHECK(e5::gameplay::frost_armor_share > 0.0F);
     CHECK(e5::gameplay::frost_armor_share < 0.5F);
-    const float resolve = (1.0F - e5::gameplay::resolve_damage_share) +
-                          e5::gameplay::resolve_heal_share * e5::gameplay::resolve_seconds;
+    const float resolve =
+        (1.0F - e5::gameplay::resolve_damage_share) + e5::gameplay::resolve_heal_share * e5::gameplay::resolve_seconds;
     CHECK(e5::gameplay::frost_armor_share / e5::gameplay::skill_cooldown_seconds(SkillId::FrostArmor) <=
           resolve / e5::gameplay::skill_cooldown_seconds(SkillId::NeverGiveUp));
     CHECK(e5::gameplay::frost_armor_slow_share == Catch::Approx(0.3F)); // as wished
@@ -1039,5 +1044,6 @@ TEST_CASE("whose ur mommy is the new wizard's skill for a full charge", "[skills
         CHECK(clone_spell(cast) != SkillId::Teleport);
     }
     // It has time for one round of them, and no more.
-    CHECK(e5::gameplay::clone_seconds / e5::gameplay::clone_cast_seconds < static_cast<float>(e5::gameplay::clone_spells) + 1.0F);
+    CHECK(e5::gameplay::clone_seconds / e5::gameplay::clone_cast_seconds <
+          static_cast<float>(e5::gameplay::clone_spells) + 1.0F);
 }
