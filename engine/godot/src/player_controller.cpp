@@ -3968,8 +3968,9 @@ void E5PlayerController::start_stance(gameplay::SkillId skill) {
     ++skills_used_;
     // Round her and with her for as long as it lasts: the effect's own lifetime is the stance's.
     if (skill == gameplay::SkillId::ProtectionDome) {
-        // It stands where he stood, in the world, not on him: its own script counts its seconds.
-        E5Effect::spawn(effect_scene(dome_path), get_parent(), get_global_position());
+        // Round him and with him wherever he goes (the keeper's choice: he is always inside it). Its
+        // own script counts its seconds.
+        E5Effect::spawn(effect_scene(dome_path), this, get_global_position());
     } else if (skill == gameplay::SkillId::NeverGiveUp) {
         resolve_left_ = gameplay::resolve_seconds;
         E5Effect::spawn(effect_scene(resolve_path), this, get_global_position());

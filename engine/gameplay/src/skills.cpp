@@ -722,8 +722,8 @@ std::string_view skill_description(SkillId skill) noexcept {
                "and waits; the first enemy that steps into it is hurt badly. Only so many lie at a time: with "
                "one more, the oldest is gone.";
     case SkillId::ProtectionDome:
-        return "A dome of pink light rises where he stands and stays for six seconds. Nothing hurts a hero "
-               "who is inside it, him or a friend. Step out and it protects no longer.";
+        return "A dome of pink light rises round him and goes with him for six seconds. Nothing hurts a hero "
+               "who is inside it: him, and a friend who keeps close to him.";
     case SkillId::MirrorImage:
         return "Takes a full charge. A copy of him in all the rainbow's colours appears where he aims and casts "
                "those of his spells that do damage at the enemies near it for a while, weaker than his own. "

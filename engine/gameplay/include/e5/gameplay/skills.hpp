@@ -138,9 +138,10 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 }
 
 // The new wizard's Dome of Protection (the keeper's own wish, 2026-10-13: "he summons a pink dome
-// of protection around him ... lasts for 6 seconds"), a stance: a dome rises where he stands and
-// stays there for `dome_seconds`. Nothing hurts a hero who is inside it, him or a friend; step
-// out and it protects no longer. Enemies walk in and out as they like.
+// of protection around him ... lasts for 6 seconds"), a stance: a dome rises round him and goes
+// with him for `dome_seconds` (it stood where he cast it at first; asked, the keeper chose this:
+// he is always inside). Nothing hurts a hero who is inside it, him or a friend who keeps near
+// him. Enemies walk in and out as they like.
 inline constexpr float dome_seconds = 6.0F;
 inline constexpr float dome_radius = 5.0F;
 
