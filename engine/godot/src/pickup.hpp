@@ -13,7 +13,10 @@ namespace e5::bridge {
 
 // Loot lying on the ground: an item stack or gold. It hops out of whatever
 // dropped it, hovers with its icon and a beam of light in its rarity's colour,
-// and flies to the player who comes near, if there is room in the bag.
+// and waits. It is picked up with the E key (`e5_interact`) by the player who stands within
+// reach of it: every pickup in reach at once; then it flies to her, if there is room in the bag.
+// (Until 2026-10-13 it flew to whoever came near; the keeper wanted the key.) A test that cannot
+// press keys in time has `--menu-auto-pickup`: the old way.
 // Built in code; made with `spawn`, or placed in a scene with `item`/`count`/`gold` set.
 class E5Pickup : public godot::Node3D {
     // Findings inside Godot's macro expansion are not ours to fix.
@@ -61,6 +64,7 @@ private:
     float home_speed_ = 0.0F;
     bool wait_for_leave_ = false;
     godot::Sprite3D* icon_ = nullptr; // non-owning child
+    godot::Node3D* hint_ = nullptr;   // non-owning child: "E" over it while it can be picked up
 };
 
 } // namespace e5::bridge

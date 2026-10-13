@@ -147,6 +147,10 @@ public:
     // that much slower for the same pace, or his feet would race.
     void set_walk_stride(float times) { walk_stride_ = std::max(times, 0.1F); }
     [[nodiscard]] float get_walk_stride() const { return walk_stride_; }
+    // Whose soul it leaves when it falls: its family ("shroomling", "troll" ...: the item
+    // "soul_<family>"); empty for one that leaves none.
+    void set_soul(const godot::String& family) { soul_ = family; }
+    [[nodiscard]] godot::String get_soul() const { return soul_; }
     void set_drops_loot(bool drops) { drops_loot_ = drops; }
     [[nodiscard]] bool get_drops_loot() const { return drops_loot_; }
 
@@ -314,6 +318,7 @@ private:
     bool starts_parked_ = false;
     bool parked_ = false;
     bool drops_loot_ = true;
+    godot::String soul_;
     float walk_stride_ = 1.0F;
     godot::Vector3 strolling_; // where it is walked to in the next step while idle (see stroll)
     bool strolls_ = false;

@@ -114,28 +114,40 @@ TEST_CASE("finding items", "[inventory]") {
     CHECK(find_item(inventory, ItemId::BowHunter) == -1);
 }
 
-TEST_CASE("loot is repeatable, always has gold, and a potion turns up one time in four", "[inventory]") {
-    CHECK(roll_loot(1234).gold == roll_loot(1234).gold);
-    CHECK(roll_loot(1234).items == roll_loot(1234).items);
+TEST_CASE("loot is repeatable, always has gold, and a soul turns up four times in ten", "[inventory]") {
+    const ItemId soul = soul_item("shroomling");
+    REQUIRE(soul != ItemId::None);
+    CHECK(item_info(soul).name == "Soul of the Shroomling");
+    CHECK(soul_item("hydra") != ItemId::None);
+    CHECK(soul_item("hydra") != soul);
+    CHECK(soul_item("nobody") == ItemId::None);
+    CHECK(soul_item("") == ItemId::None);
+    CHECK(roll_loot(1234, soul).gold == roll_loot(1234, soul).gold);
+    CHECK(roll_loot(1234, soul).items == roll_loot(1234, soul).items);
 
-    int potions = 0;
+    int souls = 0;
     const int kills = 4000;
     for (std::uint32_t seed = 0; seed < static_cast<std::uint32_t>(kills); ++seed) {
-        const Loot loot = roll_loot(seed);
+        const Loot loot = roll_loot(seed, soul);
         REQUIRE(loot.gold >= 3);
         REQUIRE(loot.gold <= 8);
+        // The same kill leaves the same gold whatever its soul is, and nothing else without one.
+        REQUIRE(roll_loot(seed).gold == loot.gold);
+        for (const ItemStack& stack : roll_loot(seed).items) {
+            REQUIRE(stack.empty());
+        }
         for (const ItemStack& stack : loot.items) {
             if (stack.empty()) {
                 continue;
             }
-            REQUIRE(stack.item == ItemId::HealthPotion);
+            REQUIRE(stack.item == soul);
             REQUIRE(stack.count == 1);
-            ++potions;
+            ++souls;
         }
     }
-    // The chance is 25 %; the bounds leave room for the generator's noise.
-    CHECK(potions > kills * 19 / 100);
-    CHECK(potions < kills * 31 / 100);
+    // The chance is 40 %; the bounds leave room for the generator's noise.
+    CHECK(souls > kills * 34 / 100);
+    CHECK(souls < kills * 46 / 100);
 }
 
 TEST_CASE("a weapon goes into the weapon slot and is only ever changed for another", "[inventory][weapon]") {

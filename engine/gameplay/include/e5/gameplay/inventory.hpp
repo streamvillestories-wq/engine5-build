@@ -37,6 +37,19 @@ enum class ItemId : std::uint8_t {
     SwordEmberbrand,
     SwordDawnbreaker,
     SwordStarweaver,
+    // Souls: what an enemy leaves, four times in ten, one kind for each family of enemy (the keeper,
+    // 2026-10-13: the drop system anew; for now gold and souls). What they are for is to come.
+    SoulShroomling,
+    SoulTreant,
+    SoulWolf,
+    SoulSpider,
+    SoulSkeleton,
+    SoulUndead,
+    SoulMask,
+    SoulTroll,
+    SoulWarden,
+    SoulQueen,
+    SoulHydra,
     Count,
 };
 
@@ -168,8 +181,14 @@ struct Loot {
     std::array<ItemStack, 3> items{}; // unused entries are empty
 };
 
-// The same seed always gives the same loot. Every kill leaves some gold, and one in four
-// a health potion. (Weapons are not found yet: every hero starts with all of hers.)
-[[nodiscard]] Loot roll_loot(std::uint32_t seed) noexcept;
+// The same seed always gives the same loot. Every kill leaves some gold and, `soul_chance` of the
+// times, the soul of what was killed (`soul`: the enemy's own, or None for one that has none).
+// Nothing else for now (the keeper, 2026-10-13). Weapons are not found: every hero starts with hers.
+inline constexpr float soul_chance = 0.4F;
+[[nodiscard]] Loot roll_loot(std::uint32_t seed, ItemId soul = ItemId::None) noexcept;
+
+// The soul of a family of enemies ("shroomling", "hydra" ...: the item whose key is "soul_" and
+// that); None when there is none.
+[[nodiscard]] ItemId soul_item(std::string_view family) noexcept;
 
 } // namespace e5::gameplay

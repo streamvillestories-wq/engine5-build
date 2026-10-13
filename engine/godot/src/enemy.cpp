@@ -135,6 +135,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_walk_stride"), &E5Enemy::get_walk_stride);
     ClassDB::bind_method(D_METHOD("set_drops_loot", "drops"), &E5Enemy::set_drops_loot);
     ClassDB::bind_method(D_METHOD("get_drops_loot"), &E5Enemy::get_drops_loot);
+    ClassDB::bind_method(D_METHOD("set_soul", "family"), &E5Enemy::set_soul);
+    ClassDB::bind_method(D_METHOD("get_soul"), &E5Enemy::get_soul);
     ClassDB::bind_method(D_METHOD("get_phase"), &E5Enemy::get_phase);
     ClassDB::bind_method(D_METHOD("get_phase_seconds"), &E5Enemy::get_phase_seconds);
     ClassDB::bind_method(D_METHOD("get_facing"), &E5Enemy::get_facing);
@@ -228,6 +230,7 @@ void E5Enemy::_bind_methods() {
                  "set_special_count", "get_special_count");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "starts_parked"), "set_starts_parked", "get_starts_parked");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "drops_loot"), "set_drops_loot", "get_drops_loot");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::STRING, "soul"), "set_soul", "get_soul");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "walk_stride", godot::PROPERTY_HINT_RANGE, "0.2,10,0.05"),
                  "set_walk_stride", "get_walk_stride");
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "on_terrain"), "set_on_terrain", "get_on_terrain");
@@ -1115,7 +1118,8 @@ void E5Enemy::drop_loot_seeded(int seed) {
     if (parent == nullptr || seed == 0) {
         return;
     }
-    const gameplay::Loot loot = gameplay::roll_loot(static_cast<std::uint32_t>(seed));
+    const gameplay::Loot loot = gameplay::roll_loot(static_cast<std::uint32_t>(seed),
+                                                    gameplay::soul_item(std::string(soul_.utf8().get_data())));
     // Where the pieces land comes from the same number, so they lie alike on every machine.
     const float turn = static_cast<float>(static_cast<std::uint32_t>(seed) % 6283U) * 0.001F;
     const godot::Vector3 feet = get_global_position();

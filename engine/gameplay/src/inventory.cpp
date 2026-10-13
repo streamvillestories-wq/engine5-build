@@ -221,6 +221,84 @@ constexpr std::array<ItemInfo, static_cast<std::size_t>(Count)> items{{
      .damage = 0.42F,
      .crit_chance = 0.1F,
      .crit_damage = 0.5F},
+    // --- souls ---------------------------------------------------------------------------------
+    {.key = "soul_shroomling",
+     .name = "Soul of the Shroomling",
+     .description = "It smells of rain and hums a tune you nearly know.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Common,
+     .max_stack = 99,
+     .value = 6},
+    {.key = "soul_treant",
+     .name = "Soul of the Treant",
+     .description = "Slow and green. Hold it and you hear leaves.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Uncommon,
+     .max_stack = 99,
+     .value = 14},
+    {.key = "soul_wolf",
+     .name = "Soul of the Wolf",
+     .description = "It pulls at your hand, towards the hills.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Common,
+     .max_stack = 99,
+     .value = 8},
+    {.key = "soul_spider",
+     .name = "Soul of the Spider",
+     .description = "Eight small lights that will not keep still.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Common,
+     .max_stack = 99,
+     .value = 8},
+    {.key = "soul_skeleton",
+     .name = "Soul of the Skeleton",
+     .description = "Cold, dry, and a little surprised to be here.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Uncommon,
+     .max_stack = 99,
+     .value = 12},
+    {.key = "soul_undead",
+     .name = "Soul of the Undead",
+     .description = "It does not want to go. It never did.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Rare,
+     .max_stack = 99,
+     .value = 30},
+    {.key = "soul_mask",
+     .name = "Soul of the Mask",
+     .description = "A face that looks back, whichever way you turn it.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Rare,
+     .max_stack = 99,
+     .value = 30},
+    {.key = "soul_troll",
+     .name = "Soul of the Troll",
+     .description = "Heavy as a stone, and about as clever.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Rare,
+     .max_stack = 99,
+     .value = 40},
+    {.key = "soul_warden",
+     .name = "Soul of the Elfish Warden",
+     .description = "It still walks its rounds, in your hand.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Epic,
+     .max_stack = 99,
+     .value = 200},
+    {.key = "soul_queen",
+     .name = "Soul of the Mole-Rat Queen",
+     .description = "She is not pleased. She will remember you.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Epic,
+     .max_stack = 99,
+     .value = 250},
+    {.key = "soul_hydra",
+     .name = "Soul of the Hydra",
+     .description = "Five voices, never agreeing.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Legendary,
+     .max_stack = 99,
+     .value = 300},
 }};
 
 [[nodiscard]] constexpr bool valid_slot(int slot) noexcept {
@@ -445,7 +523,17 @@ float weapon_hit(float damage, const Bonuses& bonuses, float roll) noexcept {
     return is_critical(bonuses, roll) ? raised * (1.0F + base_crit_damage + bonuses.crit_damage) : raised;
 }
 
-Loot roll_loot(std::uint32_t seed) noexcept {
+ItemId soul_item(std::string_view family) noexcept {
+    for (std::size_t index = 1; index < items.size(); ++index) {
+        const std::string_view key = items.at(index).key;
+        if (key.starts_with("soul_") && key.substr(5) == family) {
+            return static_cast<ItemId>(index);
+        }
+    }
+    return ItemId::None;
+}
+
+Loot roll_loot(std::uint32_t seed, ItemId soul) noexcept {
     // xorshift stays at zero forever, so zero is replaced.
     std::uint32_t state = seed == 0 ? 0x9E3779B9U : seed;
     // The first values of nearby seeds are alike; a few rounds part them.
@@ -455,14 +543,8 @@ Loot roll_loot(std::uint32_t seed) noexcept {
 
     Loot loot;
     loot.gold = 3 + static_cast<int>(chance(state) * 6.0F);
-    std::size_t used = 0;
-    const auto drop = [&loot, &used](ItemId item, int count) {
-        if (used < loot.items.size()) {
-            loot.items.at(used++) = {.item = item, .count = count};
-        }
-    };
-    if (chance(state) < 0.25F) {
-        drop(HealthPotion, 1);
+    if (soul != ItemId::None && chance(state) < soul_chance) {
+        loot.items.at(0) = {.item = soul, .count = 1};
     }
     return loot;
 }

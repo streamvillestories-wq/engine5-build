@@ -7,8 +7,11 @@
 #include <godot_cpp/classes/base_material3d.hpp>
 #include <godot_cpp/classes/gradient.hpp>
 #include <godot_cpp/classes/gradient_texture2d.hpp>
+#include <godot_cpp/classes/input.hpp>
+#include <godot_cpp/classes/label3d.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/omni_light3d.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/physics_direct_space_state3d.hpp>
 #include <godot_cpp/classes/physics_ray_query_parameters3d.hpp>
 #include <godot_cpp/classes/quad_mesh.hpp>
@@ -38,7 +41,7 @@ constexpr float hop_height = 1.1F;    // metres above the straight line, at the 
 constexpr float hover_height = 0.45F; // metres above the ground, where the icon floats
 constexpr float bob_height = 0.06F;
 constexpr float icon_size = 0.34F;         // metres
-constexpr float magnet_range = 2.8F;       // metres: from here it flies to the player
+constexpr float magnet_range = 2.8F;       // metres: within this the E key picks it up
 constexpr float leave_range = 4.0F;        // metres: a thrown-away item wakes up beyond this
 constexpr float collect_range = 0.55F;     // metres from the player's chest
 constexpr float chest_height = 1.0F;       // metres above the player's feet
@@ -98,6 +101,24 @@ E5Pickup* E5Pickup::spawn(godot::Node* parent, const godot::Vector3& from, const
 
 void E5Pickup::_ready() {
     add_to_group(group_name);
+    // The key that picks it up, shown over it while the hero stands in reach.
+    auto* const hint = memnew(godot::Label3D);
+    hint->set_text("E");
+    hint->set_billboard_mode(godot::BaseMaterial3D::BILLBOARD_ENABLED);
+    hint->set_draw_flag(godot::Label3D::FLAG_DISABLE_DEPTH_TEST, true);
+    hint->set_draw_flag(godot::Label3D::FLAG_FIXED_SIZE, true);
+    hint->set_pixel_size(0.0011F);
+    hint->set_font_size(34);
+    hint->set_outline_size(10);
+    hint->set_modulate(godot::Color(1.0F, 0.95F, 0.8F));
+    hint->set_outline_modulate(godot::Color(0.05F, 0.05F, 0.07F, 0.9F));
+    hint->set_position(godot::Vector3(0.0F, 0.42F, 0.0F));
+    hint->set_visible(false);
+    add_child(hint);
+    hint_ = hint;
+    if (phase_ == Phase::Rest) {
+        hop_to_ = get_global_position(); // placed in a scene: it rests where it was put
+    }
     build();
 }
 
@@ -228,8 +249,20 @@ void E5Pickup::_process(double delta) {
         }
         set_scale(godot::Vector3(left, left, left));
     }
-    if (!reachable || wait_for_leave_ || retry_seconds_ > 0.0F || distance > magnet_range) {
+    static const bool by_itself = godot::OS::get_singleton()->get_cmdline_user_args().has("--menu-auto-pickup");
+    const bool in_reach = reachable && distance <= magnet_range && age_seconds_ <= lifetime_seconds;
+    if (hint_ != nullptr) {
+        hint_->set_visible(in_reach && !by_itself);
+    }
+    if (!in_reach || retry_seconds_ > 0.0F) {
         return;
+    }
+    if (by_itself) {
+        if (wait_for_leave_) {
+            return;
+        }
+    } else if (player->is_input_blocked() || !godot::Input::get_singleton()->is_action_just_pressed("e5_interact")) {
+        return; // it waits for the key
     }
     const E5Inventory* const inventory = player->get_inventory();
     if (gold_ <= 0 && (inventory == nullptr || !inventory->has_room_for(item_))) {
