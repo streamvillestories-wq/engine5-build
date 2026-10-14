@@ -22,6 +22,13 @@ TEST_CASE("every item is described", "[inventory]") {
     CHECK(item_info(ItemId::Count).max_stack == 0);
 }
 
+TEST_CASE("the dwarf's axes are weapons of their own class", "[inventory]") {
+    CHECK(item_info(ItemId::AxeIronbeard).weapon == WeaponClass::Axe);
+    CHECK(item_info(ItemId::AxeRunecleaver).weapon == WeaponClass::Axe);
+    CHECK(item_info(ItemId::AxeIronbeard).kind == ItemKind::Weapon);
+    CHECK(item_info(ItemId::AxeRunecleaver).level > item_info(ItemId::AxeIronbeard).level);
+}
+
 TEST_CASE("items stack up before they take a new slot", "[inventory]") {
     Inventory inventory;
     CHECK(add_item(inventory, ItemId::HealthPotion, 4) == 0);

@@ -37,6 +37,10 @@ enum class ItemId : std::uint8_t {
     SwordEmberbrand,
     SwordDawnbreaker,
     SwordStarweaver,
+    // The new dwarf's axes (the keeper's set of two, 2026-10-14): an axe counts for every blow of a
+    // hero who fights with one, as a sword does for the warrior.
+    AxeIronbeard,
+    AxeRunecleaver,
     // Souls: what an enemy leaves, four times in ten, one kind for each family of enemy (the keeper,
     // 2026-10-13: the drop system anew; for now gold and souls). What they are for is to come.
     SoulShroomling,
@@ -64,7 +68,7 @@ enum class Rarity : std::uint8_t { Common, Uncommon, Rare, Epic, Legendary };
 
 // What a weapon is: its `damage` counts for what is done with that kind of weapon only (a bow
 // for what is shot, a sword for the blows of a hero who fights with one).
-enum class WeaponClass : std::uint8_t { None, Bow, Sword };
+enum class WeaponClass : std::uint8_t { None, Bow, Sword, Axe };
 
 // What every archer has without any bow's help: one arrow in twenty strikes true, for half as
 // much again.

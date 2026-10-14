@@ -105,6 +105,8 @@ public:
     [[nodiscard]] gameplay::SkillSet skill_bar_set() const;
     // A hero whose blows are her sword's (the first warrior and the new one).
     [[nodiscard]] bool fights_with_sword() const;
+    /// The dwarf: every blow of his is his axe's.
+    [[nodiscard]] bool fights_with_axe() const;
     [[nodiscard]] bool is_emoting() const { return remote_ ? net_clip_ == clip_emote_ : emote_left_ > 0.0F; }
     // On a horse (game/characters/mount.gd decides when: the E key at a horse, and shows it under
     // her). Only a hero whose library has the clip `ride` can. Another player's hero rides when

@@ -925,6 +925,10 @@ void E5PlayerController::_ready() {
               gameplay::ItemId::SwordStarweaver}) {
             inventory_->give(sword, 1);
         }
+    } else if (fights_with_axe()) {
+        // The smith's own axe in hand, the finer one in his bag.
+        inventory_->arm(gameplay::ItemId::AxeIronbeard);
+        inventory_->give(gameplay::ItemId::AxeRunecleaver, 1);
     }
 
     const std::string name = godot::String(get_name()).utf8().get_data();
@@ -1913,6 +1917,10 @@ bool E5PlayerController::fights_with_sword() const {
            skill_set_ == static_cast<int>(gameplay::SkillSet::Blade);
 }
 
+bool E5PlayerController::fights_with_axe() const {
+    return skill_set_ == static_cast<int>(gameplay::SkillSet::Dwarf);
+}
+
 int E5PlayerController::get_open_slot_count() const {
     return gameplay::open_slot_count(skill_bar_set());
 }
@@ -2146,7 +2154,8 @@ float E5PlayerController::dealt(gameplay::SkillId skill, float power) const {
     const gameplay::WeaponClass held = inventory_->weapon_class();
     const bool shot =
         held == gameplay::WeaponClass::Bow && gameplay::skill_info(skill).kind == gameplay::SkillKind::Bow;
-    const bool struck = held == gameplay::WeaponClass::Sword && fights_with_sword();
+    const bool struck = (held == gameplay::WeaponClass::Sword && fights_with_sword()) ||
+                        (held == gameplay::WeaponClass::Axe && fights_with_axe());
     if (!shot && !struck) {
         return damage;
     }
