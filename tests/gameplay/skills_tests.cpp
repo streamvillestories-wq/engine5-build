@@ -567,7 +567,21 @@ TEST_CASE("the dwarf has his own skills on the bar", "[skills]") {
     CHECK(bar.slot(2) == SkillId::Earthbreaker);
     CHECK(bar.slot(3) == SkillId::LeapStrike);
     CHECK(bar.slot(4) == SkillId::Battlecry);
-    CHECK(bar.slot(5) == SkillId::None);
+    // His four of 2026-10-15.
+    CHECK(bar.slot(5) == SkillId::MoltenFissure);
+    CHECK(bar.slot(6) == SkillId::RunicBulwark);
+    CHECK(bar.slot(7) == SkillId::AncestralAnvil);
+    CHECK(bar.slot(8) == SkillId::Stonebreaker);
+    CHECK(bar.slot(9) == SkillId::None);
+    CHECK(e5::gameplay::skill_is_stance(SkillId::RunicBulwark));
+    CHECK(e5::gameplay::skill_damage(SkillId::RunicBulwark) == 0.0F);
+    CHECK(e5::gameplay::bulwark_damage_share < 0.5F); // less than half of a blow gets through
+    for (const SkillId skill : {SkillId::MoltenFissure, SkillId::AncestralAnvil, SkillId::Stonebreaker}) {
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+    }
+    CHECK(e5::gameplay::anvil_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::AncestralAnvil));
+    CHECK(e5::gameplay::bulwark_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::RunicBulwark));
     for (const SkillId skill :
          {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike, SkillId::Battlecry}) {
         CHECK(e5::gameplay::skill_info(skill).kind == e5::gameplay::SkillKind::Instant);

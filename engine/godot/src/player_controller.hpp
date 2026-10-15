@@ -264,6 +264,13 @@ public:
     // Never Give Up (the new warrior's): the seconds it still lasts, also for another player's
     // hero (stance_glow.gd shows it), and what it has kept from her and given back (for tests).
     [[nodiscard]] float get_resolve_seconds() const { return resolve_left_; }
+    // Runic Bulwark (the new dwarf's): the seconds it still lasts, also for another player's hero
+    // (stance_glow.gd shows it), and what it has kept from him (for tests).
+    [[nodiscard]] float get_bulwark_seconds() const { return bulwark_left_; }
+    [[nodiscard]] float get_bulwark_spared() const { return bulwark_spared_; }
+    // Ancestral Anvil: how often it has pulsed, and the health it gave this hero (for tests).
+    [[nodiscard]] int get_anvil_pulses() const { return anvil_pulses_; }
+    [[nodiscard]] float get_anvil_healed() const { return anvil_healed_; }
     // Sprintsz (the new warrior's): the seconds it still lasts, and how often it has pounded (for tests).
     [[nodiscard]] float get_stampede_seconds() const { return stampede_.seconds_left; }
     [[nodiscard]] int get_stampede_ticks() const { return stampede_ticks_; }
@@ -496,6 +503,10 @@ private:
     [[nodiscard]] bool is_cutting() const { return pieces_.seconds_left > 0.0F; }
     // The Seismic Slash: her blow lands; the ground breaks open ahead of her, row after row.
     void strike_seismic();
+    void strike_fissure();
+    void raise_anvil();
+    void hurl_stone();
+    void update_anvil(float delta);
     void update_eruptions(float delta);
     void cast_chain();
     void summon_hydra();
@@ -783,6 +794,16 @@ private:
     float armor_tick_ = 0.0F;     // until those near him are slowed anew
     float armor_absorbed_ = 0.0F; // damage it has taken in his place
     int armor_slowed_ = 0;        // how often it slowed an enemy
+    float bulwark_left_ = 0.0F;   // seconds his Runic Bulwark still lasts
+    float bulwark_spared_ = 0.0F; // damage it has kept from him
+    // His Ancestral Anvil: where it stands and how long more; the pulses are struck from here, the
+    // healing is asked of every anvil in the world by each machine for its own hero.
+    godot::Vector3 anvil_at_;
+    float anvil_left_ = 0.0F;
+    float anvil_until_pulse_ = 0.0F;
+    int anvil_pulses_ = 0;
+    float anvil_heal_tick_ = 0.0F; // until this hero is healed by the anvils near her again
+    float anvil_healed_ = 0.0F;
     float resolve_left_ = 0.0F;   // seconds her Never Give Up still lasts
     float resolve_spared_ = 0.0F; // damage it has kept from her
     float dome_spared_ = 0.0F;    // damage a Dome of Protection has kept from her
@@ -797,6 +818,7 @@ private:
     int enrage_blows_ = 0;
     // Bursts of the Seismic Slash still to come: the ground breaks open further and further out.
     struct Eruption {
+        bool molten = false; // the Molten Fissure's: lava, not stone
         float in_seconds = 0.0F;
         godot::Vector3 place;
         float size = 1.0F;
@@ -947,6 +969,9 @@ private:
     godot::StringName clip_earthbreaker_;
     godot::StringName clip_leap_;
     godot::StringName clip_battlecry_;
+    godot::StringName clip_fissure_;
+    godot::StringName clip_anvil_;
+    godot::StringName clip_stone_;
     godot::StringName clip_flame_;
     godot::StringName clip_frost_;
     godot::StringName clip_thunder_;

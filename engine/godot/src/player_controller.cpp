@@ -222,6 +222,12 @@ constexpr SpellTiming whirlwind_timing{.playback_scale = 1.5F, .strike_at = 1.03
 constexpr SpellTiming earthbreaker_timing{.playback_scale = 1.3F, .strike_at = 0.83F, .end_at = 1.6F};
 constexpr SpellTiming leap_timing{.playback_scale = 1.5F, .strike_at = 1.7F, .end_at = 2.6F};
 constexpr SpellTiming battlecry_timing{.playback_scale = 1.3F, .strike_at = 0.75F, .end_at = 2.0F};
+// The new dwarf's four (2026-10-15). The moments are measured on his clips: when the axe hand
+// comes lowest (spin_low: 0.98 s), when the backhand swing comes through (backhand: past 0.94 s),
+// when the fist has struck the chest twice (chest_thump).
+constexpr SpellTiming fissure_timing{.playback_scale = 1.3F, .strike_at = 0.98F, .end_at = 1.8F};
+constexpr SpellTiming stone_timing{.playback_scale = 1.4F, .strike_at = 1.1F, .end_at = 2.0F};
+constexpr SpellTiming anvil_timing{.playback_scale = 1.3F, .strike_at = 1.1F, .end_at = 2.2F};
 constexpr float combo_window = 0.7F; // seconds after a blow in which the next press continues the combo
 // Her four special blows are made by tools/godot/warrior_combo.gd, like the combo: these are
 // its "strike" and "end", and they are played a little slower than made, like the combo.
@@ -271,6 +277,13 @@ constexpr float leap_remote_seconds = 0.85F;  // another player's leap is taken 
 constexpr const char* seismic_burst_path = "res://effects/seismic_burst.tscn";
 constexpr const char* seismic_crack_path = "res://effects/seismic_crack.tscn"; // its sound, once
 constexpr const char* seismic_stun_path = "res://effects/seismic_stun.tscn";   // over a stunned enemy
+// The new dwarf's: lava where the ground breaks open, his runes, his anvil, the boulder and its burst.
+constexpr const char* molten_burst_path = "res://effects/molten_burst.tscn";
+constexpr const char* bulwark_path = "res://effects/runic_bulwark.tscn";
+constexpr const char* anvil_path = "res://effects/rune_anvil.tscn";
+constexpr const char* anvil_group = "e5_anvil"; // every anvil that stands (effects/rune_anvil.gd)
+constexpr const char* stone_trail_path = "res://effects/boulder.tscn";
+constexpr const char* stone_impact_path = "res://effects/jump_attack_impact.tscn";
 constexpr int seismic_rows = 7; // (five at first, of one to five bursts: too thin to fill the wedge, bug report 33)
 constexpr float seismic_row_seconds = 0.07F; // from one row to the next
 constexpr float seismic_first_row = 2.0F;    // metres ahead of her
@@ -491,6 +504,12 @@ const SpellTiming* timing_of(gameplay::SkillId skill) {
         return &leap_timing;
     case gameplay::SkillId::Battlecry:
         return &battlecry_timing;
+    case gameplay::SkillId::MoltenFissure:
+        return &fissure_timing;
+    case gameplay::SkillId::AncestralAnvil:
+        return &anvil_timing;
+    case gameplay::SkillId::Stonebreaker:
+        return &stone_timing;
     default:
         return nullptr;
     }
@@ -671,6 +690,10 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_enrage_seconds"), &E5PlayerController::get_enrage_seconds);
     ClassDB::bind_method(D_METHOD("get_enrage_blows"), &E5PlayerController::get_enrage_blows);
     ClassDB::bind_method(D_METHOD("get_resolve_seconds"), &E5PlayerController::get_resolve_seconds);
+    ClassDB::bind_method(D_METHOD("get_bulwark_seconds"), &E5PlayerController::get_bulwark_seconds);
+    ClassDB::bind_method(D_METHOD("get_bulwark_spared"), &E5PlayerController::get_bulwark_spared);
+    ClassDB::bind_method(D_METHOD("get_anvil_pulses"), &E5PlayerController::get_anvil_pulses);
+    ClassDB::bind_method(D_METHOD("get_anvil_healed"), &E5PlayerController::get_anvil_healed);
     ClassDB::bind_method(D_METHOD("get_towers_grown"), &E5PlayerController::get_towers_grown);
     ClassDB::bind_method(D_METHOD("get_turret"), &E5PlayerController::get_turret);
     ClassDB::bind_method(D_METHOD("is_manning"), &E5PlayerController::is_manning);
@@ -880,6 +903,9 @@ void E5PlayerController::_ready() {
     clip_earthbreaker_ = godot::StringName("downward");
     clip_leap_ = godot::StringName("leap");
     clip_battlecry_ = godot::StringName("battlecry");
+    clip_fissure_ = godot::StringName("spin_low");
+    clip_anvil_ = godot::StringName("chest_thump");
+    clip_stone_ = godot::StringName("backhand");
     clip_whirl_ = godot::StringName("whirl");
     clip_kneel_ = godot::StringName("kneel");
     skills_ = gameplay::SkillBar(skill_bar_set());
@@ -1879,6 +1905,11 @@ void E5PlayerController::take_damage(float amount) {
             dome_spared_ += amount; // a Dome of Protection: nothing gets through to who is inside
             return;
         }
+        if (bulwark_left_ > 0.0F) {
+            // Runic Bulwark: less than half of it gets through.
+            bulwark_spared_ += amount * (1.0F - gameplay::bulwark_damage_share);
+            amount *= gameplay::bulwark_damage_share;
+        }
         if (resolve_left_ > 0.0F) {
             // Never Give Up: only a share of it gets through.
             resolve_spared_ += amount * (1.0F - gameplay::resolve_damage_share);
@@ -2708,7 +2739,8 @@ void E5PlayerController::prewarm_effects() {
         }
         for (const char* const path :
              {counter_stance_path, counter_strike_path, counter_bleed_path, whirl_storm_path, leap_impact_path,
-              seismic_burst_path, seismic_stun_path, enrage_path, resolve_path, stampede_path, dome_path}) {
+              seismic_burst_path, seismic_stun_path, enrage_path, resolve_path, stampede_path, dome_path,
+              molten_burst_path, bulwark_path, stone_trail_path}) {
             if (const godot::Node3D* const instance = E5Effect::spawn(effect_scene(path), get_parent(), out_of_sight)) {
                 prewarm_ids_.push_back(instance->get_instance_id());
             }
@@ -2964,6 +2996,12 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
         clip = &clip_leap_;
     } else if (skill == gameplay::SkillId::Battlecry) {
         clip = &clip_battlecry_;
+    } else if (skill == gameplay::SkillId::MoltenFissure) {
+        clip = &clip_fissure_;
+    } else if (skill == gameplay::SkillId::AncestralAnvil) {
+        clip = &clip_anvil_;
+    } else if (skill == gameplay::SkillId::Stonebreaker) {
+        clip = &clip_stone_;
     }
     return clip != nullptr && animator_.has_clip(*clip) ? clip : nullptr;
 }
@@ -3132,6 +3170,18 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
     }
     if (spell == gameplay::SkillId::SeismicSlash) {
         strike_seismic();
+        return;
+    }
+    if (spell == gameplay::SkillId::MoltenFissure) {
+        strike_fissure();
+        return;
+    }
+    if (spell == gameplay::SkillId::AncestralAnvil) {
+        raise_anvil();
+        return;
+    }
+    if (spell == gameplay::SkillId::Stonebreaker) {
+        hurl_stone();
         return;
     }
     if (spell == gameplay::SkillId::Firebolt) {
@@ -3980,6 +4030,9 @@ void E5PlayerController::start_stance(gameplay::SkillId skill) {
         // Round him and with him wherever he goes (the keeper's choice: he is always inside it). Its
         // own script counts its seconds.
         E5Effect::spawn(effect_scene(dome_path), this, get_global_position());
+    } else if (skill == gameplay::SkillId::RunicBulwark) {
+        bulwark_left_ = gameplay::bulwark_seconds;
+        E5Effect::spawn(effect_scene(bulwark_path), this, get_global_position());
     } else if (skill == gameplay::SkillId::NeverGiveUp) {
         resolve_left_ = gameplay::resolve_seconds;
         E5Effect::spawn(effect_scene(resolve_path), this, get_global_position());
@@ -4056,6 +4109,8 @@ void E5PlayerController::answer_blow(const godot::Vector3& from) {
 
 void E5PlayerController::update_counter(float delta) {
     counter_left_ = std::max(counter_left_ - delta, 0.0F);
+    bulwark_left_ = std::max(bulwark_left_ - delta, 0.0F);
+    update_anvil(delta);
     if (stampede_.seconds_left > 0.0F) {
         // Sprintsz: the ground she pounds hurts what is near, and stone flies up round her.
         const gameplay::BleedStep pounding = gameplay::step_bleed(stampede_, gameplay::stampede_tick_seconds, delta);
@@ -4983,6 +5038,133 @@ void E5PlayerController::strike_seismic() {
     }
 }
 
+void E5PlayerController::strike_fissure() {
+    // Where the player looks, like every other skill: a narrow line of lava, one burst after
+    // another further out, each a little larger.
+    const godot::Vector3 ahead(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw));
+    const godot::Vector3 feet = get_global_position();
+    shake_ = std::max(shake_, seismic_shake);
+    E5Effect::spawn(effect_scene(seismic_crack_path), get_parent(), feet + ahead * 1.2F);
+    constexpr int bursts = 9;
+    for (int index = 0; index < bursts; ++index) {
+        const float share = static_cast<float>(index) / static_cast<float>(bursts - 1);
+        const float out = 1.2F + (gameplay::fissure_length - 1.2F) * share;
+        eruptions_.push_back({.molten = true,
+                              .in_seconds = 0.06F * static_cast<float>(index),
+                              .place = feet + ahead * out + godot::Vector3(0.0F, 0.06F, 0.0F),
+                              .size = 0.8F + 0.6F * share});
+    }
+    // What stands in the line is hurt, stunned and set burning. (A hero shown here for another
+    // player hurts nobody: that is decided where he is played.)
+    if (remote_) {
+        return;
+    }
+    const float damage = dealt(gameplay::SkillId::MoltenFissure);
+    const godot::Ref<godot::PackedScene> fire = effect_scene("res://effects/burning.tscn");
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+            continue;
+        }
+        const godot::Vector3 to = enemy->get_global_position() - feet;
+        if (std::abs(static_cast<float>(to.y)) > 6.0F ||
+            !gameplay::in_wedge(static_cast<float>(to.x), static_cast<float>(to.z), static_cast<float>(ahead.x),
+                                static_cast<float>(ahead.z), gameplay::fissure_length, gameplay::fissure_half_angle,
+                                gameplay::fissure_near, enemy->get_body_radius())) {
+            continue;
+        }
+        combat::hit(enemy, enemy->get_aim_point(), damage);
+        enemy->stun(gameplay::fissure_stun_seconds);
+        E5Effect::spawn(effect_scene(seismic_stun_path), enemy,
+                        enemy->get_aim_point() + godot::Vector3(0.0F, enemy->get_body_radius() + 0.7F, 0.0F));
+        // It burns as a Fire Arrow's blast burns: its own fire goes with it.
+        E5Lingering::spawn(get_parent(), enemy->get_aim_point(),
+                           {.radius = 0.25F,
+                            .seconds = gameplay::burn_seconds,
+                            .tick_damage = gameplay::burn_tick_damage,
+                            .tick_seconds = gameplay::burn_tick_seconds,
+                            .root_seconds = 0.0F,
+                            .visual = fire,
+                            .cage = {}},
+                           enemy);
+    }
+}
+
+void E5PlayerController::raise_anvil() {
+    // Where he stands, on the ground there. It stands on every machine (the healing is asked of it
+    // there); its pulses are struck from his own.
+    // (A step before him: dropped where he stood it was inside his body.)
+    const godot::Vector3 before(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    anvil_at_ = ground_under(get_global_position() + before * 1.7F);
+    anvil_left_ = gameplay::anvil_seconds;
+    anvil_until_pulse_ = 0.35F; // the first as it lands
+    shake_ = std::max(shake_, seismic_shake);
+    if (godot::Node3D* const anvil = E5Effect::spawn(effect_scene(anvil_path), get_parent(), anvil_at_)) {
+        anvil->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+    }
+}
+
+void E5PlayerController::update_anvil(float delta) {
+    if (anvil_left_ > 0.0F) {
+        anvil_left_ -= delta;
+        anvil_until_pulse_ -= delta;
+        if (anvil_until_pulse_ <= 0.0F && anvil_left_ > 0.0F) {
+            anvil_until_pulse_ += gameplay::anvil_tick_seconds;
+            ++anvil_pulses_;
+            if (!remote_) {
+                combat::blast(this, anvil_at_ + godot::Vector3(0.0F, melee_height, 0.0F), gameplay::anvil_radius,
+                              dealt(gameplay::SkillId::AncestralAnvil));
+            }
+        }
+    }
+    // Every anvil that stands heals the hero played here while she is near it (anyone's anvil: a
+    // friend's too). Its own script counts its seconds and says whether it still heals.
+    if (remote_ || clone_ || vitals_.dead || !is_inside_tree()) {
+        return;
+    }
+    anvil_heal_tick_ -= delta;
+    if (anvil_heal_tick_ > 0.0F) {
+        return;
+    }
+    anvil_heal_tick_ = gameplay::anvil_tick_seconds;
+    const godot::TypedArray<godot::Node> anvils = get_tree()->get_nodes_in_group(anvil_group);
+    for (const godot::Variant& node : anvils) {
+        const auto* const anvil = godot::Object::cast_to<godot::Node3D>(node);
+        if (anvil == nullptr || !static_cast<bool>(anvil->get_meta("heals", false))) {
+            continue;
+        }
+        const godot::Vector3 away = get_global_position() - anvil->get_global_position();
+        if (godot::Vector2(away.x, away.z).length() > gameplay::anvil_radius ||
+            std::abs(static_cast<float>(away.y)) > gameplay::anvil_radius) {
+            continue;
+        }
+        const float full = effective_vitals().max_health;
+        const float gained = std::min(full * gameplay::anvil_heal_share, std::max(full - vitals_.health, 0.0F));
+        vitals_.health += gained;
+        anvil_healed_ += gained;
+        break; // one anvil's worth, however many stand there
+    }
+}
+
+void E5PlayerController::hurl_stone() {
+    // From his throwing hand towards whatever the crosshair covers, like the wizard's bolts.
+    const godot::Vector3 origin = get_global_position() + godot::Vector3(0.0F, 1.3F, 0.0F) +
+                                  godot::Vector3(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw)) * 0.6F;
+    const godot::Vector3 direction = (find_aim_point(origin).position - origin).normalized();
+    auto* const stone = memnew(E5SpellBolt);
+    get_parent()->add_child(stone);
+    stone->set_global_position(origin);
+    stone->set_damage(dealt(gameplay::SkillId::Stonebreaker));
+    stone->set_trail_effect(effect_scene(stone_trail_path));
+    stone->set_impact_effect(effect_scene(stone_impact_path));
+    stone->set_impact_scale(1.3F);
+    stone->set_blast_radius(gameplay::stone_blast_radius);
+    stone->set_stun(gameplay::stone_stun_seconds, effect_scene(seismic_stun_path));
+    stone->launch(direction * gameplay::stone_speed, get_rid());
+    shake_ = std::max(shake_, 0.05F);
+}
+
 void E5PlayerController::update_eruptions(float delta) {
     if (eruptions_.empty()) {
         return;
@@ -4991,7 +5173,8 @@ void E5PlayerController::update_eruptions(float delta) {
         eruption.in_seconds -= delta;
         if (eruption.in_seconds <= 0.0F) {
             if (godot::Node3D* const burst =
-                    E5Effect::spawn(effect_scene(seismic_burst_path), get_parent(), eruption.place)) {
+                    E5Effect::spawn(effect_scene(eruption.molten ? molten_burst_path : seismic_burst_path),
+                                    get_parent(), eruption.place)) {
                 burst->set_scale(godot::Vector3(eruption.size, eruption.size, eruption.size));
             }
         }

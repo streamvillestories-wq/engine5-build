@@ -107,6 +107,14 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Bear Trap", .charges = false, .kind = SkillKind::Instant};
     case SkillId::ProtectionDome:
         return {.name = "Dome of Protection", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::MoltenFissure:
+        return {.name = "Molten Fissure", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::RunicBulwark:
+        return {.name = "Runic Bulwark", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::AncestralAnvil:
+        return {.name = "Ancestral Anvil", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Stonebreaker:
+        return {.name = "Stonebreaker", .charges = false, .kind = SkillKind::Instant};
     case SkillId::MirrorImage:
         return {.name = "Whose Ur Mommy?", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
@@ -170,6 +178,12 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 82.0F;
     case SkillId::Battlecry:
         return 45.0F; // and it throws everything around him back
+    case SkillId::MoltenFissure:
+        return 30.0F; // to each it catches; the stun and the burning (burn_tick_damage) do the rest
+    case SkillId::AncestralAnvil:
+        return 9.0F; // every pulse, to each within its reach: 72 over its eight seconds
+    case SkillId::Stonebreaker:
+        return 48.0F; // to each in its burst
     // The archer's arrows to choose from: not yet weighed against the others (the user picks
     // among them first).
     case SkillId::VenomArrow:
@@ -199,6 +213,7 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::Teleport:
     case SkillId::MirrorImage: // (his copy's spells are his own, at clone_damage_share)
     case SkillId::ProtectionDome:
+    case SkillId::RunicBulwark:
         return 0.0F; // they strike nobody
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
@@ -331,6 +346,14 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 20.0F;
     case SkillId::ProtectionDome:
         return 28.0F; // from the key: it stands six of them
+    case SkillId::Stonebreaker:
+        return 9.0F;
+    case SkillId::MoltenFissure:
+        return 12.0F;
+    case SkillId::RunicBulwark:
+        return 22.0F; // from the key: it lasts six of them
+    case SkillId::AncestralAnvil:
+        return 26.0F; // from the blow: it stands eight of them
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
     case SkillId::Shot:
@@ -488,8 +511,9 @@ int next_combo_step(int last_step, float seconds_since_last, float window_second
 
 SkillBar::SkillBar(SkillSet set) noexcept {
     if (set == SkillSet::Dwarf) {
-        slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
-                  SkillId::Battlecry};
+        slots_ = {SkillId::AxeCombo,     SkillId::Whirlwind,      SkillId::Earthbreaker,
+                  SkillId::LeapStrike,   SkillId::Battlecry,      SkillId::MoltenFissure,
+                  SkillId::RunicBulwark, SkillId::AncestralAnvil, SkillId::Stonebreaker};
     } else if (set == SkillSet::Blade) {
         slots_ = {SkillId::Slash,       SkillId::CounterAttack, SkillId::BladeWhirl,
                   SkillId::JumpAttack,  SkillId::SeismicSlash,  SkillId::Enrage,
@@ -570,8 +594,9 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     };
     static constexpr std::array warrior{SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave,
                                         SkillId::StarWhirl};
-    static constexpr std::array dwarf{SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike,
-                                      SkillId::Battlecry};
+    static constexpr std::array dwarf{SkillId::AxeCombo,     SkillId::Whirlwind,      SkillId::Earthbreaker,
+                                      SkillId::LeapStrike,   SkillId::Battlecry,      SkillId::MoltenFissure,
+                                      SkillId::RunicBulwark, SkillId::AncestralAnvil, SkillId::Stonebreaker};
     static constexpr std::array wizard{SkillId::ArcaneBolt,     SkillId::Fireball, SkillId::FrostNova,
                                        SkillId::ChainLightning, SkillId::Meteor,   SkillId::StarBarrage,
                                        SkillId::BlackHole};
@@ -653,6 +678,19 @@ std::string_view skill_description(SkillId skill) noexcept {
         return "He leaps at the place he aims at and strikes where he lands.";
     case SkillId::Battlecry:
         return "A cry that hurts everything around him and throws it back.";
+    case SkillId::MoltenFissure:
+        return "He drives his axe low into the ground: a line of lava breaks open ahead of him. Enemies it "
+               "catches are stunned for a moment and burn for a while after.";
+    case SkillId::RunicBulwark:
+        return "Golden runes of the deep halls cover him for six seconds: every blow does less than half "
+               "its harm.";
+    case SkillId::AncestralAnvil:
+        return "He beats his chest, and an anvil forged with runes slams down where he stands. For eight "
+               "seconds it pulses: enemies near it are hurt, heroes near it are healed, his friends too. "
+               "The damage is one pulse.";
+    case SkillId::Stonebreaker:
+        return "He hurls a boulder at what he aims at. It bursts where it strikes and stuns what it "
+               "catches.";
     case SkillId::VenomArrow:
         return "An arrow that leaves a cloud of venom where it strikes. The damage is the arrow's; the cloud "
                "goes on hurting what stays in it.";

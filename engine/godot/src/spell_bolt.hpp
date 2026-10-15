@@ -34,6 +34,12 @@ public:
     }
     // How large the impact effect is shown, of the size it was made at.
     void set_impact_scale(float scale) { impact_scale_ = scale; }
+    // What its burst catches is stunned for `seconds`, with `visual` over its head meanwhile (the
+    // dwarf's Stonebreaker). Only where it does damage: a shown hero's stuns nobody.
+    void set_stun(float seconds, const godot::Ref<godot::PackedScene>& visual) {
+        stun_seconds_ = seconds;
+        stun_visual_ = visual;
+    }
     void set_damage(float damage) { damage_ = damage; }
     void set_blast_radius(float radius) { blast_radius_ = radius; }
     // Makes the spell steer towards a place in the world: it may start in any direction and
@@ -64,6 +70,8 @@ private:
     float poison_seconds_ = 0.0F; // 0: it poisons nobody
     float poison_tick_seconds_ = 0.5F;
     godot::Ref<godot::PackedScene> poison_visual_;
+    float stun_seconds_ = 0.0F; // 0: it stuns nobody
+    godot::Ref<godot::PackedScene> stun_visual_;
     godot::Vector3 homing_target_;
     float homing_speed_ = 0.0F; // 0 = flies straight
     float homing_turn_ = 0.0F;

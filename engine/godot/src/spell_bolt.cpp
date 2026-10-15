@@ -139,6 +139,19 @@ void E5SpellBolt::burst(const godot::Vector3& position, godot::Object* collider)
     } else {
         combat::hit(collider, position, damage_);
     }
+    if (stun_seconds_ > 0.0F && damage_ > 0.0F) {
+        const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+        for (const godot::Variant& node : enemies) {
+            auto* const caught = godot::Object::cast_to<E5Enemy>(node);
+            if (caught == nullptr || !caught->is_alive() ||
+                caught->get_aim_point().distance_to(position) > blast_radius_ + caught->get_body_radius()) {
+                continue;
+            }
+            caught->stun(stun_seconds_);
+            E5Effect::spawn(stun_visual_, caught,
+                            caught->get_aim_point() + godot::Vector3(0.0F, caught->get_body_radius() + 0.7F, 0.0F));
+        }
+    }
     auto* const struck = godot::Object::cast_to<E5Enemy>(collider);
     if (poison_seconds_ > 0.0F && struck != nullptr && struck->is_alive()) {
         // (A small circle that goes with it: it hurts that one, and whoever stands right against it.)

@@ -72,6 +72,11 @@ enum class SkillId : unsigned char {
                     // while
     ProtectionDome, // the new wizard's "Dome of Protection": a pink dome where he stands; nothing hurts a hero inside
                     // it
+    // The new dwarf's (the keeper, 2026-10-15: "4 new state of the art modern skills").
+    MoltenFissure, // a low blow into the ground: a line of lava breaks open ahead; what it catches is stunned and burns
+    RunicBulwark,  // a stance: golden runes cover him, and blows do less than half their harm
+    AncestralAnvil, // he beats his chest; a rune-forged anvil slams down and pulses: enemies hurt, heroes healed
+    Stonebreaker,   // he hurls a boulder at what he aims at; it bursts and stuns what it catches
 };
 
 // Which skills a character has on the bar.
@@ -134,8 +139,31 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 // through and does not hold her where she stands.
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
     return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede ||
-           skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome;
+           skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome || skill == SkillId::RunicBulwark;
 }
+
+// The new dwarf's four (2026-10-15, the keeper: "4 new state of the art modern skills").
+// Molten Fissure: a line of lava breaks open ahead of him, `fissure_length` long and narrow; what
+// it catches is hurt, stunned for `fissure_stun_seconds` and burns as a Fire Arrow's blast burns.
+inline constexpr float fissure_length = 12.0F;     // metres
+inline constexpr float fissure_half_angle = 0.30F; // radians to either side: a narrow wedge, 34 degrees
+inline constexpr float fissure_near = 1.4F;        // metres: this near, whatever is not behind him is caught
+inline constexpr float fissure_stun_seconds = 1.2F;
+// Runic Bulwark, a stance: for `bulwark_seconds` only `bulwark_damage_share` of a blow gets through.
+inline constexpr float bulwark_seconds = 6.0F;
+inline constexpr float bulwark_damage_share = 0.45F;
+// Ancestral Anvil: it stands `anvil_seconds` where it fell; every `anvil_tick_seconds` it hurts every
+// enemy within `anvil_radius` (skill_damage) and gives every hero within it `anvil_heal_share` of
+// their full health, him and his friends alike.
+inline constexpr float anvil_seconds = 8.0F;
+inline constexpr float anvil_radius = 6.0F;
+inline constexpr float anvil_tick_seconds = 1.0F;
+inline constexpr float anvil_heal_share = 0.04F;
+// Stonebreaker: a boulder thrown at the crosshair; it bursts where it strikes, within
+// `stone_blast_radius`, and stuns what it catches for `stone_stun_seconds`.
+inline constexpr float stone_speed = 24.0F;       // metres a second
+inline constexpr float stone_blast_radius = 3.2F; // metres
+inline constexpr float stone_stun_seconds = 1.5F;
 
 // The new wizard's Dome of Protection (the keeper's own wish, 2026-10-13: "he summons a pink dome
 // of protection around him ... lasts for 6 seconds"), a stance: a dome rises round him and goes
