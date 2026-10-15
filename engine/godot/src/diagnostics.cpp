@@ -475,6 +475,11 @@ bool E5Diagnostics::write_report() {
         player_info["disguised"] = player->is_disguised();
         player_info["disguises"] = player->get_disguises();
         player_info["pieces_blows"] = player->get_pieces_blows();
+        player_info["shadow_steps"] = player->get_shadow_steps();
+        player_info["knives_thrown"] = player->get_knives_thrown();
+        player_info["ambushes"] = player->get_ambushes();
+        player_info["poisonings"] = player->get_poisonings();
+        player_info["veiled"] = player->is_veiled();
         player_info["pieces_spared"] = player->get_pieces_spared();
         player_info["firebolts_thrown"] = player->get_firebolts_thrown();
         player_info["chain_strikes"] = player->get_chain_strikes();

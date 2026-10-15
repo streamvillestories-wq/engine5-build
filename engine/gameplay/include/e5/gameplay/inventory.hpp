@@ -41,6 +41,10 @@ enum class ItemId : std::uint8_t {
     // hero who fights with one, as a sword does for the warrior.
     AxeIronbeard,
     AxeRunecleaver,
+    // The Shadowblade's daggers (the keeper's pair, 2026-10-16): he holds the one in the weapon slot
+    // in each fist, and it counts for every blow of his.
+    DaggerCrescent,
+    DaggerWhisper,
     // Souls: what an enemy leaves, four times in ten, one kind for each family of enemy (the keeper,
     // 2026-10-13: the drop system anew; for now gold and souls). What they are for is to come.
     SoulShroomling,
@@ -68,7 +72,7 @@ enum class Rarity : std::uint8_t { Common, Uncommon, Rare, Epic, Legendary };
 
 // What a weapon is: its `damage` counts for what is done with that kind of weapon only (a bow
 // for what is shot, a sword for the blows of a hero who fights with one).
-enum class WeaponClass : std::uint8_t { None, Bow, Sword, Axe };
+enum class WeaponClass : std::uint8_t { None, Bow, Sword, Axe, Dagger };
 
 // What every archer has without any bow's help: one arrow in twenty strikes true, for half as
 // much again.

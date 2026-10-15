@@ -77,6 +77,12 @@ enum class SkillId : unsigned char {
     RunicBulwark,  // a stance: golden runes cover him, and blows do less than half their harm
     AncestralAnvil, // he beats his chest; a rune-forged anvil slams down and pulses: enemies hurt, heroes healed
     Stonebreaker,   // he hurls a boulder at what he aims at; it bursts and stuns what it catches
+    // The Shadowblade's (the keeper, 2026-10-16: "give him 5 skills").
+    ShadowStep,    // he is behind the enemy he aims at in a puff of shadow, and stabs it in the back
+    FanOfKnives,   // five daggers of shadow thrown in a fan
+    VeilOfShadows, // a stance: enemies lose sight of him, he runs faster, and his first blow out of it is doubled
+    VenomEdge,     // a stance: his blades drip venom; every blow poisons what it strikes
+    ShadowFlurry,  // on a full charge: he flits from enemy to enemy, a dagger blow for each
 };
 
 // Which skills a character has on the bar.
@@ -90,12 +96,16 @@ enum class SkillId : unsigned char {
 // `Mage` is the new wizard (2026-10-11): his arcane bolt, thrown with his wand, and nothing else
 // yet; his other slots are filled from the players' skill wishes, as the Archer's and the new
 // Warrior's are. The first wizard's spells stay his (`Wizard`).
-enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull, Mage };
+// `Shadow` is the Shadowblade (2026-10-16): the dagger combo with a dagger in each fist, and his other
+// slots open for wishes, as the new Wizard's and the new Warrior's were at first.
+enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull, Mage, Shadow };
 
 // How many of a hero's quick slots are hers to fill: shown on the bar also while they are empty.
 inline constexpr int open_slots = 11;
 [[nodiscard]] constexpr int open_slot_count(SkillSet set) noexcept {
-    return set == SkillSet::Blade || set == SkillSet::Archer || set == SkillSet::Mage ? open_slots : 0;
+    return set == SkillSet::Blade || set == SkillSet::Archer || set == SkillSet::Mage || set == SkillSet::Shadow
+               ? open_slots
+               : 0;
 }
 
 // How a skill is used.
@@ -139,8 +149,39 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 // through and does not hold her where she stands.
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
     return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede ||
-           skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome || skill == SkillId::RunicBulwark;
+           skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome || skill == SkillId::RunicBulwark ||
+           skill == SkillId::VeilOfShadows || skill == SkillId::VenomEdge;
 }
+
+// The Shadowblade's five (2026-10-16, the keeper: "give him 5 skills").
+// Shadow Step: the living enemy nearest to where the crosshair points (within `shadow_step_aim_slack`
+// of it, no further than `shadow_step_reach` from him) has him behind it at once, `shadow_step_behind`
+// beyond its body, facing it; the lunge then strikes that one (skill_damage). With nobody there the
+// key does nothing and nothing is spent.
+inline constexpr float shadow_step_reach = 14.0F;
+inline constexpr float shadow_step_aim_slack = 3.0F;
+inline constexpr float shadow_step_behind = 0.75F;
+// Fan of Knives: `fan_knife_count` daggers of shadow, `fan_knife_spread` radians apart, the middle one
+// at the crosshair; each hurts the first thing it strikes (skill_damage).
+inline constexpr int fan_knife_count = 5;
+inline constexpr float fan_knife_spread = 0.16F;
+inline constexpr float fan_knife_speed = 32.0F; // metres a second
+// Veil of Shadows, a stance: for `veil_seconds` no enemy sees him (they pass him over as they pass
+// over a disguised Archer), he is `veil_move_share` times as fast, and the first blow he lands out of
+// it does `veil_ambush_factor` times its damage and ends the veil.
+inline constexpr float veil_seconds = 5.0F;
+inline constexpr float veil_move_share = 1.3F;
+inline constexpr float veil_ambush_factor = 2.0F;
+// Venom Edge, a stance: for `venom_edge_seconds` everything his blows, his Shadow Step and his knives
+// strike is poisoned: `venom_edge_tick_damage` every `venom_edge_tick_seconds` for
+// `venom_edge_poison_seconds` (24 in all), begun anew by every blow, never twice at once.
+inline constexpr float venom_edge_seconds = 8.0F;
+inline constexpr float venom_edge_poison_seconds = 4.0F;
+inline constexpr float venom_edge_tick_seconds = 0.5F;
+inline constexpr float venom_edge_tick_damage = 3.0F;
+// Shadow Flurry, on a full charge: the new warrior's Cut in Pieces made his (the same steps, every
+// pieces_tick_seconds), shorter, with his daggers. Nothing hurts him while it lasts.
+inline constexpr float flurry_seconds = 3.5F;
 
 // The new dwarf's four (2026-10-15, the keeper: "4 new state of the art modern skills").
 // Molten Fissure: a line of lava breaks open ahead of him, `fissure_length` long and narrow; what

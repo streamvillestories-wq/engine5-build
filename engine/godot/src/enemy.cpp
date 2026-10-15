@@ -591,9 +591,9 @@ godot::Node3D* E5Enemy::nearest_player() const {
             if (hero == nullptr) {
                 continue;
             }
-            // A bush is nobody (the Archer's Disguise).
+            // A bush is nobody (the Archer's Disguise), nor is a hero in a veil of shadows (the Shadowblade).
             if (const auto* const player = godot::Object::cast_to<E5PlayerController>(hero);
-                player != nullptr && player->is_disguised()) {
+                player != nullptr && (player->is_disguised() || player->is_veiled())) {
                 continue;
             }
             const auto distance = static_cast<float>(here.distance_squared_to(hero->get_global_position()));

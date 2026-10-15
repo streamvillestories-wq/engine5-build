@@ -115,6 +115,16 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Ancestral Anvil", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Stonebreaker:
         return {.name = "Stonebreaker", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ShadowStep:
+        return {.name = "Shadow Step", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::FanOfKnives:
+        return {.name = "Fan of Knives", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::VeilOfShadows:
+        return {.name = "Veil of Shadows", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::VenomEdge:
+        return {.name = "Venom Edge", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ShadowFlurry:
+        return {.name = "Shadow Flurry", .charges = false, .kind = SkillKind::Instant};
     case SkillId::MirrorImage:
         return {.name = "Whose Ur Mommy?", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
@@ -184,6 +194,12 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 9.0F; // every pulse, to each within its reach: 72 over its eight seconds
     case SkillId::Stonebreaker:
         return 48.0F; // to each in its burst
+    case SkillId::ShadowStep:
+        return 44.0F; // the stab in the back: twice a dagger blow, for a skill that must find its one
+    case SkillId::FanOfKnives:
+        return 16.0F; // each knife: one in the face is less than a dagger blow, five into a crowd are more
+    case SkillId::ShadowFlurry:
+        return 13.0F; // each of its fourteen blows in three and a half seconds: 182 in all
     // The archer's arrows to choose from: not yet weighed against the others (the user picks
     // among them first).
     case SkillId::VenomArrow:
@@ -214,7 +230,9 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::MirrorImage: // (his copy's spells are his own, at clone_damage_share)
     case SkillId::ProtectionDome:
     case SkillId::RunicBulwark:
-        return 0.0F; // they strike nobody
+    case SkillId::VeilOfShadows: // (its ambush doubles the blow that ends it)
+    case SkillId::VenomEdge:     // (its poison: venom_edge_tick_damage)
+        return 0.0F;             // they strike nobody
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
     case SkillId::CutInPieces:
@@ -354,6 +372,14 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 22.0F; // from the key: it lasts six of them
     case SkillId::AncestralAnvil:
         return 26.0F; // from the blow: it stands eight of them
+    case SkillId::ShadowStep:
+        return 8.0F;
+    case SkillId::FanOfKnives:
+        return 7.0F;
+    case SkillId::VeilOfShadows:
+        return 20.0F; // from the key: it lasts five of them
+    case SkillId::VenomEdge:
+        return 18.0F; // from the key: it lasts eight of them
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
     case SkillId::Shot:
@@ -367,6 +393,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::Battlecry:
     case SkillId::CutInPieces:
     case SkillId::MirrorImage:
+    case SkillId::ShadowFlurry:
         return 0.0F;
     }
     return 0.0F;
@@ -374,7 +401,8 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
 
 bool skill_needs_charge(SkillId skill) noexcept {
     return skill == SkillId::Kingfishers || skill == SkillId::BlackHole || skill == SkillId::StarWhirl ||
-           skill == SkillId::Battlecry || skill == SkillId::CutInPieces || skill == SkillId::MirrorImage;
+           skill == SkillId::Battlecry || skill == SkillId::CutInPieces || skill == SkillId::MirrorImage ||
+           skill == SkillId::ShadowFlurry;
 }
 
 float firebolt_power(float charged_seconds) noexcept {
@@ -528,6 +556,9 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::ArcaneBolt,  SkillId::Firebolt,      SkillId::FrostArmor, SkillId::ChainBolt,
                   SkillId::PoisonHydra, SkillId::Teleport,      SkillId::RovingHole, SkillId::Blizzard,
                   SkillId::MirrorImage, SkillId::ProtectionDome};
+    } else if (set == SkillSet::Shadow) {
+        slots_ = {SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
+                  SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
     } else if (set == SkillSet::Wizard) {
         slots_ = {SkillId::ArcaneBolt, SkillId::Fireball,    SkillId::FrostNova, SkillId::ChainLightning,
                   SkillId::Meteor,     SkillId::StarBarrage, SkillId::BlackHole};
@@ -603,7 +634,11 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     static constexpr std::array mage{
         SkillId::ArcaneBolt, SkillId::Firebolt,   SkillId::FrostArmor, SkillId::ChainBolt,   SkillId::PoisonHydra,
         SkillId::Teleport,   SkillId::RovingHole, SkillId::Blizzard,   SkillId::MirrorImage, SkillId::ProtectionDome};
+    static constexpr std::array shadow{SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
+                                       SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
     switch (set) {
+    case SkillSet::Shadow:
+        return shadow;
     case SkillSet::Mage:
         return mage;
     case SkillSet::Archer:
@@ -691,6 +726,21 @@ std::string_view skill_description(SkillId skill) noexcept {
     case SkillId::Stonebreaker:
         return "He hurls a boulder at what he aims at. It bursts where it strikes and stuns what it "
                "catches.";
+    case SkillId::ShadowStep:
+        return "He vanishes in a puff of shadow and is behind the enemy he aims at, and drives his dagger "
+               "into its back. With nobody near the crosshair, nothing happens.";
+    case SkillId::FanOfKnives:
+        return "Five daggers of shadow thrown in a fan. Each hurts the first thing it strikes; the damage "
+               "is one knife.";
+    case SkillId::VeilOfShadows:
+        return "Shadows close round him for five seconds: enemies lose sight of him and he runs faster. "
+               "The first blow he lands out of the veil does double damage and ends it.";
+    case SkillId::VenomEdge:
+        return "For eight seconds his blades drip venom: everything his blows, his Shadow Step and his "
+               "knives strike is poisoned and goes on being hurt for a while.";
+    case SkillId::ShadowFlurry:
+        return "He flits from enemy to enemy for a few seconds, a dagger blow for each, and nothing can "
+               "touch him meanwhile. The damage is one blow.";
     case SkillId::VenomArrow:
         return "An arrow that leaves a cloud of venom where it strikes. The damage is the arrow's; the cloud "
                "goes on hurting what stays in it.";

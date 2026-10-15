@@ -22,6 +22,12 @@ TEST_CASE("every item is described", "[inventory]") {
     CHECK(item_info(ItemId::Count).max_stack == 0);
 }
 
+TEST_CASE("the Shadowblade's daggers are weapons of their own class", "[inventory]") {
+    CHECK(item_info(ItemId::DaggerCrescent).weapon == WeaponClass::Dagger);
+    CHECK(item_info(ItemId::DaggerWhisper).weapon == WeaponClass::Dagger);
+    CHECK(item_info(ItemId::DaggerWhisper).level > item_info(ItemId::DaggerCrescent).level);
+}
+
 TEST_CASE("the dwarf's axes are weapons of their own class", "[inventory]") {
     CHECK(item_info(ItemId::AxeIronbeard).weapon == WeaponClass::Axe);
     CHECK(item_info(ItemId::AxeRunecleaver).weapon == WeaponClass::Axe);

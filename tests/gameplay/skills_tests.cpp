@@ -558,6 +558,32 @@ TEST_CASE("the sword combo goes on while she keeps striking, and starts over whe
     CHECK(e5::gameplay::combo_damage_factor(9) == e5::gameplay::combo_damage_factor(2));
 }
 
+TEST_CASE("the Shadowblade has his five skills on the bar", "[skills]") {
+    using e5::gameplay::SkillId;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Shadow);
+
+    CHECK(bar.slot(0) == SkillId::DaggerCombo);
+    CHECK(bar.slot(1) == SkillId::ShadowStep);
+    CHECK(bar.slot(2) == SkillId::FanOfKnives);
+    CHECK(bar.slot(3) == SkillId::VeilOfShadows);
+    CHECK(bar.slot(4) == SkillId::VenomEdge);
+    CHECK(bar.slot(5) == SkillId::ShadowFlurry);
+    CHECK(bar.slot(6) == SkillId::None);
+    CHECK(e5::gameplay::skill_is_stance(SkillId::VeilOfShadows));
+    CHECK(e5::gameplay::skill_is_stance(SkillId::VenomEdge));
+    CHECK(e5::gameplay::skill_needs_charge(SkillId::ShadowFlurry));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::ShadowFlurry) == 0.0F);
+    for (const SkillId skill : {SkillId::ShadowStep, SkillId::FanOfKnives, SkillId::ShadowFlurry}) {
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+    }
+    for (const SkillId skill :
+         {SkillId::ShadowStep, SkillId::FanOfKnives, SkillId::VeilOfShadows, SkillId::VenomEdge}) {
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+    }
+    CHECK(e5::gameplay::veil_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::VeilOfShadows));
+    CHECK(e5::gameplay::venom_edge_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::VenomEdge));
+}
+
 TEST_CASE("the dwarf has his own skills on the bar", "[skills]") {
     using e5::gameplay::SkillId;
     const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Dwarf);
@@ -725,7 +751,7 @@ TEST_CASE("the charge fills from kills and a little from damage, and no further 
 
 TEST_CASE("every hero's skills are in her catalogue and have a description", "[skills]") {
     for (const SkillSet set : {SkillSet::Archer, SkillSet::Wizard, SkillSet::Warrior, SkillSet::Dwarf, SkillSet::Blade,
-                               SkillSet::ArcherFull, SkillSet::Mage}) {
+                               SkillSet::ArcherFull, SkillSet::Mage, SkillSet::Shadow}) {
         const auto catalogue = skill_catalogue(set);
         REQUIRE_FALSE(catalogue.empty());
         const SkillBar bar(set);

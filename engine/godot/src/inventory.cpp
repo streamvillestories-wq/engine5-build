@@ -58,6 +58,8 @@ godot::String weapon_class_name(gameplay::WeaponClass weapon) {
         return "Sword";
     case gameplay::WeaponClass::Axe:
         return "Axe";
+    case gameplay::WeaponClass::Dagger:
+        return "Dagger";
     case gameplay::WeaponClass::None:
         break;
     }

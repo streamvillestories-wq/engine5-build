@@ -107,6 +107,8 @@ public:
     [[nodiscard]] bool fights_with_sword() const;
     /// The dwarf: every blow of his is his axe's.
     [[nodiscard]] bool fights_with_axe() const;
+    /// The Shadowblade: every blow of his is his daggers'.
+    [[nodiscard]] bool fights_with_dagger() const;
     [[nodiscard]] bool is_emoting() const { return remote_ ? net_clip_ == clip_emote_ : emote_left_ > 0.0F; }
     // On a horse (game/characters/mount.gd decides when: the E key at a horse, and shows it under
     // her). Only a hero whose library has the clip `ride` can. Another player's hero rides when
@@ -267,6 +269,14 @@ public:
     // Runic Bulwark (the new dwarf's): the seconds it still lasts, also for another player's hero
     // (stance_glow.gd shows it), and what it has kept from him (for tests).
     [[nodiscard]] float get_bulwark_seconds() const { return bulwark_left_; }
+    // The Shadowblade's two stances, for his scene's scripts (shadow_look.gd, stance_glow.gd) and enemies.
+    [[nodiscard]] bool is_veiled() const { return veil_left_ > 0.0F; }
+    [[nodiscard]] float get_veil_seconds() const { return veil_left_; }
+    [[nodiscard]] float get_venom_seconds() const { return venom_left_; }
+    [[nodiscard]] int get_shadow_steps() const { return shadow_steps_; }
+    [[nodiscard]] int get_knives_thrown() const { return knives_thrown_; }
+    [[nodiscard]] int get_ambushes() const { return ambushes_; }
+    [[nodiscard]] int get_poisonings() const { return poisonings_; }
     [[nodiscard]] float get_bulwark_spared() const { return bulwark_spared_; }
     // Ancestral Anvil: how often it has pulsed, and the health it gave this hero (for tests).
     [[nodiscard]] int get_anvil_pulses() const { return anvil_pulses_; }
@@ -504,6 +514,14 @@ private:
     // The Seismic Slash: her blow lands; the ground breaks open ahead of her, row after row.
     void strike_seismic();
     void strike_fissure();
+    // The Shadowblade's (skills.hpp, "The Shadowblade's five").
+    [[nodiscard]] E5Enemy* shadow_step_target() const;
+    void shadow_step();
+    void strike_shadow_step();
+    void throw_knives();
+    float ambush();
+    void envenom(E5Enemy* enemy);
+    void envenom_near(const godot::Vector3& centre, float radius);
     void raise_anvil();
     void hurl_stone();
     void update_anvil(float delta);
@@ -789,12 +807,23 @@ private:
     float remote_blink_left_ = 0.0F; // another player's hero: until the light where he arrives is shown
     int hydra_spits_ = 0;
     int chain_strikes_ = 0;
-    float armor_left_ = 0.0F;     // seconds the new wizard's Frost Armor still lasts
-    float armor_barrier_ = 0.0F;  // what its barrier can still take
-    float armor_tick_ = 0.0F;     // until those near him are slowed anew
-    float armor_absorbed_ = 0.0F; // damage it has taken in his place
-    int armor_slowed_ = 0;        // how often it slowed an enemy
-    float bulwark_left_ = 0.0F;   // seconds his Runic Bulwark still lasts
+    float armor_left_ = 0.0F;       // seconds the new wizard's Frost Armor still lasts
+    float armor_barrier_ = 0.0F;    // what its barrier can still take
+    float armor_tick_ = 0.0F;       // until those near him are slowed anew
+    float armor_absorbed_ = 0.0F;   // damage it has taken in his place
+    int armor_slowed_ = 0;          // how often it slowed an enemy
+    float bulwark_left_ = 0.0F;     // seconds his Runic Bulwark still lasts
+    float veil_left_ = 0.0F;        // seconds the Shadowblade's Veil of Shadows still lasts
+    std::uint64_t veil_effect_ = 0; // its wisps, taken away when a blow ends it early
+    float venom_left_ = 0.0F;       // seconds his Venom Edge still lasts
+    std::uint64_t step_target_ = 0; // whom his Shadow Step stabs
+    float remote_step_left_ = 0.0F; // another player's Shadowblade: his step's jump arrives within this
+    gameplay::SkillId pieces_skill_ = gameplay::SkillId::CutInPieces; // or his Shadow Flurry
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> venom_on_;   // an enemy, and the poison his blades put on it
+    int shadow_steps_ = 0;
+    int knives_thrown_ = 0;
+    int ambushes_ = 0;
+    int poisonings_ = 0;
     float bulwark_spared_ = 0.0F; // damage it has kept from him
     // His Ancestral Anvil: where it stands and how long more; the pulses are struck from here, the
     // healing is asked of every anvil in the world by each machine for its own hero.

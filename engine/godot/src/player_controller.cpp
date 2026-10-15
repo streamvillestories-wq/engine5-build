@@ -284,6 +284,14 @@ constexpr const char* anvil_path = "res://effects/rune_anvil.tscn";
 constexpr const char* anvil_group = "e5_anvil"; // every anvil that stands (effects/rune_anvil.gd)
 constexpr const char* stone_trail_path = "res://effects/boulder.tscn";
 constexpr const char* stone_impact_path = "res://effects/jump_attack_impact.tscn";
+// The Shadowblade's: his puff of shadow, where his blows land, his knives, his two stances, the venom.
+constexpr const char* shadow_puff_path = "res://effects/shadow_puff.tscn";
+constexpr const char* shadow_hit_path = "res://effects/shadow_hit.tscn";
+constexpr const char* shadow_knife_path = "res://effects/shadow_knife.tscn";
+constexpr const char* veil_path = "res://effects/veil_of_shadows.tscn";
+constexpr const char* venom_edge_path = "res://effects/venom_edge.tscn";
+constexpr const char* poisoned_path = "res://effects/poisoned.tscn";
+constexpr float shadow_step_remote_seconds = 0.6F; // another player's: his new place arrives within this
 constexpr int seismic_rows = 7; // (five at first, of one to five bursts: too thin to fill the wedge, bug report 33)
 constexpr float seismic_row_seconds = 0.07F; // from one row to the next
 constexpr float seismic_first_row = 2.0F;    // metres ahead of her
@@ -510,6 +518,10 @@ const SpellTiming* timing_of(gameplay::SkillId skill) {
         return &anvil_timing;
     case gameplay::SkillId::Stonebreaker:
         return &stone_timing;
+    case gameplay::SkillId::ShadowStep:
+        return &dagger_combo_timings.at(2); // the lunge
+    case gameplay::SkillId::FanOfKnives:
+        return &dagger_combo_timings.at(1); // the backhand from his left: the knives leave with it
     default:
         return nullptr;
     }
@@ -559,6 +571,8 @@ bool is_melee(gameplay::SkillId skill) {
     case gameplay::SkillId::LeapStrike:
     case gameplay::SkillId::Battlecry:
     case gameplay::SkillId::SeismicSlash:
+    case gameplay::SkillId::ShadowStep:
+    case gameplay::SkillId::FanOfKnives:
         return true;
     default:
         return false;
@@ -566,6 +580,9 @@ bool is_melee(gameplay::SkillId skill) {
 }
 
 gameplay::SkillSet skill_set_from(int value) {
+    if (value == 7) {
+        return gameplay::SkillSet::Shadow;
+    }
     if (value == 6) {
         return gameplay::SkillSet::Mage;
     }
@@ -692,6 +709,13 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_resolve_seconds"), &E5PlayerController::get_resolve_seconds);
     ClassDB::bind_method(D_METHOD("get_bulwark_seconds"), &E5PlayerController::get_bulwark_seconds);
     ClassDB::bind_method(D_METHOD("get_bulwark_spared"), &E5PlayerController::get_bulwark_spared);
+    ClassDB::bind_method(D_METHOD("is_veiled"), &E5PlayerController::is_veiled);
+    ClassDB::bind_method(D_METHOD("get_veil_seconds"), &E5PlayerController::get_veil_seconds);
+    ClassDB::bind_method(D_METHOD("get_venom_seconds"), &E5PlayerController::get_venom_seconds);
+    ClassDB::bind_method(D_METHOD("get_shadow_steps"), &E5PlayerController::get_shadow_steps);
+    ClassDB::bind_method(D_METHOD("get_knives_thrown"), &E5PlayerController::get_knives_thrown);
+    ClassDB::bind_method(D_METHOD("get_ambushes"), &E5PlayerController::get_ambushes);
+    ClassDB::bind_method(D_METHOD("get_poisonings"), &E5PlayerController::get_poisonings);
     ClassDB::bind_method(D_METHOD("get_anvil_pulses"), &E5PlayerController::get_anvil_pulses);
     ClassDB::bind_method(D_METHOD("get_anvil_healed"), &E5PlayerController::get_anvil_healed);
     ClassDB::bind_method(D_METHOD("get_towers_grown"), &E5PlayerController::get_towers_grown);
@@ -841,7 +865,7 @@ void E5PlayerController::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "max_health", godot::PROPERTY_HINT_RANGE, "1,1000,1"),
                  "set_max_health", "get_max_health");
     ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "skill_set", godot::PROPERTY_HINT_ENUM,
-                              "Archer,Wizard,Warrior,Dwarf,Blade,ArcherFull,Mage"),
+                              "Archer,Wizard,Warrior,Dwarf,Blade,ArcherFull,Mage,Shadow"),
                  "set_skill_set", "get_skill_set");
     for (const char* const effect :
          {"charge_effect",           "charge_full_effect",  "trail_effect",       "impact_effect",
@@ -955,6 +979,10 @@ void E5PlayerController::_ready() {
         // The smith's own axe in hand, the finer one in his bag.
         inventory_->arm(gameplay::ItemId::AxeIronbeard);
         inventory_->give(gameplay::ItemId::AxeRunecleaver, 1);
+    } else if (fights_with_dagger()) {
+        // The curved fang in his fists, the stiletto in his bag.
+        inventory_->arm(gameplay::ItemId::DaggerCrescent);
+        inventory_->give(gameplay::ItemId::DaggerWhisper, 1);
     }
 
     const std::string name = godot::String(get_name()).utf8().get_data();
@@ -1329,6 +1357,11 @@ void E5PlayerController::_physics_process(double delta) {
             is_on_floor() && skill_ready(skills_.selected()) && pieces_victim() != nullptr) {
             start_pieces(skills_.selected());
         }
+        // The Shadowblade's Shadow Flurry: the same, with his daggers.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::ShadowFlurry && !mounted_ && !is_busy() &&
+            is_on_floor() && skill_ready(skills_.selected()) && pieces_victim() != nullptr) {
+            start_pieces(skills_.selected());
+        }
         // Enrage is on at once too; what it does begins with the next step (update_enrage).
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Enrage && !mounted_ && !is_busy() &&
             !is_enraged() && skill_ready(skills_.selected())) {
@@ -1520,12 +1553,21 @@ void E5PlayerController::apply_net_state(const godot::Vector3& position, float f
         model_yaw_ = facing;
         has_net_state_ = true;
     }
-    if (remote_pieces_left_ > 0.0F && has_net_state_ &&
+    if ((remote_pieces_left_ > 0.0F || remote_step_left_ > 0.0F) && has_net_state_ &&
         static_cast<float>(position.distance_to(net_position_)) > 2.0F) {
-        // Cut in Pieces: she is beside the next enemy at once, and leaves the streak she leaves
-        // on her own machine.
-        E5LightningArc::spawn(get_parent(), get_global_position() + godot::Vector3(0.0F, 1.1F, 0.0F),
-                              position + godot::Vector3(0.0F, 1.1F, 0.0F), godot::Color(2.4F, 2.4F, 2.8F));
+        if (remote_step_left_ > 0.0F) {
+            // The Shadowblade's Shadow Step: gone in a puff of shadow, there in another.
+            E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), get_global_position());
+            E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), position);
+            remote_step_left_ = 0.0F;
+        } else {
+            // Cut in Pieces: she is beside the next enemy at once, and leaves the streak she leaves
+            // on her own machine (his Shadow Flurry's is violet).
+            const bool flurry = pieces_skill_ == gameplay::SkillId::ShadowFlurry;
+            E5LightningArc::spawn(get_parent(), get_global_position() + godot::Vector3(0.0F, 1.1F, 0.0F),
+                                  position + godot::Vector3(0.0F, 1.1F, 0.0F),
+                                  flurry ? godot::Color(1.6F, 0.7F, 2.6F) : godot::Color(2.4F, 2.4F, 2.8F));
+        }
         set_global_position(position);
     }
     net_position_ = position;
@@ -1678,12 +1720,17 @@ void E5PlayerController::update_remote(float delta) {
             pending_start_ = false;
             start_channel(skills_.selected());
         }
-        if (pending_start_ && skills_.selected() == gameplay::SkillId::CutInPieces) {
+        if (pending_start_ && (skills_.selected() == gameplay::SkillId::CutInPieces ||
+                               skills_.selected() == gameplay::SkillId::ShadowFlurry)) {
             // From enemy to enemy: where she is arrives with her place; a leap is seen as one.
             pending_start_ = false;
-            remote_pieces_left_ = gameplay::pieces_seconds + 0.6F;
+            pieces_skill_ = skills_.selected();
+            remote_pieces_left_ = (pieces_skill_ == gameplay::SkillId::ShadowFlurry ? gameplay::flurry_seconds
+                                                                                    : gameplay::pieces_seconds) +
+                                  0.6F;
         }
         remote_pieces_left_ = std::max(remote_pieces_left_ - delta, 0.0F);
+        remote_step_left_ = std::max(remote_step_left_ - delta, 0.0F);
         if (pending_start_ && skills_.selected() == gameplay::SkillId::Teleport) {
             // Where he is now arrives with his place: light where he left, and where he comes to.
             pending_start_ = false;
@@ -1948,6 +1995,10 @@ bool E5PlayerController::fights_with_sword() const {
            skill_set_ == static_cast<int>(gameplay::SkillSet::Blade);
 }
 
+bool E5PlayerController::fights_with_dagger() const {
+    return skill_set_ == static_cast<int>(gameplay::SkillSet::Shadow);
+}
+
 bool E5PlayerController::fights_with_axe() const {
     return skill_set_ == static_cast<int>(gameplay::SkillSet::Dwarf);
 }
@@ -2141,6 +2192,10 @@ gameplay::MotorParams E5PlayerController::motor_params() const {
         params.walk_speed *= gameplay::stampede_move_share;
         params.sprint_speed *= gameplay::stampede_move_share;
     }
+    if (veil_left_ > 0.0F) {
+        params.walk_speed *= gameplay::veil_move_share;
+        params.sprint_speed *= gameplay::veil_move_share;
+    }
     if (is_enraged()) {
         params.walk_speed *= gameplay::enrage_move_share;
         params.sprint_speed *= gameplay::enrage_move_share;
@@ -2186,7 +2241,8 @@ float E5PlayerController::dealt(gameplay::SkillId skill, float power) const {
     const bool shot =
         held == gameplay::WeaponClass::Bow && gameplay::skill_info(skill).kind == gameplay::SkillKind::Bow;
     const bool struck = (held == gameplay::WeaponClass::Sword && fights_with_sword()) ||
-                        (held == gameplay::WeaponClass::Axe && fights_with_axe());
+                        (held == gameplay::WeaponClass::Axe && fights_with_axe()) ||
+                        (held == gameplay::WeaponClass::Dagger && fights_with_dagger());
     if (!shot && !struck) {
         return damage;
     }
@@ -3002,6 +3058,10 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
         clip = &clip_anvil_;
     } else if (skill == gameplay::SkillId::Stonebreaker) {
         clip = &clip_stone_;
+    } else if (skill == gameplay::SkillId::ShadowStep) {
+        clip = &clip_dagger_combo_.at(2);
+    } else if (skill == gameplay::SkillId::FanOfKnives) {
+        clip = &clip_dagger_combo_.at(1);
     }
     return clip != nullptr && animator_.has_clip(*clip) ? clip : nullptr;
 }
@@ -3009,6 +3069,10 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
 bool E5PlayerController::can_start_instant_skill(gameplay::SkillId skill) const {
     // Nothing that takes the whole body from the saddle (a kick, the dagger, a cast).
     if (mounted_ || !is_on_floor() || instant_clip(skill) == nullptr || !skill_ready(skill)) {
+        return false;
+    }
+    // The Shadow Step needs someone to step behind.
+    if (skill == gameplay::SkillId::ShadowStep && !remote_ && shadow_step_target() == nullptr) {
         return false;
     }
     // One flock at a time: no new birds while the last ones are still flying. One black hole at a time.
@@ -3119,6 +3183,9 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
             }
         }
     }
+    if (skill == gameplay::SkillId::ShadowStep) {
+        shadow_step(); // at once: the lunge then strikes from behind the one he stepped to
+    }
     // (A firebolt's power goes with it: the others see a fireball of the same size.)
     note_net_event(0, skill == gameplay::SkillId::Firebolt ? firebolt_power_ : 0.0F);
 }
@@ -3202,6 +3269,14 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
     }
     if (spell == gameplay::SkillId::Blizzard) {
         cast_blizzard();
+        return;
+    }
+    if (spell == gameplay::SkillId::ShadowStep) {
+        strike_shadow_step();
+        return;
+    }
+    if (spell == gameplay::SkillId::FanOfKnives) {
+        throw_knives();
         return;
     }
     if (is_melee(spell)) {
@@ -3954,6 +4029,12 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
     if (is_combo(skill)) {
         damage *= gameplay::combo_damage_factor(combo_step_);
     }
+    if (skill == gameplay::SkillId::DaggerCombo && fights_with_dagger()) {
+        damage *= ambush(); // the Shadowblade's first blow out of his veil
+        if (venom_left_ > 0.0F) {
+            envenom_near(centre, blow.radius);
+        }
+    }
     combat::blast(this, centre, blow.radius, damage);
     shake_ = std::max(shake_, blow.shake);
     if (is_combo(skill) && combo_step_ >= 0) {
@@ -4033,6 +4114,15 @@ void E5PlayerController::start_stance(gameplay::SkillId skill) {
     } else if (skill == gameplay::SkillId::RunicBulwark) {
         bulwark_left_ = gameplay::bulwark_seconds;
         E5Effect::spawn(effect_scene(bulwark_path), this, get_global_position());
+    } else if (skill == gameplay::SkillId::VeilOfShadows) {
+        veil_left_ = gameplay::veil_seconds;
+        E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), get_global_position());
+        if (const godot::Node3D* const wisps = E5Effect::spawn(effect_scene(veil_path), this, get_global_position())) {
+            veil_effect_ = wisps->get_instance_id();
+        }
+    } else if (skill == gameplay::SkillId::VenomEdge) {
+        venom_left_ = gameplay::venom_edge_seconds;
+        E5Effect::spawn(effect_scene(venom_edge_path), this, get_global_position());
     } else if (skill == gameplay::SkillId::NeverGiveUp) {
         resolve_left_ = gameplay::resolve_seconds;
         E5Effect::spawn(effect_scene(resolve_path), this, get_global_position());
@@ -4110,6 +4200,14 @@ void E5PlayerController::answer_blow(const godot::Vector3& from) {
 void E5PlayerController::update_counter(float delta) {
     counter_left_ = std::max(counter_left_ - delta, 0.0F);
     bulwark_left_ = std::max(bulwark_left_ - delta, 0.0F);
+    venom_left_ = std::max(venom_left_ - delta, 0.0F);
+    if (veil_left_ > 0.0F) {
+        veil_left_ = std::max(veil_left_ - delta, 0.0F);
+        if (veil_left_ <= 0.0F) {
+            // Out of the shadows, seen again.
+            E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), get_global_position());
+        }
+    }
     update_anvil(delta);
     if (stampede_.seconds_left > 0.0F) {
         // Sprintsz: the ground she pounds hurts what is near, and stone flies up round her.
@@ -4654,8 +4752,14 @@ void E5PlayerController::start_pieces(gameplay::SkillId skill) {
     ++skills_used_;
     action_skill_ = skill;
     emote_left_ = 0.0F;
+    pieces_skill_ = skill;
+    const bool flurry = skill == gameplay::SkillId::ShadowFlurry;
+    if (flurry) {
+        ambush(); // (a veil ends: he is seen in every place he is at)
+        E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), get_global_position());
+    }
     // The first blow at once, the others every quarter of a second after it.
-    pieces_ = {.seconds_left = gameplay::pieces_seconds, .until_tick = 0.0F};
+    pieces_ = {.seconds_left = flurry ? gameplay::flurry_seconds : gameplay::pieces_seconds, .until_tick = 0.0F};
     note_net_event(0, 0.0F);
 }
 
@@ -4682,26 +4786,34 @@ bool E5PlayerController::update_pieces(float delta) {
                                         : godot::Vector3(-std::sin(model_yaw_), 0.0F, -std::cos(model_yaw_));
         const godot::Vector3 place =
             victim->get_global_position() + side * (victim->get_body_radius() + pieces_stand_off);
-        // The streak she leaves from where she was to where she is.
+        // The streak she leaves from where she was to where she is (his: violet).
+        const bool flurry = pieces_skill_ == gameplay::SkillId::ShadowFlurry;
         E5LightningArc::spawn(get_parent(), get_global_position() + godot::Vector3(0.0F, 1.1F, 0.0F),
-                              place + godot::Vector3(0.0F, 1.1F, 0.0F), godot::Color(2.4F, 2.4F, 2.8F));
+                              place + godot::Vector3(0.0F, 1.1F, 0.0F),
+                              flurry ? godot::Color(1.6F, 0.7F, 2.6F) : godot::Color(2.4F, 2.4F, 2.8F));
         set_global_position(place);
         model_yaw_ = gameplay::facing_yaw(-static_cast<float>(side.x), -static_cast<float>(side.z));
         if (model_ != nullptr) {
             model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
         }
         const godot::Vector3 body = victim->get_aim_point();
-        combat::hit(victim, body, dealt(gameplay::SkillId::CutInPieces));
-        E5Effect::spawn(effect_scene(counter_strike_path), get_parent(), body);
+        combat::hit(victim, body, dealt(pieces_skill_));
+        if (flurry && venom_left_ > 0.0F) {
+            envenom(victim);
+        }
+        E5Effect::spawn(effect_scene(flurry ? shadow_hit_path : counter_strike_path), get_parent(), body);
         shake_ = std::max(shake_, pieces_shake);
-        // The blow: the combo's first two, turn about, begun anew each time.
-        combo_step_ = pieces_blows_ % 2;
+        // The blow: the combo's first two, turn about, begun anew each time (his: all three daggers').
+        combo_step_ = pieces_blows_ % (flurry ? 3 : 2);
         ++pieces_blows_;
-        show_slash_arc();
-        if (animator_.is_ready() && animator_.has_clip(clip_combo_.front())) {
+        if (!flurry) {
+            show_slash_arc(); // (his daggers leave their own violet streak: blade_trail.gd)
+        }
+        const std::array<godot::StringName, 3>& clips = flurry ? clip_dagger_combo_ : clip_combo_;
+        if (animator_.is_ready() && animator_.has_clip(clips.front())) {
             animator_.set_upper(godot::StringName());
             animator_.set_base(clip_idle_, 1.0F, 0.0F);
-            animator_.set_base(clip_combo_.at(static_cast<std::size_t>(combo_step_)), pieces_blow_pace, 0.04F);
+            animator_.set_base(clips.at(static_cast<std::size_t>(combo_step_)), pieces_blow_pace, 0.04F);
         }
     }
     // She stands where the last blow put her.
@@ -5163,6 +5275,169 @@ void E5PlayerController::hurl_stone() {
     stone->set_stun(gameplay::stone_stun_seconds, effect_scene(seismic_stun_path));
     stone->launch(direction * gameplay::stone_speed, get_rid());
     shake_ = std::max(shake_, 0.05F);
+}
+
+E5Enemy* E5PlayerController::shadow_step_target() const {
+    // The living enemy on the ground nearest to where the crosshair points, if that is near it and
+    // the enemy is within his reach.
+    const godot::Vector3 here = get_global_position();
+    const godot::Vector3 aimed = find_aim_point(here + godot::Vector3(0.0F, 1.3F, 0.0F)).position;
+    E5Enemy* found = nullptr;
+    float nearest = 0.0F;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held() || !enemy->is_on_floor()) {
+            continue;
+        }
+        godot::Vector3 to = enemy->get_global_position() - here;
+        to.y = 0.0F;
+        if (static_cast<float>(to.length()) - enemy->get_body_radius() > gameplay::shadow_step_reach) {
+            continue;
+        }
+        godot::Vector3 off = enemy->get_global_position() - aimed;
+        off.y = 0.0F;
+        const float miss = static_cast<float>(off.length()) - enemy->get_body_radius();
+        if (miss <= gameplay::shadow_step_aim_slack && (found == nullptr || miss < nearest)) {
+            found = enemy;
+            nearest = miss;
+        }
+    }
+    return found;
+}
+
+void E5PlayerController::shadow_step() {
+    step_target_ = 0;
+    if (remote_) {
+        // His new place arrives with his state: shown in a puff of shadow (apply_net_state).
+        remote_step_left_ = shadow_step_remote_seconds;
+        return;
+    }
+    E5Enemy* const target = shadow_step_target();
+    if (target == nullptr) {
+        return; // (it was there when the key was pressed; gone since: the lunge stabs the air)
+    }
+    const godot::Vector3 here = get_global_position();
+    godot::Vector3 through = target->get_global_position() - here;
+    through.y = 0.0F;
+    const godot::Vector3 way = through.length() > 0.05F
+                                   ? through.normalized()
+                                   : godot::Vector3(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw));
+    // Behind it, seen from where he was; on the ground there.
+    const godot::Vector3 behind =
+        target->get_global_position() + way * (target->get_body_radius() + gameplay::shadow_step_behind);
+    const godot::Vector3 place =
+        ground_at(behind).value_or(godot::Vector3(behind.x, target->get_global_position().y, behind.z));
+    E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), here);
+    set_global_position(place);
+    set_velocity(godot::Vector3());
+    E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), place);
+    // Facing it, and the camera turned with him, so that it is ahead again.
+    model_yaw_ = gameplay::facing_yaw(-static_cast<float>(way.x), -static_cast<float>(way.z));
+    if (model_ != nullptr) {
+        model_->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+    }
+    look_.yaw = std::atan2(static_cast<float>(way.x), static_cast<float>(way.z));
+    apply_look_to_nodes();
+    step_target_ = target->get_instance_id();
+    ++shadow_steps_;
+}
+
+void E5PlayerController::strike_shadow_step() {
+    auto* const target = godot::Object::cast_to<E5Enemy>(godot::ObjectDB::get_instance(step_target_));
+    const godot::Vector3 forward(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw));
+    const bool there = target != nullptr && target->is_alive();
+    const godot::Vector3 body =
+        there ? target->get_aim_point() : get_global_position() + forward * 1.0F + godot::Vector3(0.0F, 1.1F, 0.0F);
+    E5Effect::spawn(effect_scene(shadow_hit_path), get_parent(), body);
+    shake_ = std::max(shake_, 0.08F);
+    const float factor = ambush();
+    if (remote_ || !there) {
+        return; // (a hero shown for another player hurts nobody: that is decided where he is played)
+    }
+    combat::hit(target, body, dealt(gameplay::SkillId::ShadowStep) * factor);
+    if (venom_left_ > 0.0F) {
+        envenom(target);
+    }
+}
+
+void E5PlayerController::throw_knives() {
+    // From his throwing hand, fanned out sideways about what the crosshair covers.
+    const godot::Vector3 origin = casting_point(false);
+    const godot::Vector3 centre = (find_aim_point(origin).position - origin).normalized();
+    const float damage = dealt(gameplay::SkillId::FanOfKnives) * ambush();
+    for (int index = 0; index < gameplay::fan_knife_count; ++index) {
+        const godot::Vector3 direction =
+            centre.rotated(godot::Vector3(0.0F, 1.0F, 0.0F),
+                           gameplay::fan_yaw_offset(index, gameplay::fan_knife_count, gameplay::fan_knife_spread));
+        auto* const knife = memnew(E5SpellBolt);
+        get_parent()->add_child(knife);
+        knife->set_global_position(origin);
+        knife->set_damage(damage);
+        knife->set_trail_effect(effect_scene(shadow_knife_path));
+        knife->set_impact_effect(effect_scene(shadow_hit_path));
+        if (venom_left_ > 0.0F && damage > 0.0F) {
+            knife->set_poison(gameplay::venom_edge_tick_damage, gameplay::venom_edge_poison_seconds,
+                              gameplay::venom_edge_tick_seconds, effect_scene(poisoned_path));
+        }
+        knife->launch(direction * gameplay::fan_knife_speed, get_rid());
+        ++knives_thrown_;
+    }
+}
+
+float E5PlayerController::ambush() {
+    if (veil_left_ <= 0.0F) {
+        return 1.0F;
+    }
+    // Out of the veil with a blow: it is over, and the blow is doubled.
+    veil_left_ = 0.0F;
+    ++ambushes_;
+    if (auto* const wisps = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(veil_effect_))) {
+        wisps->queue_free();
+    }
+    veil_effect_ = 0;
+    E5Effect::spawn(effect_scene(shadow_puff_path), get_parent(), get_global_position());
+    return gameplay::veil_ambush_factor;
+}
+
+void E5PlayerController::envenom(E5Enemy* enemy) {
+    if (remote_ || enemy == nullptr || !enemy->is_alive()) {
+        return;
+    }
+    // One poison of his on an enemy: struck again, it begins anew (as the hydra's).
+    std::erase_if(venom_on_, [](const std::pair<std::uint64_t, std::uint64_t>& on) {
+        return godot::ObjectDB::get_instance(on.first) == nullptr;
+    });
+    const std::uint64_t id = enemy->get_instance_id();
+    auto on = std::ranges::find(venom_on_, id, &std::pair<std::uint64_t, std::uint64_t>::first);
+    if (on == venom_on_.end()) {
+        venom_on_.emplace_back(id, 0);
+        on = venom_on_.end() - 1;
+    } else if (auto* const old = godot::Object::cast_to<godot::Node>(godot::ObjectDB::get_instance(on->second))) {
+        old->queue_free();
+    }
+    const E5Lingering* const poison = E5Lingering::spawn(get_parent(), enemy->get_aim_point(),
+                                                         {.radius = 0.25F,
+                                                          .seconds = gameplay::venom_edge_poison_seconds,
+                                                          .tick_damage = gameplay::venom_edge_tick_damage,
+                                                          .tick_seconds = gameplay::venom_edge_tick_seconds,
+                                                          .root_seconds = 0.0F,
+                                                          .visual = effect_scene(poisoned_path),
+                                                          .cage = {}},
+                                                         enemy);
+    on->second = poison != nullptr ? poison->get_instance_id() : 0;
+    ++poisonings_;
+}
+
+void E5PlayerController::envenom_near(const godot::Vector3& centre, float radius) {
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy != nullptr && enemy->is_alive() &&
+            static_cast<float>(enemy->get_aim_point().distance_to(centre)) <= radius + enemy->get_body_radius()) {
+            envenom(enemy);
+        }
+    }
 }
 
 void E5PlayerController::update_eruptions(float delta) {
