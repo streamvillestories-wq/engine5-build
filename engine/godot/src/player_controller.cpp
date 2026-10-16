@@ -175,6 +175,10 @@ constexpr float kick_bolt_reach = 3.4F;  // metres from her
 // without its long wind-down; the spell leaves his hands at the moment they are stretched
 // furthest forward (measured in the clips, in seconds of the clip).
 constexpr float wand_tip_from_grip = 0.42F; // metres along the wand from where his fist holds it
+// The Bonecaller's souls leave from the skull in his lantern: this far along the staff (his holder's
+// +Y) from where his fist holds it, and this far off it to the lantern's side (along the holder's X).
+constexpr float lantern_skull_up = 0.56F;
+constexpr float lantern_skull_out = -0.26F; // (the lantern is turned half round in his scene)
 constexpr SpellTiming bolt_timing{.playback_scale = 1.7F, .strike_at = 1.13F, .end_at = 1.75F};
 constexpr SpellTiming fireball_timing{.playback_scale = 1.5F, .strike_at = 1.33F, .end_at = 2.1F};
 constexpr SpellTiming nova_timing{.playback_scale = 1.5F, .strike_at = 1.23F, .end_at = 2.2F};
@@ -476,6 +480,7 @@ constexpr float palm_from_wrist = 0.1F;            // metres           // metres
 const SpellTiming* timing_of(gameplay::SkillId skill) {
     switch (skill) {
     case gameplay::SkillId::ArcaneBolt:
+    case gameplay::SkillId::SoulBolt: // the same throw, of his lantern
     case gameplay::SkillId::Firebolt: // the same throw of the wand
     case gameplay::SkillId::ChainBolt:
     case gameplay::SkillId::PoisonHydra:
@@ -580,6 +585,9 @@ bool is_melee(gameplay::SkillId skill) {
 }
 
 gameplay::SkillSet skill_set_from(int value) {
+    if (value == 8) {
+        return gameplay::SkillSet::Bone;
+    }
     if (value == 7) {
         return gameplay::SkillSet::Shadow;
     }
@@ -865,7 +873,7 @@ void E5PlayerController::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "max_health", godot::PROPERTY_HINT_RANGE, "1,1000,1"),
                  "set_max_health", "get_max_health");
     ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "skill_set", godot::PROPERTY_HINT_ENUM,
-                              "Archer,Wizard,Warrior,Dwarf,Blade,ArcherFull,Mage,Shadow"),
+                              "Archer,Wizard,Warrior,Dwarf,Blade,ArcherFull,Mage,Shadow,Bone"),
                  "set_skill_set", "get_skill_set");
     for (const char* const effect :
          {"charge_effect",           "charge_full_effect",  "trail_effect",       "impact_effect",
@@ -2926,6 +2934,7 @@ void E5PlayerController::use_skill(float power) {
     case gameplay::SkillId::ThunderKick: // not bow skills; handled by the action timeline
     case gameplay::SkillId::Kingfishers:
     case gameplay::SkillId::ArcaneBolt:
+    case gameplay::SkillId::SoulBolt:
     case gameplay::SkillId::Fireball:
     case gameplay::SkillId::FrostNova:
     case gameplay::SkillId::ChainLightning:
@@ -3013,9 +3022,10 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
         clip = &clip_kick_;
     } else if (skill == gameplay::SkillId::Kingfishers) {
         clip = &clip_summon_;
-    } else if (skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::Firebolt ||
-               skill == gameplay::SkillId::ChainBolt || skill == gameplay::SkillId::PoisonHydra ||
-               skill == gameplay::SkillId::RovingHole || skill == gameplay::SkillId::Blizzard) {
+    } else if (skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::SoulBolt ||
+               skill == gameplay::SkillId::Firebolt || skill == gameplay::SkillId::ChainBolt ||
+               skill == gameplay::SkillId::PoisonHydra || skill == gameplay::SkillId::RovingHole ||
+               skill == gameplay::SkillId::Blizzard) {
         clip = &clip_bolt_;
     } else if (skill == gameplay::SkillId::Fireball) {
         clip = &clip_fireball_;
@@ -3154,10 +3164,10 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
         if (right_hand_ != nullptr && !melee) {
             E5Effect::spawn(cast_glow(skill), right_hand_, casting_point(false));
         }
-        const bool one_handed = skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::ChainLightning ||
-                                skill == gameplay::SkillId::Firebolt || skill == gameplay::SkillId::ChainBolt ||
-                                skill == gameplay::SkillId::PoisonHydra || skill == gameplay::SkillId::RovingHole ||
-                                skill == gameplay::SkillId::Blizzard;
+        const bool one_handed = skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::SoulBolt ||
+                                skill == gameplay::SkillId::ChainLightning || skill == gameplay::SkillId::Firebolt ||
+                                skill == gameplay::SkillId::ChainBolt || skill == gameplay::SkillId::PoisonHydra ||
+                                skill == gameplay::SkillId::RovingHole || skill == gameplay::SkillId::Blizzard;
         if (!one_handed && !melee && left_hand_ != nullptr) {
             E5Effect::spawn(cast_glow(skill), left_hand_,
                             left_hand_->get_global_transform().xform(godot::Vector3(0.0F, palm_from_wrist, 0.0F)));
@@ -3197,6 +3207,13 @@ godot::Vector3 E5PlayerController::casting_point(bool both_hands) const {
         if (const auto* const holder = godot::Object::cast_to<godot::Node3D>(
                 get_node_or_null(godot::NodePath("RightHandAttachment/WeaponHolder")))) {
             return holder->get_global_transform().xform(godot::Vector3(0.0F, wand_tip_from_grip, 0.0F));
+        }
+    }
+    // The Bonecaller: from the skull in his lantern.
+    if (skill_set_ == static_cast<int>(gameplay::SkillSet::Bone)) {
+        if (const auto* const holder = godot::Object::cast_to<godot::Node3D>(
+                get_node_or_null(godot::NodePath("RightHandAttachment/WeaponHolder")))) {
+            return holder->get_global_transform().xform(godot::Vector3(lantern_skull_out, lantern_skull_up, 0.0F));
         }
     }
     if (right_hand_ == nullptr) {

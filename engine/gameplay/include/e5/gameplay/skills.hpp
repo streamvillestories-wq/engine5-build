@@ -83,6 +83,8 @@ enum class SkillId : unsigned char {
     VeilOfShadows, // a stance: enemies lose sight of him, he runs faster, and his first blow out of it is doubled
     VenomEdge,     // a stance: his blades drip venom; every blow poisons what it strikes
     ShadowFlurry,  // on a full charge: he flits from enemy to enemy, a dagger blow for each
+    // The Bonecaller's (2026-10-16): his standard attack, cast as the new wizard's Arcane Bolt is.
+    SoulBolt, // a wailing soul thrown from the skull in his lantern at what the crosshair covers
 };
 
 // Which skills a character has on the bar.
@@ -98,12 +100,15 @@ enum class SkillId : unsigned char {
 // Warrior's are. The first wizard's spells stay his (`Wizard`).
 // `Shadow` is the Shadowblade (2026-10-16): the dagger combo with a dagger in each fist, and his other
 // slots open for wishes, as the new Wizard's and the new Warrior's were at first.
-enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull, Mage, Shadow };
+// `Bone` is the Bonecaller (2026-10-16), a necromancer with a skull lantern: his Soul Bolt and his
+// other slots open, as the Shadowblade's were at first.
+enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull, Mage, Shadow, Bone };
 
 // How many of a hero's quick slots are hers to fill: shown on the bar also while they are empty.
 inline constexpr int open_slots = 11;
 [[nodiscard]] constexpr int open_slot_count(SkillSet set) noexcept {
-    return set == SkillSet::Blade || set == SkillSet::Archer || set == SkillSet::Mage || set == SkillSet::Shadow
+    return set == SkillSet::Blade || set == SkillSet::Archer || set == SkillSet::Mage || set == SkillSet::Shadow ||
+                   set == SkillSet::Bone
                ? open_slots
                : 0;
 }

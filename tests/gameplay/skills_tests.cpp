@@ -558,6 +558,16 @@ TEST_CASE("the sword combo goes on while she keeps striking, and starts over whe
     CHECK(e5::gameplay::combo_damage_factor(9) == e5::gameplay::combo_damage_factor(2));
 }
 
+TEST_CASE("the Bonecaller throws souls as his standard attack", "[skills]") {
+    using e5::gameplay::SkillId;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Bone);
+    CHECK(bar.slot(0) == SkillId::SoulBolt);
+    CHECK(bar.slot(1) == SkillId::None);
+    CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Bone) == e5::gameplay::open_slots);
+    CHECK(e5::gameplay::skill_damage(SkillId::SoulBolt) == e5::gameplay::skill_damage(SkillId::ArcaneBolt));
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::SoulBolt) == 0.0F);
+}
+
 TEST_CASE("the Shadowblade has his five skills on the bar", "[skills]") {
     using e5::gameplay::SkillId;
     const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Shadow);
@@ -751,7 +761,7 @@ TEST_CASE("the charge fills from kills and a little from damage, and no further 
 
 TEST_CASE("every hero's skills are in her catalogue and have a description", "[skills]") {
     for (const SkillSet set : {SkillSet::Archer, SkillSet::Wizard, SkillSet::Warrior, SkillSet::Dwarf, SkillSet::Blade,
-                               SkillSet::ArcherFull, SkillSet::Mage, SkillSet::Shadow}) {
+                               SkillSet::ArcherFull, SkillSet::Mage, SkillSet::Shadow, SkillSet::Bone}) {
         const auto catalogue = skill_catalogue(set);
         REQUIRE_FALSE(catalogue.empty());
         const SkillBar bar(set);

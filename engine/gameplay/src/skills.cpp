@@ -25,6 +25,8 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Kingfishers", .charges = false, .kind = SkillKind::Instant};
     case SkillId::ArcaneBolt:
         return {.name = "Arcane Bolt", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::SoulBolt:
+        return {.name = "Soul Bolt", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Fireball:
         return {.name = "Fireball", .charges = false, .kind = SkillKind::Instant};
     case SkillId::FrostNova:
@@ -154,6 +156,7 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::Kingfishers:
         return 6.0F;
     case SkillId::ArcaneBolt:
+    case SkillId::SoulBolt: // his standard attack, as the wizard's is
         return 22.0F;
     case SkillId::Fireball:
         return 50.0F;
@@ -384,6 +387,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::None:
     case SkillId::Shot:
     case SkillId::ArcaneBolt:
+    case SkillId::SoulBolt:
     case SkillId::Slash:
     case SkillId::AxeCombo:
     case SkillId::DaggerCombo:
@@ -556,6 +560,8 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         slots_ = {SkillId::ArcaneBolt,  SkillId::Firebolt,      SkillId::FrostArmor, SkillId::ChainBolt,
                   SkillId::PoisonHydra, SkillId::Teleport,      SkillId::RovingHole, SkillId::Blizzard,
                   SkillId::MirrorImage, SkillId::ProtectionDome};
+    } else if (set == SkillSet::Bone) {
+        slots_ = {SkillId::SoulBolt};
     } else if (set == SkillSet::Shadow) {
         slots_ = {SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
                   SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
@@ -636,7 +642,10 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
         SkillId::Teleport,   SkillId::RovingHole, SkillId::Blizzard,   SkillId::MirrorImage, SkillId::ProtectionDome};
     static constexpr std::array shadow{SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
                                        SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
+    static constexpr std::array bone{SkillId::SoulBolt};
     switch (set) {
+    case SkillSet::Bone:
+        return bone;
     case SkillSet::Shadow:
         return shadow;
     case SkillSet::Mage:
@@ -680,6 +689,9 @@ std::string_view skill_description(SkillId skill) noexcept {
                "one peck of one bird; they peck many times.";
     case SkillId::ArcaneBolt:
         return "His standard attack: a bolt of arcane force, thrown at what the crosshair covers.";
+    case SkillId::SoulBolt:
+        return "His standard attack: a wailing soul torn from the skull in his lantern, thrown at what the "
+               "crosshair covers.";
     case SkillId::Fireball:
         return "A ball of fire that explodes where it strikes.";
     case SkillId::FrostNova:
