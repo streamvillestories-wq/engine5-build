@@ -413,6 +413,16 @@ public:
     [[nodiscard]] bool is_input_blocked() const { return input_blocked_; }
     void set_max_health(float health) { vitals_params_.max_health = health; }
     [[nodiscard]] float get_max_health() const { return vitals_params_.max_health; }
+    // Where she comes back after dying: the start, or (in a crystal core match) beside her own
+    // core. `reset_spawn` gives her the start again; `set_respawn_blocked` keeps her dead (a
+    // player out of the match watches).
+    void set_spawn_transform(const godot::Transform3D& place) { spawn_transform_ = place; }
+    [[nodiscard]] godot::Transform3D get_spawn_transform() const { return spawn_transform_; }
+    void reset_spawn() { spawn_transform_ = start_transform_; }
+    void set_respawn_seconds(float seconds) { vitals_params_.respawn_seconds = seconds; }
+    [[nodiscard]] float get_respawn_seconds() const { return vitals_params_.respawn_seconds; }
+    void set_respawn_blocked(bool blocked) { respawn_blocked_ = blocked; }
+    [[nodiscard]] bool is_respawn_blocked() const { return respawn_blocked_; }
 
     // Orbit angle of the camera about the character, in radians.
     void set_camera_yaw(float radians);
@@ -1101,6 +1111,8 @@ private:
     float damage_taken_ = 0.0F;
     int death_count_ = 0;
     godot::Transform3D spawn_transform_;
+    godot::Transform3D start_transform_; // where she was put at the start
+    bool respawn_blocked_ = false;
     E5HealthHud* health_hud_ = nullptr; // non-owning child
     E5Inventory* inventory_ = nullptr;  // non-owning child
     bool input_blocked_ = false;

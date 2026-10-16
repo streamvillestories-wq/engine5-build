@@ -7,6 +7,7 @@
 #include "black_hole.hpp"
 #include "bow_string.hpp"
 #include "cloth_simulator.hpp"
+#include "crystal_core.hpp"
 #include "day_night.hpp"
 #include "diagnostics.hpp"
 #include "e5/core/profiling.hpp"
@@ -60,6 +61,7 @@ void initialize_engine5(godot::ModuleInitializationLevel level) {
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5AimOffset);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5Effect);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5Lingering);
+    GDREGISTER_RUNTIME_CLASS(e5::bridge::E5CrystalCore);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5ArrowRain);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5SkillBarHud);
     GDREGISTER_RUNTIME_CLASS(e5::bridge::E5HealthHud);

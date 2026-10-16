@@ -17,6 +17,7 @@ add_library(e5_gameplay STATIC
     src/day_cycle.cpp
     src/patrol.cpp
     src/trails.cpp
+    src/crystal_core.cpp
 )
 add_library(e5::gameplay ALIAS e5_gameplay)
 
@@ -37,6 +38,7 @@ target_sources(e5_gameplay PUBLIC FILE_SET HEADERS BASE_DIRS include FILES
     include/e5/gameplay/day_cycle.hpp
     include/e5/gameplay/patrol.hpp
     include/e5/gameplay/trails.hpp
+    include/e5/gameplay/crystal_core.hpp
 )
 
 target_link_libraries(e5_gameplay PUBLIC e5::core)

@@ -22,6 +22,7 @@ add_executable(e5_unit_tests
     gameplay/inventory_tests.cpp
     gameplay/day_cycle_tests.cpp
     gameplay/patrol_tests.cpp
+    gameplay/crystal_core_tests.cpp
 )
 target_link_libraries(e5_unit_tests PRIVATE e5::core e5::gameplay Catch2::Catch2)
 e5_set_warnings(e5_unit_tests)
@@ -40,6 +41,22 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} -m unittest discover -s "${CMAKE_SOURCE_DIR}/tools/asset_pipeline/tests" -t "${CMAKE_SOURCE_DIR}/tools/asset_pipeline"
     )
     set_tests_properties(asset_pipeline.unit PROPERTIES LABELS unit)
+endif()
+
+# The crystal core match's rules exist twice, for the server and for the game (the server has
+# none of the game's files): the two copies must be the same.
+add_test(NAME match.state_copies
+    COMMAND ${CMAKE_COMMAND} -E compare_files "${CMAKE_SOURCE_DIR}/server/match_state.gd"
+            "${CMAKE_SOURCE_DIR}/game/net/match_state.gd"
+)
+set_tests_properties(match.state_copies PROPERTIES LABELS unit)
+# And the rules themselves, run headless in Godot (no window, no GPU): tests/godot/match_state_test.gd.
+if(DEFINED ENV{GODOT} AND EXISTS "$ENV{GODOT}")
+    add_test(NAME match.rules
+        COMMAND "$ENV{GODOT}" --headless --path "${CMAKE_SOURCE_DIR}/server"
+                --script "${CMAKE_SOURCE_DIR}/tests/godot/match_state_test.gd"
+    )
+    set_tests_properties(match.rules PROPERTIES LABELS unit TIMEOUT 60)
 endif()
 
 # End-to-end test: launches the real game in Godot, runs the benchmark scene,

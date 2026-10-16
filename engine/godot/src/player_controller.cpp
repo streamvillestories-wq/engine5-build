@@ -52,6 +52,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <span>
 #include <string>
@@ -938,6 +939,13 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("is_dead"), &E5PlayerController::is_dead);
     ClassDB::bind_method(D_METHOD("set_max_health", "health"), &E5PlayerController::set_max_health);
     ClassDB::bind_method(D_METHOD("get_max_health"), &E5PlayerController::get_max_health);
+    ClassDB::bind_method(D_METHOD("set_spawn_transform", "place"), &E5PlayerController::set_spawn_transform);
+    ClassDB::bind_method(D_METHOD("get_spawn_transform"), &E5PlayerController::get_spawn_transform);
+    ClassDB::bind_method(D_METHOD("reset_spawn"), &E5PlayerController::reset_spawn);
+    ClassDB::bind_method(D_METHOD("set_respawn_seconds", "seconds"), &E5PlayerController::set_respawn_seconds);
+    ClassDB::bind_method(D_METHOD("get_respawn_seconds"), &E5PlayerController::get_respawn_seconds);
+    ClassDB::bind_method(D_METHOD("set_respawn_blocked", "blocked"), &E5PlayerController::set_respawn_blocked);
+    ClassDB::bind_method(D_METHOD("is_respawn_blocked"), &E5PlayerController::is_respawn_blocked);
     ClassDB::bind_method(D_METHOD("select_skill", "slot"), &E5PlayerController::select_skill);
     ClassDB::bind_method(D_METHOD("get_selected_skill"), &E5PlayerController::get_selected_skill);
     ClassDB::bind_method(D_METHOD("get_charge"), &E5PlayerController::get_charge);
@@ -1121,6 +1129,7 @@ void E5PlayerController::_ready() {
     clip_ride_ = godot::StringName("ride");
     dodge_clip_ = clip_dodge_;
     spawn_transform_ = get_global_transform();
+    start_transform_ = spawn_transform_;
     vitals_ = gameplay::full_vitals(vitals_params_);
     inventory_ = memnew(E5Inventory);
     inventory_->set_name(E5Inventory::node_name);
@@ -2455,6 +2464,9 @@ gameplay::MotorParams E5PlayerController::motor_params() const {
 
 gameplay::VitalsParams E5PlayerController::effective_vitals() const {
     gameplay::VitalsParams params = vitals_params_;
+    if (respawn_blocked_) {
+        params.respawn_seconds = std::numeric_limits<float>::max(); // out of the match: she stays down
+    }
     if (inventory_ != nullptr) {
         const gameplay::Bonuses worn = inventory_->bonuses();
         params.max_health += worn.health;
@@ -2578,7 +2590,8 @@ bool E5PlayerController::update_vitals(float delta) {
     }
     if (health_hud_ != nullptr) {
         health_hud_->show_health(vitals_.health, vitals_params.max_health);
-        health_hud_->show_respawn(vitals_.dead ? vitals_params.respawn_seconds - vitals_.seconds_dead : -1.0F);
+        health_hud_->show_respawn(
+            vitals_.dead && !respawn_blocked_ ? vitals_params.respawn_seconds - vitals_.seconds_dead : -1.0F);
     }
     if (!vitals_.dead) {
         return false;

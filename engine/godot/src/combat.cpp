@@ -1,5 +1,6 @@
 #include "combat.hpp"
 
+#include "crystal_core.hpp"
 #include "effect.hpp"
 #include "enemy.hpp"
 #include "lightning_arc.hpp"
@@ -47,6 +48,10 @@ bool hit(godot::Object* struck, const godot::Vector3& position, float damage, in
     }
     if (auto* const target = godot::Object::cast_to<E5Target>(struck)) {
         target->register_hit(position, score_multiplier);
+        return true;
+    }
+    if (auto* const core = godot::Object::cast_to<E5CrystalCore>(struck)) {
+        core->take_damage(damage, position);
         return true;
     }
     return false;
@@ -103,6 +108,19 @@ int blast(godot::Node* context, const godot::Vector3& centre, float radius, floa
         if (body.distance_to(centre) <= radius + enemy->get_body_radius()) {
             credit(enemy, damage);
             enemy->take_damage(damage, body);
+            ++count;
+        }
+    }
+    // A crystal core in a match (it counts what it takes for the server; see crystal_core.hpp).
+    const godot::TypedArray<godot::Node> cores = context->get_tree()->get_nodes_in_group(E5CrystalCore::group_name);
+    for (const godot::Variant& node : cores) {
+        auto* const core = godot::Object::cast_to<E5CrystalCore>(node);
+        if (core == nullptr || !core->is_hittable()) {
+            continue;
+        }
+        const godot::Vector3 body = core->get_aim_point();
+        if (body.distance_to(centre) <= radius + core->get_body_radius()) {
+            core->take_damage(damage, body);
             ++count;
         }
     }

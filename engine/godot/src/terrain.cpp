@@ -15,6 +15,7 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
@@ -29,6 +30,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <numbers>
 #include <span>
 #include <vector>
 
@@ -119,6 +121,8 @@ void E5Terrain::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_mountain_pass"), &E5Terrain::get_mountain_pass);
     ClassDB::bind_method(D_METHOD("river_distance_at", "world_x", "world_z"), &E5Terrain::river_distance_at);
     ClassDB::bind_method(D_METHOD("lake_distance_at", "world_x", "world_z"), &E5Terrain::lake_distance_at);
+    ClassDB::bind_method(D_METHOD("judge_core_site", "world_x", "world_z", "keep_out", "underground", "nearest_core"),
+                         &E5Terrain::judge_core_site);
     ClassDB::bind_method(D_METHOD("set_paths", "paths"), &E5Terrain::set_paths);
     ClassDB::bind_method(D_METHOD("get_paths"), &E5Terrain::get_paths);
     ClassDB::bind_method(D_METHOD("set_trails", "trails"), &E5Terrain::set_trails);
@@ -405,6 +409,43 @@ float E5Terrain::lake_distance_at(float world_x, float world_z) const {
     const godot::Vector3 origin = get_global_position();
     return gameplay::island_lake_distance(params_, world_x - static_cast<float>(origin.x),
                                           world_z - static_cast<float>(origin.z));
+}
+
+godot::Dictionary E5Terrain::judge_core_site(float world_x, float world_z, bool keep_out, bool underground,
+                                             float nearest_core) const {
+    const gameplay::CoreRules rules{};
+    gameplay::CoreSiteProbe probe{};
+    probe.height = height_at(world_x, world_z);
+    probe.lowest = probe.height;
+    probe.highest = probe.height;
+    // The plinth is about 2.6 m across: the ground under its rim, at eight places round it.
+    constexpr int ring_samples = 8;
+    constexpr float ring_radius = 1.4F;
+    for (int index = 0; index < ring_samples; ++index) {
+        const float angle = static_cast<float>(index) * std::numbers::pi_v<float> * 2.0F / ring_samples;
+        const float height =
+            height_at(world_x + std::cos(angle) * ring_radius, world_z + std::sin(angle) * ring_radius);
+        probe.lowest = std::min(probe.lowest, height);
+        probe.highest = std::max(probe.highest, height);
+    }
+    const float sea = static_cast<float>(get_global_position().y);
+    probe.height -= sea;
+    probe.lowest -= sea;
+    probe.highest -= sea;
+    probe.slope = slope_at(world_x, world_z);
+    probe.road_distance = path_distance_at(world_x, world_z);
+    probe.river_distance = river_distance_at(world_x, world_z) - params_.river_width * 0.5F;
+    probe.lake_distance = lake_distance_at(world_x, world_z);
+    probe.underground = underground;
+    probe.keep_out = keep_out;
+    probe.nearest_core = nearest_core;
+    const gameplay::CoreSite site = gameplay::judge_core_site(probe, rules);
+    godot::Dictionary verdict;
+    verdict["ok"] = site == gameplay::CoreSite::Ok;
+    verdict["site"] = static_cast<int>(site);
+    verdict["reason"] = godot::String(gameplay::core_site_reason(site));
+    verdict["height"] = probe.height + sea;
+    return verdict;
 }
 
 float E5Terrain::ground(float x, float z) const {

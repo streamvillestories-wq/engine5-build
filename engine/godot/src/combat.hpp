@@ -15,8 +15,8 @@ namespace e5::bridge::combat {
 // machine, which decides (E5PlayerController::take_outgoing_damage).
 
 // A direct hit on `struck` (the collider an arrow ran into, the thing a bird
-// pecked). Enemies take `damage`; practice targets score by ring, times
-// `score_multiplier`. Returns false if `struck` is neither.
+// pecked). Enemies and crystal cores take `damage`; practice targets score by ring, times
+// `score_multiplier`. Returns false if `struck` is none of them.
 bool hit(godot::Object* struck, const godot::Vector3& position, float damage, int score_multiplier = 1);
 
 // An area effect: everything within `radius` of `centre` is hit. `context` is

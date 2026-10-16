@@ -1,5 +1,6 @@
 #pragma once
 
+#include "e5/gameplay/crystal_core.hpp"
 #include "e5/gameplay/island.hpp"
 #include "e5/gameplay/paths.hpp"
 #include "e5/gameplay/trails.hpp"
@@ -8,6 +9,7 @@
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 
@@ -125,6 +127,12 @@ public:
     // Metres to the middle of the river and to the nearest lake's shore (negative in it).
     [[nodiscard]] float river_distance_at(float world_x, float world_z) const;
     [[nodiscard]] float lake_distance_at(float world_x, float world_z) const;
+    // Whether a crystal core may stand at a place (e5/gameplay/crystal_core.hpp): the ground is
+    // read here, what only the game knows (a camp or a landmark there, under the island, the
+    // nearest other core) is handed in. Returns "ok", "site" (the CoreSite's number), "reason"
+    // (words for the player) and "height" (the ground there).
+    [[nodiscard]] godot::Dictionary judge_core_site(float world_x, float world_z, bool keep_out, bool underground,
+                                                    float nearest_core) const;
     void set_paths(const godot::Array& paths) { paths_ = paths; }
     [[nodiscard]] godot::Array get_paths() const { return paths_; }
     void set_trails(const godot::Array& trails) { trails_ = trails; }

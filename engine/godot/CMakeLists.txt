@@ -24,6 +24,7 @@ add_library(e5_godot SHARED
     src/spell_bolt.cpp
     src/spell_bolt.hpp
     src/target.cpp
+    src/crystal_core.cpp
     src/terrain.cpp
     src/target.hpp
     src/bow_string.cpp
