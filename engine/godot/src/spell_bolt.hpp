@@ -5,6 +5,8 @@
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
+#include <cstdint>
+
 namespace e5::bridge {
 
 // A spell in flight: a glowing effect that flies in a straight line (no
@@ -45,6 +47,9 @@ public:
     // Makes the spell steer towards a place in the world: it may start in any direction and
     // bends its path there, speeding up to `speed`. `turn` is how hard it steers (m/s^2).
     void set_homing(const godot::Vector3& target, float speed, float turn);
+    // With set_homing: it steers towards this enemy's aim point instead (an E5Enemy; anything else is
+    // not followed), for as long as it is there and alive; then towards where it was last.
+    void set_homing_on(const godot::Node3D* target);
     // Thrown by an enemy: it hurts the player and nothing else, and flies through other enemies.
     void set_hostile(bool hostile) { hostile_ = hostile; }
     // Seconds the spell hangs where it is before it starts to fly.
@@ -75,6 +80,7 @@ private:
     godot::Vector3 homing_target_;
     float homing_speed_ = 0.0F; // 0 = flies straight
     float homing_turn_ = 0.0F;
+    std::uint64_t homing_on_ = 0; // an instance id: it may be gone
     float launch_delay_ = 0.0F;
     double age_seconds_ = 0.0;
     bool flying_ = false;

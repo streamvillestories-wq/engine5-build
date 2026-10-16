@@ -53,7 +53,7 @@ bool hit(godot::Object* struck, const godot::Vector3& position, float damage, in
 }
 
 int chain(godot::Node* parent, const godot::Vector3& from, godot::Object* first, float damage, int jumps, float reach,
-          const godot::Color& colour, const godot::Ref<godot::PackedScene>& effect) {
+          const godot::Color& colour, const godot::Ref<godot::PackedScene>& effect, float gain) {
     if (parent == nullptr || !parent->is_inside_tree()) {
         return 0;
     }
@@ -67,6 +67,7 @@ int chain(godot::Node* parent, const godot::Vector3& from, godot::Object* first,
     }
     godot::Vector3 current = from;
     int reached = 0;
+    float strength = damage;
     for (int jump = 0; jump < jumps && !untouched.empty(); ++jump) {
         const auto nearest = std::ranges::min_element(untouched, {}, [&current](const E5Enemy* enemy) {
             return enemy->get_aim_point().distance_squared_to(current);
@@ -77,7 +78,8 @@ int chain(godot::Node* parent, const godot::Vector3& from, godot::Object* first,
         }
         E5LightningArc::spawn(parent, current, body, colour);
         E5Effect::spawn(effect, parent, body);
-        hit(*nearest, body, damage);
+        hit(*nearest, body, strength);
+        strength *= gain;
         current = body;
         untouched.erase(nearest);
         ++reached;

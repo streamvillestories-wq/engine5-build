@@ -251,6 +251,26 @@ void E5Arrow::leave_behind(const godot::Vector3& hit_position, godot::Object* co
     } else if (special_ == Special::Storm) {
         combat::chain(get_parent(), hit_position, collider, special_damage_, gameplay::storm_jumps,
                       gameplay::storm_jump_reach, godot::Color(0.5F, 0.9F, 3.0F), special_first_);
+    } else if (special_ == Special::Ricochet) {
+        // From what it struck on to the next, pale gold, each bounce weaker than the one before.
+        combat::chain(get_parent(), hit_position, collider, special_damage_, gameplay::ricochet_bounces,
+                      gameplay::ricochet_reach, godot::Color(2.4F, 1.9F, 0.9F), special_first_,
+                      gameplay::ricochet_share);
+    } else if (special_ == Special::Mark) {
+        // Her machine's copy of the enemy alone: only her blows are struck there (no skill helps
+        // another player). The mark hangs on it for as long as it lasts.
+        if (enemy != nullptr && enemy->is_alive() && special_damage_ > 0.0F) {
+            enemy->curse(gameplay::mark_factor, gameplay::mark_seconds);
+            if (godot::Node3D* const mark = E5Effect::spawn(special_first_, enemy, enemy->get_global_position())) {
+                // Its ring of stars a little over the head, whatever the enemy's size (the aim point is
+                // the middle of the body).
+                if (auto* const crown =
+                        godot::Object::cast_to<godot::Node3D>(mark->get_node_or_null(godot::NodePath("Crown")))) {
+                    const float middle = static_cast<float>(enemy->get_aim_point().y - enemy->get_global_position().y);
+                    crown->set_position(godot::Vector3(0.0F, 2.0F * middle + 0.3F, 0.0F));
+                }
+            }
+        }
     } else if (special_ == Special::Bramble) {
         E5Lingering::spawn(get_parent(), hit_position,
                            {.radius = gameplay::bramble_radius,

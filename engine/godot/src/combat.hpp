@@ -25,9 +25,10 @@ int blast(godot::Node* context, const godot::Vector3& centre, float radius, floa
 
 // Lightning that leaps on from where something struck: from `from` to the nearest enemy within
 // `reach` that it has not touched (`first`, what was struck, counts as touched), and on from
-// that one, `jumps` times at most. Each takes `damage`. The arcs and `effect` at every enemy
-// are drawn under `parent`. Returns how many it reached.
+// that one, `jumps` times at most. The first takes `damage`, each after it `gain` times the one
+// before (the Archer's Ricochet Arrow: 0.8). The arcs and `effect` at every enemy are drawn under
+// `parent`. Returns how many it reached.
 int chain(godot::Node* parent, const godot::Vector3& from, godot::Object* first, float damage, int jumps, float reach,
-          const godot::Color& colour, const godot::Ref<godot::PackedScene>& effect);
+          const godot::Color& colour, const godot::Ref<godot::PackedScene>& effect, float gain = 1.0F);
 
 } // namespace e5::bridge::combat

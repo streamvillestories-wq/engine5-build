@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 using Catch::Approx;
@@ -16,12 +17,12 @@ TEST_CASE("the archer has her shot, the skills wished for her and slots to fill"
     CHECK(bar.slot(2) == SkillId::Disguise);   // "the first free slot"
     CHECK(bar.slot(3) == SkillId::BearTrap);   // "the first free slot" too
     CHECK(bar.slot(5) == SkillId::GatlingGun); // wished for key 6
-    for (std::size_t slot = 4; slot < SkillBar::slot_count; ++slot) {
-        if (slot != 5) {
-            CHECK(bar.slot(slot) == SkillId::None);
-        }
+    // Key 5 and keys 7 to 10 hold her five of 2026-10-16 (see "the Archer's five ..." below); the
+    // last two are free.
+    for (std::size_t slot = 10; slot < SkillBar::slot_count; ++slot) {
+        CHECK(bar.slot(slot) == SkillId::None);
     }
-    CHECK_FALSE(bar.select(4)); // an empty slot is not chosen
+    CHECK_FALSE(bar.select(10)); // an empty slot is not chosen
     CHECK(bar.select(5));
     CHECK(open_slot_count(SkillSet::Archer) == 11);
     CHECK(open_slot_count(SkillSet::ArcherFull) == 0);
@@ -225,10 +226,12 @@ TEST_CASE("the new warrior has her sword's combo, the skills wished for her and 
     CHECK(bar.slot(6) == SkillId::NeverGiveUp);
     CHECK(bar.slot(7) == SkillId::Stampede);
     CHECK(bar.slot(8) == SkillId::CutInPieces);
-    for (std::size_t slot = 9; slot < e5::gameplay::SkillBar::slot_count; ++slot) {
-        CHECK(bar.slot(slot) == SkillId::None);
-    }
+    // The first three of her five of 2026-10-16 after them (see "the new Warrior's five ...").
+    CHECK(bar.slot(9) == SkillId::Charge);
+    CHECK(bar.slot(10) == SkillId::RainOfBlades);
+    CHECK(bar.slot(11) == SkillId::Execute);
     // An empty slot cannot be chosen.
+    CHECK(bar.clear(9));
     CHECK_FALSE(bar.select(9));
     CHECK(bar.selected() == SkillId::Slash);
     CHECK(bar.select(1));
@@ -362,7 +365,7 @@ TEST_CASE("the vine tower grows by how long it was charged", "[skills]") {
     CHECK(e5::gameplay::skill_info(SkillId::VineTower).kind == e5::gameplay::SkillKind::Instant);
     // The players' archer has it beside her shot; the bar kept for tests is as it was.
     CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(1) == SkillId::VineTower);
-    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(4) == SkillId::None);
+    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::Archer).slot(4) == SkillId::RicochetArrow);
     CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::ArcherFull).slot(1) == SkillId::PowerShot);
     // "Rarely"; let go too soon, sooner.
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::VineTower) >= 20.0F);
@@ -584,6 +587,208 @@ TEST_CASE("the Bonecaller throws souls as his standard attack", "[skills]") {
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::SoulBolt) == 0.0F);
 }
 
+TEST_CASE("the Archer's five of 2026-10-16 fill her players' bar", "[skills]") {
+    using e5::gameplay::SkillId;
+    using e5::gameplay::SkillKind;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Archer);
+    // Her wishes keep their keys; the five fill key 5 and follow the gun.
+    CHECK(bar.slot(0) == SkillId::Shot);
+    CHECK(bar.slot(3) == SkillId::BearTrap);
+    CHECK(bar.slot(4) == SkillId::RicochetArrow);
+    CHECK(bar.slot(5) == SkillId::GatlingGun);
+    CHECK(bar.slot(6) == SkillId::HuntersMark);
+    CHECK(bar.slot(7) == SkillId::SpiritWolf);
+    CHECK(bar.slot(8) == SkillId::OwlSentinel);
+    CHECK(bar.slot(9) == SkillId::EvasiveShot);
+    CHECK(bar.slot(10) == SkillId::None);
+    // The full bar of the test runs is what it was.
+    CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::ArcherFull).slot(4) == SkillId::FireArrow);
+    // The two arrows are drawn and loosed with her bow; the others play through on the key.
+    CHECK(e5::gameplay::skill_info(SkillId::RicochetArrow).kind == SkillKind::Bow);
+    CHECK(e5::gameplay::skill_info(SkillId::HuntersMark).kind == SkillKind::Bow);
+    for (const SkillId skill : {SkillId::SpiritWolf, SkillId::OwlSentinel, SkillId::EvasiveShot}) {
+        CHECK(e5::gameplay::skill_info(skill).kind == SkillKind::Instant);
+    }
+    for (const SkillId skill : {SkillId::RicochetArrow, SkillId::HuntersMark, SkillId::SpiritWolf, SkillId::OwlSentinel,
+                                SkillId::EvasiveShot}) {
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+        CHECK_FALSE(e5::gameplay::skill_needs_charge(skill));
+        CHECK_FALSE(e5::gameplay::skill_description(skill).empty());
+    }
+    // Each bounce four fifths of the one before; no more than four bounces count.
+    CHECK(e5::gameplay::ricochet_damage_factor(0) == 1.0F);
+    CHECK(e5::gameplay::ricochet_damage_factor(1) == Catch::Approx(0.8F));
+    CHECK(e5::gameplay::ricochet_damage_factor(4) == Catch::Approx(0.4096F));
+    CHECK(e5::gameplay::ricochet_damage_factor(9) == e5::gameplay::ricochet_damage_factor(4));
+    // The mark and the owl run out before they are ready again.
+    CHECK(e5::gameplay::mark_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::HuntersMark));
+    CHECK(e5::gameplay::owl_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::OwlSentinel));
+    CHECK(e5::gameplay::mark_factor > 1.0F);
+    // The wolf: 18 m in 1.6 s.
+    CHECK(e5::gameplay::wolf_speed() == Catch::Approx(11.25F));
+    // The three arrows of the Evasive Shot do less than two plain shots: it is for getting away.
+    CHECK(e5::gameplay::skill_damage(SkillId::EvasiveShot) * e5::gameplay::evasive_arrows <
+          e5::gameplay::skill_damage(SkillId::Shot) * 2.0F);
+}
+
+TEST_CASE("the new Wizard's five of 2026-10-16 are on his bar and in his book", "[skills]") {
+    using e5::gameplay::SkillId;
+    using e5::gameplay::SkillKind;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Mage);
+    // His wishes keep their keys; the first two of the five fill the last two slots.
+    CHECK(bar.slot(0) == SkillId::ArcaneBolt);
+    CHECK(bar.slot(9) == SkillId::ProtectionDome);
+    CHECK(bar.slot(10) == SkillId::ArcaneOrb);
+    CHECK(bar.slot(11) == SkillId::GravityWell);
+    // All five are in his book, so the other three can be dragged onto the bar.
+    const auto his = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Mage);
+    const std::array five{SkillId::ArcaneOrb, SkillId::GravityWell, SkillId::LightningPylon, SkillId::IcePrison,
+                          SkillId::ArcaneMissiles};
+    for (const SkillId skill : five) {
+        CHECK(std::ranges::find(his, skill) != his.end());
+        // Thrown with his bolt's cast, played through on the key; none takes a charge.
+        CHECK(e5::gameplay::skill_info(skill).kind == SkillKind::Instant);
+        CHECK_FALSE(e5::gameplay::skill_is_stance(skill));
+        CHECK_FALSE(e5::gameplay::skill_needs_charge(skill));
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+        CHECK_FALSE(e5::gameplay::skill_description(skill).empty());
+    }
+    // None of them is in the first wizard's book: they are his.
+    const auto first = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Wizard);
+    CHECK(std::ranges::find(first, SkillId::ArcaneOrb) == first.end());
+    // The orb: 20 m at 8 m/s, its burst half of a touch.
+    CHECK(e5::gameplay::orb_seconds() == Catch::Approx(2.5F));
+    CHECK(e5::gameplay::skill_damage(SkillId::ArcaneOrb) * e5::gameplay::orb_burst_share == Catch::Approx(15.0F));
+    // What stands for a while is gone before it is ready again.
+    CHECK(e5::gameplay::well_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::GravityWell));
+    CHECK(e5::gameplay::pylon_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::LightningPylon));
+    CHECK(e5::gameplay::prison_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::IcePrison));
+    // The well draws from further than it implodes.
+    CHECK(e5::gameplay::well_radius < e5::gameplay::well_pull_radius);
+    // The pylon does as much a second as his hydra's spits, without their poison.
+    CHECK(e5::gameplay::skill_damage(SkillId::LightningPylon) / e5::gameplay::pylon_zap_seconds ==
+          Catch::Approx(e5::gameplay::skill_damage(SkillId::PoisonHydra) / e5::gameplay::hydra_spit_seconds +
+                        e5::gameplay::hydra_poison_damage / e5::gameplay::hydra_poison_seconds)
+              .margin(1.0));
+    // The missiles: all five leave within a bolt's cast, and do about two bolts.
+    CHECK(e5::gameplay::missile_interval * static_cast<float>(e5::gameplay::missile_count - 1) < 0.6F);
+    CHECK(e5::gameplay::skill_damage(SkillId::ArcaneMissiles) * static_cast<float>(e5::gameplay::missile_count) ==
+          Catch::Approx(2.0F * e5::gameplay::skill_damage(SkillId::ArcaneBolt)).margin(2.0));
+}
+
+TEST_CASE("the new Warrior's five of 2026-10-16 are on her bar and in her book", "[skills]") {
+    using e5::gameplay::SkillId;
+    using e5::gameplay::SkillKind;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Blade);
+    // Her wishes keep their keys; the first three of the five fill the last three slots.
+    CHECK(bar.slot(8) == SkillId::CutInPieces);
+    CHECK(bar.slot(9) == SkillId::Charge);
+    CHECK(bar.slot(10) == SkillId::RainOfBlades);
+    CHECK(bar.slot(11) == SkillId::Execute);
+    // All five are in her book, so the other two can be dragged onto the bar.
+    const auto hers = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Blade);
+    const std::array five{SkillId::Charge, SkillId::RainOfBlades, SkillId::Execute, SkillId::WarBanner,
+                          SkillId::SwordThrow};
+    for (const SkillId skill : five) {
+        CHECK(std::ranges::find(hers, skill) != hers.end());
+        // Struck with her sword, played through on the key; none takes a charge.
+        CHECK(e5::gameplay::skill_info(skill).kind == SkillKind::Instant);
+        CHECK_FALSE(e5::gameplay::skill_is_stance(skill));
+        CHECK_FALSE(e5::gameplay::skill_needs_charge(skill));
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+        CHECK_FALSE(e5::gameplay::skill_description(skill).empty());
+    }
+    // The banner strikes nobody; the others do.
+    CHECK(e5::gameplay::skill_damage(SkillId::WarBanner) == 0.0F);
+    for (const SkillId skill : {SkillId::Charge, SkillId::RainOfBlades, SkillId::Execute, SkillId::SwordThrow}) {
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+    }
+    // None of them is the first warrior's.
+    const auto first = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Warrior);
+    CHECK(std::ranges::find(first, SkillId::Charge) == first.end());
+    // The charge: 9 m in 0.45 s, about her Jump Attack's blow.
+    CHECK(e5::gameplay::charge_speed() == Catch::Approx(20.0F));
+    CHECK(e5::gameplay::skill_damage(SkillId::Charge) ==
+          Catch::Approx(e5::gameplay::skill_damage(SkillId::JumpAttack)).margin(2.0));
+    // The rain: eight swords, all fallen in 1.2 s, each within reach of the place aimed at.
+    CHECK(e5::gameplay::skill_damage(SkillId::RainOfBlades) * static_cast<float>(e5::gameplay::blade_rain_count) ==
+          Catch::Approx(112.0F));
+    CHECK(e5::gameplay::blade_rain_radius < e5::gameplay::blade_rain_spread);
+    // Execute: 2.5 times below three tenths of its health, not above, not on the dead.
+    CHECK(e5::gameplay::execute_damage_factor(29.0F, 100.0F) == Catch::Approx(2.5F));
+    CHECK(e5::gameplay::execute_damage_factor(31.0F, 100.0F) == Catch::Approx(1.0F));
+    CHECK(e5::gameplay::execute_damage_factor(0.0F, 100.0F) == Catch::Approx(1.0F));
+    CHECK(e5::gameplay::execute_damage_factor(10.0F, 0.0F) == Catch::Approx(1.0F));
+    CHECK(e5::gameplay::skill_damage(SkillId::Execute) * e5::gameplay::execute_factor == Catch::Approx(100.0F));
+    // The banner is gone before it can be planted again; its healing is a fifth of her health in all.
+    CHECK(e5::gameplay::banner_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::WarBanner));
+    CHECK(e5::gameplay::banner_heal_share * e5::gameplay::banner_seconds == Catch::Approx(0.2F));
+    CHECK(e5::gameplay::banner_blow_factor > 1.0F);
+    // The throw: out in well under a second, two sword blows to what it passes both ways.
+    CHECK(e5::gameplay::throw_out_seconds() < 0.7F);
+    CHECK(2.0F * e5::gameplay::throw_out_seconds() < e5::gameplay::throw_longest_seconds);
+    CHECK(e5::gameplay::skill_damage(SkillId::SwordThrow) == Catch::Approx(e5::gameplay::skill_damage(SkillId::Slash)));
+}
+
+TEST_CASE("the new Dwarf's five of 2026-10-16 are on his bar and in his book", "[skills]") {
+    using e5::gameplay::SkillId;
+    using e5::gameplay::SkillKind;
+    const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Dwarf);
+    // His four of 2026-10-15 keep their keys; the first three of the five fill the last three slots.
+    CHECK(bar.slot(8) == SkillId::Stonebreaker);
+    CHECK(bar.slot(9) == SkillId::Tremor);
+    CHECK(bar.slot(10) == SkillId::DwarvenCannon);
+    CHECK(bar.slot(11) == SkillId::ThrowingAxe);
+    // All five are in his book, so the other two can be dragged onto the bar.
+    const auto his = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Dwarf);
+    const std::array five{SkillId::Tremor, SkillId::DwarvenCannon, SkillId::ThrowingAxe, SkillId::StoneBrew,
+                          SkillId::PowderKeg};
+    for (const SkillId skill : five) {
+        CHECK(std::ranges::find(his, skill) != his.end());
+        CHECK(e5::gameplay::skill_info(skill).kind == SkillKind::Instant);
+        CHECK_FALSE(e5::gameplay::skill_needs_charge(skill));
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+        CHECK_FALSE(e5::gameplay::skill_description(skill).empty());
+    }
+    // The brew is a stance and strikes nobody; the others are played through on the key and strike.
+    CHECK(e5::gameplay::skill_is_stance(SkillId::StoneBrew));
+    CHECK(e5::gameplay::skill_damage(SkillId::StoneBrew) == 0.0F);
+    for (const SkillId skill : {SkillId::Tremor, SkillId::DwarvenCannon, SkillId::ThrowingAxe, SkillId::PowderKeg}) {
+        CHECK_FALSE(e5::gameplay::skill_is_stance(skill));
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+    }
+    // None of them is another hero's.
+    const auto blade = e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Blade);
+    CHECK(std::ranges::find(blade, SkillId::ThrowingAxe) == blade.end());
+    // The tremor: three rings 3, 6 and 9 m wide, all gone out within a second; what stands close takes
+    // all three (about his Earthbreaker), what stands at the edge one.
+    CHECK(e5::gameplay::tremor_radius(0) == Catch::Approx(3.0F));
+    CHECK(e5::gameplay::tremor_radius(e5::gameplay::tremor_rings - 1) == Catch::Approx(9.0F));
+    CHECK(e5::gameplay::tremor_ring_interval * static_cast<float>(e5::gameplay::tremor_rings - 1) < 1.0F);
+    CHECK(e5::gameplay::skill_damage(SkillId::Tremor) * static_cast<float>(e5::gameplay::tremor_rings) ==
+          Catch::Approx(e5::gameplay::skill_damage(SkillId::Earthbreaker)).margin(12.0));
+    // The cannon: eight shots in its time, gone before it can be set down again, and it reaches as far as
+    // it may be set down.
+    CHECK(e5::gameplay::cannon_seconds / e5::gameplay::cannon_shot_seconds == Catch::Approx(8.0F));
+    CHECK(e5::gameplay::cannon_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::DwarvenCannon));
+    CHECK(e5::gameplay::cannon_range >= e5::gameplay::cannon_blast_radius * 4.0F);
+    // The axe: out in well under a second and back in time, a little harder than her sword.
+    CHECK(e5::gameplay::axe_throw_out_seconds() < 0.7F);
+    CHECK(2.0F * e5::gameplay::axe_throw_out_seconds() < e5::gameplay::throw_longest_seconds);
+    CHECK(e5::gameplay::skill_damage(SkillId::ThrowingAxe) > e5::gameplay::skill_damage(SkillId::SwordThrow));
+    // The brew: half of a blow, a tenth of his health back over its time, gone before it is ready again.
+    CHECK(e5::gameplay::stone_brew_damage_share == Catch::Approx(0.5F));
+    CHECK(e5::gameplay::stone_brew_heal_share * e5::gameplay::stone_brew_seconds == Catch::Approx(0.105F));
+    CHECK(e5::gameplay::stone_brew_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::StoneBrew));
+    // The keg: what sets it off stands well inside its blast; it lies further off than that, so it does
+    // not go off on him.
+    CHECK(e5::gameplay::keg_trigger_radius < e5::gameplay::keg_blast_radius);
+    CHECK(e5::gameplay::keg_ahead > e5::gameplay::keg_trigger_radius);
+    CHECK(e5::gameplay::keg_fuse_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::PowderKeg));
+}
+
 TEST_CASE("the Shadowblade has his five skills on the bar", "[skills]") {
     using e5::gameplay::SkillId;
     const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Shadow);
@@ -624,7 +829,8 @@ TEST_CASE("the dwarf has his own skills on the bar", "[skills]") {
     CHECK(bar.slot(6) == SkillId::RunicBulwark);
     CHECK(bar.slot(7) == SkillId::AncestralAnvil);
     CHECK(bar.slot(8) == SkillId::Stonebreaker);
-    CHECK(bar.slot(9) == SkillId::None);
+    // The first three of his five of 2026-10-16 after them (see "the new Dwarf's five ...").
+    CHECK(bar.slot(9) == SkillId::Tremor);
     CHECK(e5::gameplay::skill_is_stance(SkillId::RunicBulwark));
     CHECK(e5::gameplay::skill_damage(SkillId::RunicBulwark) == 0.0F);
     CHECK(e5::gameplay::bulwark_damage_share < 0.5F); // less than half of a blow gets through
@@ -826,7 +1032,7 @@ TEST_CASE("the bar can be rearranged, but not its standard attack", "[skills]") 
     CHECK(bar.find(SkillId::CounterAttack) == SkillBar::slot_count);
     CHECK_FALSE(bar.clear(2));
 
-    // And back from the book into an empty slot.
+    // And back from the book into a slot (it takes the place of what was there).
     CHECK(bar.assign(11, SkillId::CounterAttack));
     CHECK(bar.find(SkillId::CounterAttack) == 11);
 }
@@ -847,9 +1053,9 @@ TEST_CASE("the new wizard has his arcane bolt and slots to fill", "[skills]") {
     CHECK(e5::gameplay::skill_damage(SkillId::ProtectionDome) == 0.0F);
     CHECK(e5::gameplay::dome_seconds == 6.0F); // as the keeper said
     CHECK(e5::gameplay::dome_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::ProtectionDome));
-    for (std::size_t slot = 10; slot < SkillBar::slot_count; ++slot) {
-        CHECK(bar.slot(slot) == SkillId::None);
-    }
+    // The two slots after key 0 hold the first two of his five of 2026-10-16 (see "the new Wizard's five ...").
+    CHECK(bar.slot(10) == SkillId::ArcaneOrb);
+    CHECK(bar.slot(11) == SkillId::GravityWell);
     CHECK(open_slot_count(SkillSet::Mage) == open_slots);
     // The first wizard keeps all of his.
     CHECK(SkillBar(SkillSet::Wizard).slot(6) == SkillId::BlackHole);

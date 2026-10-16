@@ -37,6 +37,46 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Bone Armor", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Requiem:
         return {.name = "Requiem", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::RicochetArrow:
+        return {.name = "Ricochet Arrow", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::HuntersMark:
+        return {.name = "Hunter's Mark", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::SpiritWolf:
+        return {.name = "Spirit Wolf", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::OwlSentinel:
+        return {.name = "Owl Sentinel", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::EvasiveShot:
+        return {.name = "Evasive Shot", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ArcaneOrb:
+        return {.name = "Arcane Orb", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::GravityWell:
+        return {.name = "Gravity Well", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::LightningPylon:
+        return {.name = "Lightning Pylon", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::IcePrison:
+        return {.name = "Ice Prison", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ArcaneMissiles:
+        return {.name = "Arcane Missiles", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Charge:
+        return {.name = "Charge", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::RainOfBlades:
+        return {.name = "Rain of Blades", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Execute:
+        return {.name = "Execute", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::WarBanner:
+        return {.name = "War Banner", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::SwordThrow:
+        return {.name = "Sword Throw", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Tremor:
+        return {.name = "Tremor", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::DwarvenCannon:
+        return {.name = "Dwarven Cannon", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ThrowingAxe:
+        return {.name = "Throwing Axe", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::StoneBrew:
+        return {.name = "Stone Brew", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::PowderKeg:
+        return {.name = "Powder Keg", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Fireball:
         return {.name = "Fireball", .charges = false, .kind = SkillKind::Instant};
     case SkillId::FrostNova:
@@ -174,6 +214,42 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 34.0F; // to the one; half of it heals him
     case SkillId::Requiem:
         return 40.0F; // to each round him: it takes a full charge, and stuns besides
+    case SkillId::RicochetArrow:
+        return 26.0F; // what it strikes first; each bounce ricochet_share of the one before: 87 over five
+    case SkillId::HuntersMark:
+        return 22.0F; // the arrow; the mark makes everything of hers after it harder (mark_factor)
+    case SkillId::SpiritWolf:
+        return 28.0F; // each bite, one to every enemy it runs past, and the slow
+    case SkillId::OwlSentinel:
+        return 10.0F; // each of its little arrows: ten in its twelve seconds, 100 if it is never idle
+    case SkillId::EvasiveShot:
+        return 14.0F; // each of its three arrows: 42, and out of harm's way
+    case SkillId::ArcaneOrb:
+        return 30.0F; // to each enemy it passes through; its burst at the end orb_burst_share of that
+    case SkillId::GravityWell:
+        return 45.0F; // its implosion, to each it caught, and a stun: about two of his bolts
+    case SkillId::LightningPylon:
+        return 14.0F; // each strike, one every 0.8 s for ten seconds: the hydra's 17 a second, no poison
+    case SkillId::IcePrison:
+        return 20.0F; // the strike; three seconds frozen is the point of it
+    case SkillId::ArcaneMissiles:
+        return 9.0F; // each of five: 45, two of his bolts in one cast, and they find their mark
+    case SkillId::Charge:
+        return 32.0F; // to each she passes: about her Jump Attack, with 9 m of ground won besides
+    case SkillId::RainOfBlades:
+        return 14.0F; // each of eight swords, to what is where it lands: a crowd takes most of 112
+    case SkillId::Execute:
+        return 40.0F; // execute_factor times that (100) to an enemy below execute_threshold of its health
+    case SkillId::SwordThrow:
+        return 22.0F; // each time it passes one, out and back: a sword blow twice
+    case SkillId::Tremor:
+        return 18.0F; // each ring, to all it reaches: 54 to what stands close, struck by all three
+    case SkillId::DwarvenCannon:
+        return 22.0F; // each cannonball's burst: eight in its twelve seconds, about the Lightning Pylon's
+    case SkillId::ThrowingAxe:
+        return 24.0F; // each time it passes one, out and back: about an axe blow twice
+    case SkillId::PowderKeg:
+        return 55.0F; // to everything in its blast: slow to set off, so harder than his Whirlwind
     case SkillId::Fireball:
         return 50.0F;
     case SkillId::FrostNova:
@@ -253,6 +329,8 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::BoneArmor:
     case SkillId::VeilOfShadows: // (its ambush doubles the blow that ends it)
     case SkillId::VenomEdge:     // (its poison: venom_edge_tick_damage)
+    case SkillId::WarBanner:     // (her blows near it: banner_blow_factor)
+    case SkillId::StoneBrew:     // (it hardens and heals him)
         return 0.0F;             // they strike nobody
     case SkillId::Stampede:
         return 5.0F; // every half second to all it reaches: 40 over its four seconds
@@ -409,6 +487,46 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 16.0F; // it lasts eight of them
     case SkillId::BoneArmor:
         return 20.0F; // from the key: it lasts seven of them
+    case SkillId::RicochetArrow:
+        return 7.0F;
+    case SkillId::HuntersMark:
+        return 14.0F; // the mark lasts ten of them
+    case SkillId::SpiritWolf:
+        return 12.0F;
+    case SkillId::OwlSentinel:
+        return 24.0F; // it stands twelve of them
+    case SkillId::EvasiveShot:
+        return 10.0F;
+    case SkillId::ArcaneOrb:
+        return 8.0F;
+    case SkillId::GravityWell:
+        return 16.0F;
+    case SkillId::LightningPylon:
+        return 30.0F; // it stands ten of them, as his hydra
+    case SkillId::IcePrison:
+        return 15.0F;
+    case SkillId::ArcaneMissiles:
+        return 6.0F;
+    case SkillId::Charge:
+        return 10.0F;
+    case SkillId::RainOfBlades:
+        return 14.0F;
+    case SkillId::Execute:
+        return 8.0F;
+    case SkillId::WarBanner:
+        return 25.0F; // from the plant: it stands ten of them
+    case SkillId::SwordThrow:
+        return 7.0F;
+    case SkillId::Tremor:
+        return 14.0F;
+    case SkillId::DwarvenCannon:
+        return 28.0F; // from the setting down: it stands twelve of them
+    case SkillId::ThrowingAxe:
+        return 8.0F;
+    case SkillId::StoneBrew:
+        return 24.0F; // from the key: it lasts seven of them
+    case SkillId::PowderKeg:
+        return 16.0F;
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
     case SkillId::Shot:
@@ -570,23 +688,28 @@ int next_combo_step(int last_step, float seconds_since_last, float window_second
 
 SkillBar::SkillBar(SkillSet set) noexcept {
     if (set == SkillSet::Dwarf) {
-        slots_ = {SkillId::AxeCombo,     SkillId::Whirlwind,      SkillId::Earthbreaker,
-                  SkillId::LeapStrike,   SkillId::Battlecry,      SkillId::MoltenFissure,
-                  SkillId::RunicBulwark, SkillId::AncestralAnvil, SkillId::Stonebreaker};
+        slots_ = {SkillId::AxeCombo, SkillId::Whirlwind, SkillId::Earthbreaker, SkillId::LeapStrike, SkillId::Battlecry,
+                  SkillId::MoltenFissure, SkillId::RunicBulwark, SkillId::AncestralAnvil, SkillId::Stonebreaker,
+                  // The first three of his five of 2026-10-16 (the other two are in his book).
+                  SkillId::Tremor, SkillId::DwarvenCannon, SkillId::ThrowingAxe};
     } else if (set == SkillSet::Blade) {
-        slots_ = {SkillId::Slash,       SkillId::CounterAttack, SkillId::BladeWhirl,
-                  SkillId::JumpAttack,  SkillId::SeismicSlash,  SkillId::Enrage,
-                  SkillId::NeverGiveUp, SkillId::Stampede,      SkillId::CutInPieces};
+        slots_ = {SkillId::Slash, SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,
+                  SkillId::SeismicSlash, SkillId::Enrage, SkillId::NeverGiveUp, SkillId::Stampede, SkillId::CutInPieces,
+                  // The first three of her five of 2026-10-16 (the other two are in her book).
+                  SkillId::Charge, SkillId::RainOfBlades, SkillId::Execute};
     } else if (set == SkillSet::Archer) {
-        // (The Gatling Arrow Gun was wished for key 6: the slots before it are still to be filled.)
-        slots_ = {SkillId::Shot,     SkillId::VineTower, SkillId::Disguise,
-                  SkillId::BearTrap, SkillId::None,      SkillId::GatlingGun};
+        // (The Gatling Arrow Gun was wished for key 6. Her five of 2026-10-16 fill key 5 and follow it.)
+        slots_ = {SkillId::Shot,          SkillId::VineTower,  SkillId::Disguise,    SkillId::BearTrap,
+                  SkillId::RicochetArrow, SkillId::GatlingGun, SkillId::HuntersMark, SkillId::SpiritWolf,
+                  SkillId::OwlSentinel,   SkillId::EvasiveShot};
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
     } else if (set == SkillSet::Mage) {
-        slots_ = {SkillId::ArcaneBolt,  SkillId::Firebolt,      SkillId::FrostArmor, SkillId::ChainBolt,
-                  SkillId::PoisonHydra, SkillId::Teleport,      SkillId::RovingHole, SkillId::Blizzard,
-                  SkillId::MirrorImage, SkillId::ProtectionDome};
+        // His wishes in keys 2 to 0; the first two of his five of 2026-10-16 after them (the other three
+        // are in his book).
+        slots_ = {SkillId::ArcaneBolt,  SkillId::Firebolt,       SkillId::FrostArmor, SkillId::ChainBolt,
+                  SkillId::PoisonHydra, SkillId::Teleport,       SkillId::RovingHole, SkillId::Blizzard,
+                  SkillId::MirrorImage, SkillId::ProtectionDome, SkillId::ArcaneOrb,  SkillId::GravityWell};
     } else if (set == SkillSet::Bone) {
         slots_ = {SkillId::SoulBolt,       SkillId::BoneSpikes, SkillId::SoulDrain,
                   SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem};
@@ -648,26 +771,33 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     // The Archer's: what was made from wishes, then the skills she had before (kept "in the
     // back" since 2026-10-10 and offered again in the book).
     static constexpr std::array archer{
-        SkillId::Shot,      SkillId::VineTower,   SkillId::Disguise,     SkillId::GatlingGun,
-        SkillId::BearTrap,  SkillId::PowerShot,   SkillId::ArrowRain,    SkillId::FrostFan,
-        SkillId::FireArrow, SkillId::ThunderKick, SkillId::Kingfishers,  SkillId::VenomArrow,
-        SkillId::GaleArrow, SkillId::StormArrow,  SkillId::BrambleArrow, SkillId::DaggerCombo,
+        SkillId::Shot,          SkillId::VineTower,   SkillId::Disguise,   SkillId::GatlingGun,  SkillId::BearTrap,
+        SkillId::RicochetArrow, SkillId::HuntersMark, SkillId::SpiritWolf, SkillId::OwlSentinel, SkillId::EvasiveShot,
+        SkillId::PowerShot,     SkillId::ArrowRain,   SkillId::FrostFan,   SkillId::FireArrow,   SkillId::ThunderKick,
+        SkillId::Kingfishers,   SkillId::VenomArrow,  SkillId::GaleArrow,  SkillId::StormArrow,  SkillId::BrambleArrow,
+        SkillId::DaggerCombo,
     };
     static constexpr std::array blade{
-        SkillId::Slash,  SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,  SkillId::SeismicSlash,
-        SkillId::Enrage, SkillId::NeverGiveUp,   SkillId::Stampede,   SkillId::CutInPieces,
+        SkillId::Slash,        SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,  SkillId::SeismicSlash,
+        SkillId::Enrage,       SkillId::NeverGiveUp,   SkillId::Stampede,   SkillId::CutInPieces, SkillId::Charge,
+        SkillId::RainOfBlades, SkillId::Execute,       SkillId::WarBanner,  SkillId::SwordThrow,
     };
     static constexpr std::array warrior{SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave,
                                         SkillId::StarWhirl};
-    static constexpr std::array dwarf{SkillId::AxeCombo,     SkillId::Whirlwind,      SkillId::Earthbreaker,
-                                      SkillId::LeapStrike,   SkillId::Battlecry,      SkillId::MoltenFissure,
-                                      SkillId::RunicBulwark, SkillId::AncestralAnvil, SkillId::Stonebreaker};
+    static constexpr std::array dwarf{
+        SkillId::AxeCombo,     SkillId::Whirlwind,     SkillId::Earthbreaker,  SkillId::LeapStrike,
+        SkillId::Battlecry,    SkillId::MoltenFissure, SkillId::RunicBulwark,  SkillId::AncestralAnvil,
+        SkillId::Stonebreaker, SkillId::Tremor,        SkillId::DwarvenCannon, SkillId::ThrowingAxe,
+        SkillId::StoneBrew,    SkillId::PowderKeg,
+    };
     static constexpr std::array wizard{SkillId::ArcaneBolt,     SkillId::Fireball, SkillId::FrostNova,
                                        SkillId::ChainLightning, SkillId::Meteor,   SkillId::StarBarrage,
                                        SkillId::BlackHole};
-    static constexpr std::array mage{
-        SkillId::ArcaneBolt, SkillId::Firebolt,   SkillId::FrostArmor, SkillId::ChainBolt,   SkillId::PoisonHydra,
-        SkillId::Teleport,   SkillId::RovingHole, SkillId::Blizzard,   SkillId::MirrorImage, SkillId::ProtectionDome};
+    static constexpr std::array mage{SkillId::ArcaneBolt,     SkillId::Firebolt,    SkillId::FrostArmor,
+                                     SkillId::ChainBolt,      SkillId::PoisonHydra, SkillId::Teleport,
+                                     SkillId::RovingHole,     SkillId::Blizzard,    SkillId::MirrorImage,
+                                     SkillId::ProtectionDome, SkillId::ArcaneOrb,   SkillId::GravityWell,
+                                     SkillId::LightningPylon, SkillId::IcePrison,   SkillId::ArcaneMissiles};
     static constexpr std::array shadow{SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
                                        SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
     static constexpr std::array bone{SkillId::SoulBolt,       SkillId::BoneSpikes, SkillId::SoulDrain,
@@ -736,6 +866,68 @@ std::string_view skill_description(SkillId skill) noexcept {
     case SkillId::Requiem:
         return "Wailing souls burst out all round him: every enemy they reach is hurt and stunned, and "
                "each heals him a little. The damage is to each.";
+    case SkillId::RicochetArrow:
+        return "An arrow that bounces on from what it strikes to the enemies near it, one after another, a "
+               "little weaker each time. The damage is the first strike.";
+    case SkillId::HuntersMark:
+        return "An arrow that marks what it strikes: for ten seconds her arrows and blows hurt it more. The "
+               "mark helps nobody else.";
+    case SkillId::SpiritWolf:
+        return "A ghostly wolf bounds out from her over the ground where she aims. It bites every enemy it "
+               "runs past once and leaves it slowed for a moment.";
+    case SkillId::OwlSentinel:
+        return "An owl on a post rises where she aims and for a while shoots small arrows at the nearest "
+               "enemy near it. One at a time. The damage is one arrow.";
+    case SkillId::EvasiveShot:
+        return "She springs back out of harm's way, away from where she aims, and looses three quick arrows "
+               "at the crosshair while in the air. Nothing hurts her as she springs. The damage is one arrow.";
+    case SkillId::ArcaneOrb:
+        return "A slow orb of violet light leaves his wand and flies straight on where he aims, through every "
+               "enemy in its way, hurting each once; at the end of its way it bursts. The damage is to each it "
+               "passes; the burst does half of it.";
+    case SkillId::GravityWell:
+        return "A dark vortex opens on the ground where he aims and draws the enemies near it in, slowed. After "
+               "three seconds it implodes: everything at its heart is hurt and stunned for a moment.";
+    case SkillId::LightningPylon:
+        return "A crystal pylon rises where he aims and for ten seconds throws lightning at the nearest enemy "
+               "near it. One at a time. The damage is one strike.";
+    case SkillId::IcePrison:
+        return "The enemy he aims at is frozen into a block of ice: hurt, and for three seconds it can neither "
+               "move nor strike. Then the ice shatters.";
+    case SkillId::ArcaneMissiles:
+        return "Five small arcane missiles leave his wand one after another and curve onto the enemy he aims "
+               "at. The damage is one missile.";
+    case SkillId::Charge:
+        return "She dashes a long way ahead where she aims, sword low; every enemy in her way is struck and "
+               "flung aside. Nobody steers her meanwhile, and a wall stops her.";
+    case SkillId::RainOfBlades:
+        return "She raises her sword, and spectral swords fall from the sky onto the place she aims at, one "
+               "after another. The damage is one sword, to everything where it lands.";
+    case SkillId::Execute:
+        return "One heavy blow at what is before her. An enemy already badly hurt is struck far harder: it is "
+               "meant to end it.";
+    case SkillId::WarBanner:
+        return "She plants her war banner at her feet. While she stands near it, her blows hit harder and her "
+               "wounds close. It helps nobody but her.";
+    case SkillId::SwordThrow:
+        return "She hurls a spinning copy of her sword straight ahead where she aims; it flies back to her "
+               "hand, striking every enemy it passes on the way out and again on the way back.";
+    case SkillId::Tremor:
+        return "He brings his axe down into the ground: three rings of shock run out from him one after "
+               "another, each further. Every ring hurts and briefly stuns the enemies it reaches; the damage "
+               "is one ring.";
+    case SkillId::DwarvenCannon:
+        return "He sets down a small bronze cannon where he aims. For twelve seconds it turns to the nearest "
+               "enemy and fires a cannonball at it again and again. The damage is one cannonball.";
+    case SkillId::ThrowingAxe:
+        return "He hurls a spinning copy of his axe straight ahead where he aims; it flies back to his hand, "
+               "striking every enemy it passes on the way out and again on the way back.";
+    case SkillId::StoneBrew:
+        return "He drinks deep of a dark dwarven brew and his skin turns to stone for seven seconds: blows "
+               "do half their harm and his wounds slowly close. It helps nobody but him.";
+    case SkillId::PowderKeg:
+        return "He kicks a keg of black powder out ahead of him. When its fuse has burnt down, or at once "
+               "when an enemy comes near it, it blows up and hurls everything around it away.";
     case SkillId::Fireball:
         return "A ball of fire that explodes where it strikes.";
     case SkillId::FrostNova:

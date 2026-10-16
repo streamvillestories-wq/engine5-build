@@ -91,13 +91,37 @@ enum class SkillId : unsigned char {
     CurseOfFrailty, // enemies where he aims are cursed: every blow hurts them more for a while
     BoneArmor,      // a stance: bones circle him and take the blows, until they have taken their share
     Requiem,        // on a full charge: wailing souls burst out round him; what they reach is hurt and stunned
+    // The Archer's five (2026-10-16), on the players' bar beside her wished skills.
+    RicochetArrow, // an arrow that bounces on from what it strikes to the enemies near it, weaker each time
+    HuntersMark,   // an arrow that marks what it strikes: her blows hurt it more for a while
+    SpiritWolf,    // a ghostly wolf bounds out ahead of her over the ground and bites what it passes
+    OwlSentinel,   // an owl on a post where she aims shoots small arrows at the enemies near it for a while
+    EvasiveShot,   // she springs back out of harm's way and looses three quick arrows while in the air
+    // The new Wizard's five (2026-10-16), on his players' bar and in his skill book.
+    ArcaneOrb,      // a slow violet orb flies straight on through the enemies, hurting each, and bursts at its end
+    GravityWell,    // a vortex where he aims draws the enemies near it in, then implodes and stuns them
+    LightningPylon, // a crystal pylon where he aims throws lightning at the nearest enemy for a while
+    IcePrison,      // the enemy he aims at is frozen into a block of ice: it cannot move or strike for a while
+    ArcaneMissiles, // five small missiles leave his wand one after another and curve onto the enemy he aims at
+    // The new Warrior's five (2026-10-16), on her players' bar and in her skill book.
+    Charge,       // she dashes ahead along where she aims; what she passes is struck and flung aside
+    RainOfBlades, // spectral swords fall from the sky onto the place she aims at
+    Execute,      // one heavy blow; an enemy already low on health is struck far harder
+    WarBanner,    // she plants a banner: near it her own blows hit harder and her wounds close
+    SwordThrow,   // she hurls a spinning copy of her sword ahead; it flies back to her, striking twice
+    // The new Dwarf's five (2026-10-16), on his bar after Stonebreaker and in his skill book.
+    Tremor,        // he strikes the ground: three rings of shock run outward, hurting and stunning what they reach
+    DwarvenCannon, // he sets down a small bronze cannon where he aims; it fires at the nearest enemy for a while
+    ThrowingAxe,   // he hurls a spinning copy of his axe ahead; it flies back to him, striking twice
+    StoneBrew,     // a stance: he drinks, his skin turns to stone; blows do half their harm and his wounds close
+    PowderKeg,     // he kicks a keg of black powder ahead; it blows up when its fuse burns down or an enemy comes near
 };
 
 // Room for this many skills in anything indexed by SkillId (the player's cooldowns). It was 64 until
 // the Bonecaller's five took the count to 66 and every use of a skill threw: the check below fails
 // the build instead. Name the LAST SkillId in it when adding one.
 inline constexpr std::size_t skill_id_limit = 128;
-static_assert(static_cast<std::size_t>(SkillId::Requiem) < skill_id_limit, "more skills than skill_id_limit");
+static_assert(static_cast<std::size_t>(SkillId::PowderKeg) < skill_id_limit, "more skills than skill_id_limit");
 
 // Which skills a character has on the bar.
 // `Blade` is the new warrior (2026-10-10): her sword's combo and nothing else yet. Her other
@@ -114,6 +138,13 @@ static_assert(static_cast<std::size_t>(SkillId::Requiem) < skill_id_limit, "more
 // slots open for wishes, as the new Wizard's and the new Warrior's were at first.
 // `Bone` is the Bonecaller (2026-10-16), a necromancer with a skull lantern: his Soul Bolt and his
 // other slots open, as the Shadowblade's were at first.
+// The Archer's players' bar (`Archer`) has her five of 2026-10-16 too, in the slots her wishes left.
+// The new Wizard's (`Mage`) has the first two of his five of 2026-10-16 in the two slots after key 0;
+// the other three are in his book.
+// The new Warrior's (`Blade`) has the first three of her five of 2026-10-16 in the three slots after
+// key 9 (key 0 and the two right of it); the other two are in her book.
+// The new Dwarf's (`Dwarf`) has the first three of his five of 2026-10-16 after Stonebreaker (key 0 and
+// the two right of it; his bar is full now); the other two are in his book.
 enum class SkillSet : unsigned char { Archer, Wizard, Warrior, Dwarf, Blade, ArcherFull, Mage, Shadow, Bone };
 
 // How many of a hero's quick slots are hers to fill: shown on the bar also while they are empty.
@@ -167,7 +198,8 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
     return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede ||
            skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome || skill == SkillId::RunicBulwark ||
-           skill == SkillId::VeilOfShadows || skill == SkillId::VenomEdge || skill == SkillId::BoneArmor;
+           skill == SkillId::VeilOfShadows || skill == SkillId::VenomEdge || skill == SkillId::BoneArmor ||
+           skill == SkillId::StoneBrew;
 }
 
 // The Bonecaller's five (2026-10-16, the keeper: "give him more skills"), all cast with his Soul
@@ -202,6 +234,144 @@ inline constexpr float requiem_radius = 7.0F;
 inline constexpr float requiem_stun_seconds = 2.0F;
 inline constexpr float requiem_heal_share = 0.05F;
 inline constexpr float requiem_heal_most = 0.3F;
+
+// The Archer's five (2026-10-16), keys 5 and 7 to 10 of the players' bar. Nothing of them helps
+// another player (the keeper: "since we do PVP"): the mark lies only on her machine's copy of an
+// enemy, as the Bonecaller's curse does.
+// Ricochet Arrow (her bow): what the arrow strikes is hurt (skill_damage), and the arrow bounces on
+// to up to `ricochet_bounces` more enemies, each the nearest not yet struck within `ricochet_reach`
+// of the last, every bounce `ricochet_share` of the one before.
+inline constexpr int ricochet_bounces = 4;
+inline constexpr float ricochet_reach = 8.0F;
+inline constexpr float ricochet_share = 0.8F;
+// What the strike after `bounces` bounces does, of the first.
+[[nodiscard]] constexpr float ricochet_damage_factor(int bounces) noexcept {
+    float factor = 1.0F;
+    for (int bounce = 0; bounce < bounces && bounce < ricochet_bounces; ++bounce) {
+        factor *= ricochet_share;
+    }
+    return factor;
+}
+// Hunter's Mark (her bow): the enemy the arrow strikes takes `mark_factor` times HER blows and arrows
+// for `mark_seconds` (E5Enemy::curse, on her machine alone).
+inline constexpr float mark_seconds = 10.0F;
+inline constexpr float mark_factor = 1.35F;
+// Spirit Wolf: a ghostly wolf runs out from her along where she aims, `wolf_distance` over the ground
+// in `wolf_seconds`; every enemy within `wolf_bite_radius` of it is bitten once (skill_damage) and goes
+// `wolf_slow_share` slower for `wolf_slow_seconds`.
+inline constexpr float wolf_distance = 18.0F;
+inline constexpr float wolf_seconds = 1.6F;
+inline constexpr float wolf_bite_radius = 1.3F;
+inline constexpr float wolf_slow_share = 0.3F;
+inline constexpr float wolf_slow_seconds = 2.0F;
+[[nodiscard]] constexpr float wolf_speed() noexcept {
+    return wolf_distance / wolf_seconds;
+}
+// Owl Sentinel: an owl on a post where the crosshair points (`owl_place_range` from her at most); for
+// `owl_seconds` it shoots a small arrow (skill_damage) every `owl_shot_seconds` at the nearest enemy
+// within `owl_range` of it. One at a time: a new one takes the old one's place.
+inline constexpr float owl_seconds = 12.0F;
+inline constexpr float owl_shot_seconds = 1.2F;
+inline constexpr float owl_range = 16.0F;
+inline constexpr float owl_place_range = 20.0F;
+// Evasive Shot: she springs `evasive_distance` back, away from where she aims, in `evasive_seconds`,
+// and looses `evasive_arrows` arrows (skill_damage each) at the crosshair meanwhile. Nothing hurts her
+// while she springs, as in her roll.
+inline constexpr float evasive_distance = 6.0F;
+inline constexpr float evasive_seconds = 0.35F;
+inline constexpr int evasive_arrows = 3;
+
+// The new Wizard's five (2026-10-16), all thrown with his Arcane Bolt's cast from the wand's tip.
+// Nothing of them helps another player (the keeper: "since we do PVP"): what holds, drags or stuns
+// an enemy is done by his own machine only.
+// Arcane Orb: a slow orb flies `orb_distance` level along where he aims at `orb_speed`, through the
+// enemies: each within `orb_touch_radius` of it is hurt once (skill_damage); at its end (or at a
+// wall) it bursts, `orb_burst_share` of that to everything within `orb_burst_radius`.
+inline constexpr float orb_speed = 8.0F; // m/s
+inline constexpr float orb_distance = 20.0F;
+inline constexpr float orb_touch_radius = 1.0F;
+inline constexpr float orb_burst_radius = 2.5F;
+inline constexpr float orb_burst_share = 0.5F;
+[[nodiscard]] constexpr float orb_seconds() noexcept {
+    return orb_distance / orb_speed;
+}
+// Gravity Well: on the ground where he aims (`well_range` from him at most), for `well_seconds`
+// every enemy within `well_pull_radius` is drawn in at `well_pull_speed` and goes `well_slow_share`
+// slower; then it implodes: skill_damage to everything within `well_radius`, stunned for
+// `well_stun_seconds`.
+inline constexpr float well_seconds = 3.0F;
+inline constexpr float well_pull_radius = 7.0F;
+inline constexpr float well_pull_speed = 3.0F; // m/s towards its middle
+inline constexpr float well_slow_share = 0.4F;
+inline constexpr float well_radius = 3.5F;
+inline constexpr float well_stun_seconds = 1.0F;
+inline constexpr float well_range = 25.0F;
+// Lightning Pylon: a crystal where he aims (`pylon_place_range` from him at most); for
+// `pylon_seconds` it strikes the nearest enemy within `pylon_range` of it every `pylon_zap_seconds`
+// (skill_damage). One at a time: a new one takes the old one's place.
+inline constexpr float pylon_seconds = 10.0F;
+inline constexpr float pylon_zap_seconds = 0.8F;
+inline constexpr float pylon_range = 12.0F;
+inline constexpr float pylon_place_range = 20.0F;
+// Ice Prison: the enemy nearest where the crosshair points (within `prison_aim_slack` of it, no
+// further than `prison_reach` from him) is struck (skill_damage) and frozen: stunned `prison_seconds`.
+inline constexpr float prison_seconds = 3.0F;
+inline constexpr float prison_reach = 25.0F;
+inline constexpr float prison_aim_slack = 2.5F;
+// Arcane Missiles: `missile_count` missiles (skill_damage each), `missile_interval` apart, curving onto
+// the enemy nearest where the crosshair points (within `missile_aim_slack` of it), or onto that place.
+inline constexpr int missile_count = 5;
+inline constexpr float missile_interval = 0.12F;
+inline constexpr float missile_aim_slack = 2.5F;
+
+// The new Warrior's five (2026-10-16), all her sword's (it counts for every one of them). Nothing of
+// them helps another player (the keeper: "since we do PVP"): her banner strengthens and heals only
+// her, and what flings an enemy is done by her own machine only.
+// Charge: she dashes `charge_distance` along where she aims in `charge_seconds` (nobody steers her;
+// a wall stops her); every enemy that comes within `charge_reach` of her is struck once
+// (skill_damage) and flung aside, out of her way and a little up.
+inline constexpr float charge_distance = 9.0F;
+inline constexpr float charge_seconds = 0.45F;
+inline constexpr float charge_reach = 1.6F;
+inline constexpr float charge_fling_speed = 6.0F; // m/s sideways, out of her way
+inline constexpr float charge_fling_lift = 3.5F;  // m/s upwards
+[[nodiscard]] constexpr float charge_speed() noexcept {
+    return charge_distance / charge_seconds;
+}
+// Rain of Blades: `blade_rain_count` spectral swords fall over `blade_rain_seconds` onto the place she
+// aims at (`blade_rain_range` from her at most), each within `blade_rain_spread` of it; each hurts
+// everything within `blade_rain_radius` of where it lands (skill_damage).
+inline constexpr int blade_rain_count = 8;
+inline constexpr float blade_rain_seconds = 1.2F;
+inline constexpr float blade_rain_spread = 3.5F;
+inline constexpr float blade_rain_radius = 1.5F;
+inline constexpr float blade_rain_range = 20.0F;
+// Execute: one heavy blow (skill_damage) at the enemy nearest her within `execute_reach` (she turns
+// to it); an enemy with less than `execute_threshold` of its full health left takes `execute_factor`
+// times that.
+inline constexpr float execute_reach = 2.2F; // metres from her to its body: a sword's length and a step
+inline constexpr float execute_threshold = 0.3F;
+inline constexpr float execute_factor = 2.5F;
+[[nodiscard]] constexpr float execute_damage_factor(float health, float max_health) noexcept {
+    return max_health > 0.0F && health > 0.0F && health < max_health * execute_threshold ? execute_factor : 1.0F;
+}
+// War Banner: a banner at her feet for `banner_seconds`. While SHE stands within `banner_radius` of
+// her OWN banner her blows do `banner_blow_factor` times their damage and she gains
+// `banner_heal_share` of her full health a second. Nobody else gains by it. One at a time.
+inline constexpr float banner_seconds = 10.0F;
+inline constexpr float banner_radius = 6.0F;
+inline constexpr float banner_blow_factor = 1.25F;
+inline constexpr float banner_heal_share = 0.02F;
+// Sword Throw: a spinning copy of her sword flies `throw_distance` straight along where she aims at
+// `throw_speed` (a wall turns it back sooner), then back to her; each enemy within `throw_touch_radius`
+// of it is struck once on the way out and once on the way back (skill_damage each time).
+inline constexpr float throw_distance = 14.0F;
+inline constexpr float throw_speed = 24.0F; // m/s
+inline constexpr float throw_touch_radius = 1.2F;
+inline constexpr float throw_longest_seconds = 3.0F; // it is back in her hand by then, wherever she ran
+[[nodiscard]] constexpr float throw_out_seconds() noexcept {
+    return throw_distance / throw_speed;
+}
 
 // The Shadowblade's five (2026-10-16, the keeper: "give him 5 skills").
 // Shadow Step: the living enemy nearest to where the crosshair points (within `shadow_step_aim_slack`
@@ -256,6 +426,52 @@ inline constexpr float anvil_heal_share = 0.04F;
 inline constexpr float stone_speed = 24.0F;       // metres a second
 inline constexpr float stone_blast_radius = 3.2F; // metres
 inline constexpr float stone_stun_seconds = 1.5F;
+
+// The new Dwarf's five (2026-10-16), all his axe's (it counts for every one of them). Nothing of them
+// helps another player (the keeper: "since we do PVP"): his Stone Brew hardens and heals only him, and
+// what stuns or flings an enemy is done by his own machine only.
+// Tremor: he strikes the ground and `tremor_rings` rings of shock run out from where he stands, one
+// every `tremor_ring_interval`, the first `tremor_first_radius` wide and each further out by as much;
+// each hurts every enemy within its radius (skill_damage: so what stands close is struck by all three)
+// and stuns it for `tremor_stun_seconds`.
+inline constexpr int tremor_rings = 3;
+inline constexpr float tremor_ring_interval = 0.35F;
+inline constexpr float tremor_first_radius = 3.0F;
+inline constexpr float tremor_stun_seconds = 0.8F;
+[[nodiscard]] constexpr float tremor_radius(int ring) noexcept {
+    return tremor_first_radius * static_cast<float>(ring + 1);
+}
+// Dwarven Cannon: a small cannon set down on the ground where he aims (`cannon_place_range` from him
+// at most) for `cannon_seconds`; every `cannon_shot_seconds` it fires a cannonball at the nearest enemy
+// within `cannon_range`, which bursts where it strikes within `cannon_blast_radius` (skill_damage).
+// One at a time.
+inline constexpr float cannon_seconds = 12.0F;
+inline constexpr float cannon_place_range = 18.0F;
+inline constexpr float cannon_range = 18.0F;
+inline constexpr float cannon_shot_seconds = 1.5F;
+inline constexpr float cannon_blast_radius = 2.5F;
+inline constexpr float cannonball_speed = 26.0F; // m/s
+// Throwing Axe: the Sword Throw with his axe (the same flight): `axe_throw_distance` out along where he
+// aims and back, each enemy within `throw_touch_radius` struck once each way (skill_damage).
+inline constexpr float axe_throw_distance = 13.0F;
+inline constexpr float axe_throw_speed = 22.0F; // m/s: a heavier thing than her sword
+[[nodiscard]] constexpr float axe_throw_out_seconds() noexcept {
+    return axe_throw_distance / axe_throw_speed;
+}
+// Stone Brew, a stance: for `stone_brew_seconds` only `stone_brew_damage_share` of a blow gets through
+// and he gains `stone_brew_heal_share` of his full health a second. Only him.
+inline constexpr float stone_brew_seconds = 7.0F;
+inline constexpr float stone_brew_damage_share = 0.5F;
+inline constexpr float stone_brew_heal_share = 0.015F;
+// Powder Keg: a keg set `keg_ahead` before him; it blows up when its fuse has burnt `keg_fuse_seconds`,
+// or at once when an enemy comes within `keg_trigger_radius` of it: everything within `keg_blast_radius`
+// is hurt (skill_damage) and flung outward. One at a time.
+inline constexpr float keg_ahead = 3.0F;
+inline constexpr float keg_fuse_seconds = 3.0F;
+inline constexpr float keg_trigger_radius = 2.0F;
+inline constexpr float keg_blast_radius = 4.5F;
+inline constexpr float keg_fling_speed = 7.0F; // m/s outward
+inline constexpr float keg_fling_lift = 4.5F;  // m/s upwards
 
 // The new wizard's Dome of Protection (the keeper's own wish, 2026-10-13: "he summons a pink dome
 // of protection around him ... lasts for 6 seconds"), a stance: a dome rises round him and goes

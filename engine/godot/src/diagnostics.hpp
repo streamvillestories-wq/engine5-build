@@ -61,6 +61,7 @@ private:
     bool camera_yaw_applied_ = false;
     double auto_shoot_elapsed_ms_ = 0.0;
     double auto_block_elapsed_ms_ = 0.0;
+    double skill_put_wait_ms_ = 0.0; // until the automatic input begins (a skill put on the bar first)
 };
 
 } // namespace e5::bridge

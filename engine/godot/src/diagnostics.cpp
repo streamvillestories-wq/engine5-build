@@ -59,6 +59,19 @@ constexpr double auto_shoot_pause_ms = 400.0;
 constexpr double auto_block_cycle_ms = 3000.0;
 constexpr double auto_block_pause_ms = 500.0; // let go for this long at the start of each cycle
 constexpr int power_shot_slot = 1;
+// The skill book puts a skill onto the bar a second after the start (`--menu-skill-put`); the runs
+// that use it wait this long before choosing the slot and pressing anything.
+constexpr double skill_put_wait_ms = 1600.0;
+
+bool skill_put_asked() {
+    const godot::PackedStringArray args = godot::OS::get_singleton()->get_cmdline_user_args();
+    for (const godot::String& arg : args) {
+        if (arg.begins_with("--menu-skill-put=")) {
+            return true;
+        }
+    }
+    return false;
+}
 // Per second, not per frame: the turn must not depend on the frame rate.
 constexpr float auto_turn_pixels_per_second = 500.0F;
 
@@ -172,7 +185,9 @@ void E5Diagnostics::_process(double /*delta*/) {
             if ((config_.auto_skill || config_.auto_fire || config_.auto_charge) && !config_.cooldowns) {
                 player->set_cooldowns_enabled(false);
             }
-            if (config_.auto_skill) {
+            if (config_.auto_skill && skill_put_asked()) {
+                skill_put_wait_ms_ = skill_put_wait_ms; // selected once the skill book has put it there
+            } else if (config_.auto_skill) {
                 player->select_skill(*config_.auto_skill - 1);
             } else if (config_.auto_charge) {
                 player->select_skill(power_shot_slot);
@@ -248,6 +263,21 @@ void E5Diagnostics::drive_automated_input(double frame_ms) {
         } else {
             input->action_release(actions::block);
             input->action_release(actions::dodge);
+        }
+    }
+    if (skill_put_wait_ms_ > 0.0) {
+        // A skill from the book is put onto the bar first (`--menu-skill-put`, game/ui/skill_book.gd,
+        // a second after the start): only then is its slot chosen and the button pressed, or the run
+        // would cast what was there before.
+        skill_put_wait_ms_ -= frame_ms;
+        if (skill_put_wait_ms_ > 0.0) {
+            return;
+        }
+        skill_put_wait_ms_ = 0.0;
+        if (auto* const player = godot::Object::cast_to<E5PlayerController>(
+                get_tree()->get_first_node_in_group(E5PlayerController::group_name));
+            player != nullptr && config_.auto_skill) {
+            player->select_skill(*config_.auto_skill - 1);
         }
     }
     if (config_.auto_fire || config_.auto_charge || config_.auto_attack) {
@@ -482,6 +512,25 @@ bool E5Diagnostics::write_report() {
         player_info["veiled"] = player->is_veiled();
         player_info["healed_by_skills"] = player->get_healed_by_skills();
         player_info["cursed_count"] = player->get_cursed_count();
+        player_info["wolf_bites"] = player->get_wolf_bites();
+        player_info["owl_shots"] = player->get_owl_shots();
+        player_info["springs"] = player->get_springs();
+        player_info["orb_touches"] = player->get_orb_touches();
+        player_info["well_caught"] = player->get_well_caught();
+        player_info["pylon_zaps"] = player->get_pylon_zaps();
+        player_info["prisons"] = player->get_prisons();
+        player_info["missiles_sent"] = player->get_missiles_sent();
+        player_info["charge_struck"] = player->get_charge_struck();
+        player_info["blade_rain_hits"] = player->get_blade_rain_hits();
+        player_info["executions"] = player->get_executions();
+        player_info["banner_healed"] = player->get_banner_healed();
+        player_info["blow_factor"] = player->get_blow_factor();
+        player_info["throw_hits"] = player->get_throw_hits();
+        player_info["tremor_hits"] = player->get_tremor_hits();
+        player_info["cannon_shots"] = player->get_cannon_shots();
+        player_info["stone_brew_spared"] = player->get_stone_brew_spared();
+        player_info["stone_brew_healed"] = player->get_stone_brew_healed();
+        player_info["keg_caught"] = player->get_keg_caught();
         player_info["pieces_spared"] = player->get_pieces_spared();
         player_info["firebolts_thrown"] = player->get_firebolts_thrown();
         player_info["chain_strikes"] = player->get_chain_strikes();

@@ -279,6 +279,36 @@ public:
     [[nodiscard]] int get_poisonings() const { return poisonings_; }
     [[nodiscard]] float get_healed_by_skills() const { return healed_by_skills_; }
     [[nodiscard]] int get_cursed_count() const { return cursed_count_; }
+    // The Archer's five of 2026-10-16: her spirit wolf's bites, her owl's arrows, her springs (for tests).
+    [[nodiscard]] int get_wolf_bites() const { return wolf_bites_; }
+    [[nodiscard]] int get_owl_shots() const { return owl_shots_; }
+    [[nodiscard]] int get_springs() const { return springs_; }
+    // The new Wizard's five of 2026-10-16 (for tests): the enemies his orb passed through, those his
+    // gravity well caught as it imploded, his pylon's strikes, the enemies he froze, the missiles sent.
+    [[nodiscard]] int get_orb_touches() const { return orb_touches_; }
+    [[nodiscard]] int get_well_caught() const { return well_caught_; }
+    [[nodiscard]] int get_pylon_zaps() const { return pylon_zaps_; }
+    [[nodiscard]] int get_prisons() const { return prisons_; }
+    [[nodiscard]] int get_missiles_sent() const { return missiles_sent_; }
+    // The new Warrior's five of 2026-10-16 (for tests): the enemies her charge struck, the strikes of
+    // her falling swords, her blows that executed, the health her banner gave her, what her blows are
+    // worth now (1.25 beside her banner), the strikes of her thrown sword.
+    [[nodiscard]] int get_charge_struck() const { return charge_struck_; }
+    [[nodiscard]] int get_blade_rain_hits() const { return blade_rain_hits_; }
+    [[nodiscard]] int get_executions() const { return executions_; }
+    [[nodiscard]] float get_banner_healed() const { return banner_healed_; }
+    [[nodiscard]] float get_blow_factor() const { return banner_blow_factor(); }
+    [[nodiscard]] int get_throw_hits() const { return throw_hits_; }
+    // The new Dwarf's five of 2026-10-16: the enemies his tremor's rings struck, his cannon's shots, the
+    // seconds his Stone Brew still lasts (stance_glow.gd shows it, also for another player's hero), what
+    // it kept from him and gave him back, the enemies his keg caught (for tests). His thrown axe's
+    // strikes are counted with her sword's (get_throw_hits).
+    [[nodiscard]] int get_tremor_hits() const { return tremor_hits_; }
+    [[nodiscard]] int get_cannon_shots() const { return cannon_shots_; }
+    [[nodiscard]] float get_stone_brew_seconds() const { return stone_brew_left_; }
+    [[nodiscard]] float get_stone_brew_spared() const { return stone_brew_spared_; }
+    [[nodiscard]] float get_stone_brew_healed() const { return stone_brew_healed_; }
+    [[nodiscard]] int get_keg_caught() const { return keg_caught_; }
     [[nodiscard]] float get_bulwark_spared() const { return bulwark_spared_; }
     // Ancestral Anvil: how often it has pulsed, and the health it gave this hero (for tests).
     [[nodiscard]] int get_anvil_pulses() const { return anvil_pulses_; }
@@ -530,6 +560,60 @@ private:
     void curse_area();
     void sing_requiem();
     void heal_self(float amount);
+    // The Archer's five (skills.hpp, "The Archer's five"): the two arrows, the wolf that runs and
+    // bites, the owl that stands and shoots, the spring back and its three arrows.
+    void fire_hunter_arrow(gameplay::SkillId skill);
+    void send_wolf();
+    void update_wolf(float delta);
+    void place_owl();
+    void update_owl(float delta);
+    void spring_back();
+    void update_spring(float delta);
+    // The new Wizard's five (skills.hpp, "The new Wizard's five"): the orb that flies through, the
+    // well that draws in and implodes, the pylon that stands and strikes, the prison of ice, the
+    // missiles that leave one after another.
+    void cast_orb();
+    void update_orb(float delta);
+    void cast_well();
+    void update_well(float delta);
+    void place_pylon();
+    void update_pylon(float delta);
+    void cast_prison();
+    void cast_missiles();
+    void update_missiles(float delta);
+    // The new Warrior's five (skills.hpp, "The new Warrior's five"): the dash that flings aside, the
+    // swords that fall, the blow that ends what is low, the banner that strengthens her alone, the
+    // sword that flies out and back.
+    void start_dash();
+    void update_dash(float delta); // after she has moved: strikes, and ends it at a wall
+    void end_dash();
+    void cast_blade_rain();
+    void update_blade_rain(float delta);
+    void strike_execute();
+    void plant_banner();
+    void update_banner(float delta);
+    // Her blows' factor: banner_blow_factor beside her OWN banner, else 1 (nobody else's helps her,
+    // hers helps nobody else).
+    [[nodiscard]] float banner_blow_factor() const;
+    [[nodiscard]] bool near_own_banner() const;
+    void throw_sword(gameplay::SkillId skill); // her Sword Throw, or the new Dwarf's Throwing Axe
+    void update_throw(float delta);
+    void show_sword_in_hand(bool shown);
+    [[nodiscard]] godot::Node* weapons_node() const; // swords.gd's node: "Swords" or "Axes"
+    // The new Dwarf's five (skills.hpp, "The new Dwarf's five"): the rings of shock, the cannon that
+    // stands and fires, the keg that blows up (his Throwing Axe is throw_sword, his Stone Brew a stance).
+    void strike_tremor();
+    void update_tremor(float delta);
+    void place_cannon();
+    void update_cannon(float delta);
+    void set_keg();
+    void update_keg(float delta);
+    void blow_keg();
+    // The living enemy nearest to `place`, within `slack` of it (its body's width allowed for).
+    [[nodiscard]] E5Enemy* enemy_near(const godot::Vector3& place, float slack) const;
+    // Where the way from `from` to `to` first meets something that is neither a hero nor an enemy.
+    [[nodiscard]] std::optional<godot::Vector3> wall_between(const godot::Vector3& from,
+                                                             const godot::Vector3& to) const;
     void raise_anvil();
     void hurl_stone();
     void update_anvil(float delta);
@@ -611,7 +695,8 @@ private:
     // In the middle of using a skill: the selection must not change now.
     [[nodiscard]] bool is_busy() const {
         return is_aiming() || action_.active || block_.raised || dodge_left_ > 0.0F || is_whirling() || is_leaping() ||
-               enrage_driving_ || tower_charging_ || firebolt_charging_ || is_cutting() || manning_;
+               enrage_driving_ || tower_charging_ || firebolt_charging_ || is_cutting() || manning_ ||
+               dash_.left > 0.0F;
     }
 
     gameplay::MotorParams params_;
@@ -762,6 +847,134 @@ private:
     float hydra_left_ = 0.0F;       // seconds it still stands
     float hydra_until_spit_ = 0.0F; // until it spits again
     int hydras_ = 0;
+    // The Archer's Spirit Wolf while it runs: its look (an id: it may be gone), where it is, which way
+    // it runs, how long more, and whom it has bitten (each once).
+    struct WolfRun {
+        std::uint64_t look = 0;
+        godot::Vector3 at;
+        godot::Vector3 way;
+        float left = 0.0F;
+        std::vector<std::uint64_t> bitten;
+    };
+    WolfRun wolf_;
+    int wolf_bites_ = 0;
+    // Her Owl Sentinel that stands (an id: it may be gone), how long more, until it shoots again.
+    std::uint64_t owl_id_ = 0;
+    float owl_left_ = 0.0F;
+    float owl_until_shot_ = 0.0F;
+    int owl_shots_ = 0;
+    // Her Evasive Shot: how long she still springs and which way, the arrows loosed and until the
+    // next, and the hop off the ground still to be given.
+    struct Spring {
+        float left = 0.0F;
+        godot::Vector3 way;
+        int arrows = gameplay::evasive_arrows; // (all loosed: nothing under way)
+        float until_arrow = 0.0F;
+        bool lift = false;
+        bool moving = false; // it carried her in the last step
+    };
+    Spring spring_;
+    int springs_ = 0;
+    // The new Wizard's Arcane Orb in flight: its look (an id: it may be gone), where it is, which way
+    // it flies, how long more, and whom it has passed through (each is hurt once).
+    struct Orb {
+        std::uint64_t look = 0;
+        godot::Vector3 at;
+        godot::Vector3 way;
+        float left = 0.0F;
+        std::vector<std::uint64_t> touched;
+    };
+    Orb orb_;
+    int orb_touches_ = 0;
+    // His Gravity Well while it draws: its look, where its heart is, how long more, how long it has been.
+    struct Well {
+        std::uint64_t look = 0;
+        godot::Vector3 at;
+        float left = 0.0F;
+        float age = 0.0F;
+    };
+    Well well_;
+    int well_caught_ = 0;
+    // His Lightning Pylon that stands (an id: it may be gone), how long more, until it strikes again.
+    std::uint64_t pylon_id_ = 0;
+    float pylon_left_ = 0.0F;
+    float pylon_until_zap_ = 0.0F;
+    int pylon_zaps_ = 0;
+    int prisons_ = 0;
+    // His Arcane Missiles still to leave the wand: how many, until the next, onto whom (an id: it may
+    // be gone), and the place aimed at if nobody was there.
+    struct Missiles {
+        int left = 0;
+        float until_next = 0.0F;
+        std::uint64_t target = 0;
+        godot::Vector3 aimed;
+        int sent = 0;
+    };
+    Missiles missiles_;
+    int missiles_sent_ = 0;
+    // The new Warrior's Charge while it carries her: how long more, which way, whom it struck (ids:
+    // they may be gone; they pass through her until it ends), whether it carried her in the last step.
+    struct Dash {
+        float left = 0.0F;
+        godot::Vector3 way;
+        std::vector<std::uint64_t> struck;
+        bool moving = false;
+    };
+    Dash dash_;
+    int charge_struck_ = 0;
+    // Her Rain of Blades: the swords still to fall, each with where it lands, until it appears and until
+    // it lands, and which of her swords it shows.
+    struct FallingBlade {
+        godot::Vector3 at;
+        float until_shown = 0.0F;
+        float until_landed = 0.0F;
+        int model = 0;
+        bool shown = false;
+    };
+    std::vector<FallingBlade> blade_rain_;
+    int blade_rain_hits_ = 0;
+    int executions_ = 0;
+    // Her War Banner that stands (an id: it may be gone) and how long more.
+    std::uint64_t banner_id_ = 0;
+    float banner_left_ = 0.0F;
+    float banner_healed_ = 0.0F;
+    // Her thrown sword: its look (an id), where it is, which way it flew out, how long more out, whether
+    // it is coming back, how long it has flown, whom it struck going out and coming back.
+    struct ThrownSword {
+        std::uint64_t look = 0;
+        gameplay::SkillId skill = gameplay::SkillId::SwordThrow; // or the new Dwarf's ThrowingAxe
+        godot::Vector3 at;
+        godot::Vector3 way;
+        float out_left = 0.0F;
+        bool back = false;
+        float age = 0.0F;
+        std::vector<std::uint64_t> struck_out;
+        std::vector<std::uint64_t> struck_back;
+    };
+    ThrownSword thrown_;
+    int throw_hits_ = 0;
+    // The new Dwarf's Tremor: its rings still to run out, each with how long until it does, where from
+    // and which it is (0 the first, the narrowest).
+    struct TremorRing {
+        float in_seconds = 0.0F;
+        godot::Vector3 centre;
+        int ring = 0;
+    };
+    std::vector<TremorRing> tremor_;
+    int tremor_hits_ = 0;
+    // His Dwarven Cannon that stands (an id: it may be gone), how long more, until it fires again.
+    std::uint64_t cannon_id_ = 0;
+    float cannon_left_ = 0.0F;
+    float cannon_until_shot_ = 0.0F;
+    int cannon_shots_ = 0;
+    // His Stone Brew: how long more, what it kept from him, what it gave back.
+    float stone_brew_left_ = 0.0F;
+    float stone_brew_spared_ = 0.0F;
+    float stone_brew_healed_ = 0.0F;
+    // His Powder Keg that lies (an id: it may be gone) and until its fuse has burnt down.
+    std::uint64_t keg_id_ = 0;
+    float keg_left_ = 0.0F;
+    int keg_caught_ = 0;
     int teleports_ = 0;
     // The new wizard's Black Whole that drifts: what is seen of it (an id: it may be gone), where
     // it is and which way it goes, how long it still lasts and until it hurts again.
@@ -1013,6 +1226,7 @@ private:
     godot::StringName clip_fissure_;
     godot::StringName clip_anvil_;
     godot::StringName clip_stone_;
+    godot::StringName clip_keg_; // the new Dwarf's kick: his Powder Keg goes off his foot
     godot::StringName clip_flame_;
     godot::StringName clip_frost_;
     godot::StringName clip_thunder_;

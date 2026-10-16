@@ -51,9 +51,13 @@ public:
         Storm,   // lightning leaps on to the enemies nearby
         Bramble, // brambles hold every enemy around the place
         Burn,    // every enemy its blast caught goes on burning
+        // The Archer's of 2026-10-16:
+        Ricochet, // bounces on to the enemies nearby, weaker each time (a pale gold streak)
+        Mark,     // the enemy it struck takes her blows harder for a while (only on her machine)
     };
-    // `damage`: of the cloud's or the fire's ticks, or of each leap of the lightning. `first`: the cloud, the
-    // flames on a burning enemy, the
+    // `damage`: of the cloud's or the fire's ticks, of each leap of the lightning, of the first bounce
+    // of a ricochet; for a mark, anything above 0 marks (0: a hero shown for another player, who marks
+    // nothing). `first`: the cloud, the mark hung on the enemy, the flames on a burning enemy, the
     // strike at each enemy the lightning reaches, the burst of leaves. `second`: the cage of
     // brambles round each enemy held. Call before launch.
     void set_special(Special special, float damage, const godot::Ref<godot::PackedScene>& first,

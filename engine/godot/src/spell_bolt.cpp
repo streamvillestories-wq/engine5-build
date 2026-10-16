@@ -24,8 +24,9 @@
 namespace e5::bridge {
 namespace {
 
-constexpr double flight_lifetime = 4.0; // seconds after which a spell that has hit nothing is gone
-constexpr double fade_seconds = 1.0;    // the trail's last sparks die out before the node is removed
+constexpr double flight_lifetime = 4.0;    // seconds after which a spell that has hit nothing is gone
+constexpr float homing_last_metres = 4.0F; // see _physics_process
+constexpr double fade_seconds = 1.0;       // the trail's last sparks die out before the node is removed
 
 // Which poison is on which enemy (ids: either may be gone), so that one struck again is poisoned
 // anew and not twice over.
@@ -51,6 +52,10 @@ void E5SpellBolt::set_homing(const godot::Vector3& target, float speed, float tu
     homing_target_ = target;
     homing_speed_ = speed;
     homing_turn_ = turn;
+}
+
+void E5SpellBolt::set_homing_on(const godot::Node3D* target) {
+    homing_on_ = target != nullptr ? target->get_instance_id() : 0;
 }
 
 void E5SpellBolt::launch(const godot::Vector3& velocity, const godot::RID& caster) {
@@ -80,10 +85,23 @@ void E5SpellBolt::_physics_process(double delta) {
         return;
     }
     const godot::Vector3 from = get_global_position();
+    if (homing_on_ != 0) {
+        const auto* const enemy = godot::Object::cast_to<E5Enemy>(godot::ObjectDB::get_instance(homing_on_));
+        if (enemy != nullptr && enemy->is_alive()) {
+            homing_target_ = enemy->get_aim_point();
+        } else {
+            homing_on_ = 0; // gone or dead: on to where it was last
+        }
+    }
     if (homing_speed_ > 0.0F) {
         // Steer the velocity towards the one that leads straight to the target.
         const godot::Vector3 wanted = (homing_target_ - from).normalized() * homing_speed_;
         velocity_ = velocity_.move_toward(wanted, homing_turn_ * static_cast<float>(delta));
+        if (homing_on_ != 0 && from.distance_to(homing_target_) < homing_last_metres) {
+            // Close to an enemy it follows, it goes straight in: turning as it does far off, it would
+            // circle one that stands near (its turn is metres wide) and never strike.
+            velocity_ = wanted;
+        }
     }
     const godot::Vector3 to = from + velocity_ * static_cast<float>(delta);
     godot::TypedArray<godot::RID> excluded;
