@@ -85,7 +85,19 @@ enum class SkillId : unsigned char {
     ShadowFlurry,  // on a full charge: he flits from enemy to enemy, a dagger blow for each
     // The Bonecaller's (2026-10-16): his standard attack, cast as the new wizard's Arcane Bolt is.
     SoulBolt, // a wailing soul thrown from the skull in his lantern at what the crosshair covers
+    // The Bonecaller's five more (the keeper, 2026-10-16: "give him more skills").
+    BoneSpikes,     // a line of bone spikes breaks out of the ground ahead; what it catches is held
+    SoulDrain,      // a beam from his lantern tears at the enemy he aims at; he is healed by half of it
+    CurseOfFrailty, // enemies where he aims are cursed: every blow hurts them more for a while
+    BoneArmor,      // a stance: bones circle him and take the blows, until they have taken their share
+    Requiem,        // on a full charge: wailing souls burst out round him; what they reach is hurt and stunned
 };
+
+// Room for this many skills in anything indexed by SkillId (the player's cooldowns). It was 64 until
+// the Bonecaller's five took the count to 66 and every use of a skill threw: the check below fails
+// the build instead. Name the LAST SkillId in it when adding one.
+inline constexpr std::size_t skill_id_limit = 128;
+static_assert(static_cast<std::size_t>(SkillId::Requiem) < skill_id_limit, "more skills than skill_id_limit");
 
 // Which skills a character has on the bar.
 // `Blade` is the new warrior (2026-10-10): her sword's combo and nothing else yet. Her other
@@ -155,8 +167,41 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
 [[nodiscard]] constexpr bool skill_is_stance(SkillId skill) noexcept {
     return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede ||
            skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome || skill == SkillId::RunicBulwark ||
-           skill == SkillId::VeilOfShadows || skill == SkillId::VenomEdge;
+           skill == SkillId::VeilOfShadows || skill == SkillId::VenomEdge || skill == SkillId::BoneArmor;
 }
+
+// The Bonecaller's five (2026-10-16, the keeper: "give him more skills"), all cast with his Soul
+// Bolt's throw of the lantern but Bone Armor.
+// Bone Spikes: a line of bone breaks open ahead of him, `bone_spikes_length` long and narrow; what
+// it catches is hurt and held where it stands (E5Enemy::root) for `bone_spikes_root_seconds`.
+inline constexpr float bone_spikes_length = 11.0F;
+inline constexpr float bone_spikes_half_angle = 0.30F;
+inline constexpr float bone_spikes_near = 1.4F;
+inline constexpr float bone_spikes_root_seconds = 2.0F;
+// Soul Drain: the living enemy nearest to where the crosshair points (within `drain_aim_slack` of it,
+// no further than `drain_reach` from him) is struck, and he gains `drain_heal_share` of the damage.
+inline constexpr float drain_reach = 24.0F;
+inline constexpr float drain_aim_slack = 3.0F;
+inline constexpr float drain_heal_share = 0.5F;
+// Curse of Frailty: every enemy within `curse_radius` of where the crosshair points takes
+// `curse_factor` times HIS blows for `curse_seconds` (E5Enemy::curse). Nobody else gains by it (the
+// keeper, 2026-10-16: no skill helps another player, "since we do PVP"): the curse lies only on his
+// machine's copy of the enemy, which is where his blows are counted, and is told to no other machine.
+inline constexpr float curse_radius = 4.0F;
+inline constexpr float curse_seconds = 8.0F;
+inline constexpr float curse_factor = 1.4F;
+inline constexpr float curse_reach = 25.0F; // metres from him to where it falls, at most
+// Bone Armor, a stance: for `bone_armor_seconds` a barrier takes what would hurt him until it has
+// taken `bone_armor_share` of his full health (the new wizard's Frost Armor without its frost).
+inline constexpr float bone_armor_seconds = 7.0F;
+inline constexpr float bone_armor_share = 0.35F;
+// Requiem, on a full charge: every enemy within `requiem_radius` is hurt (skill_damage), stunned for
+// `requiem_stun_seconds`, and gives him `requiem_heal_share` of his full health, at most
+// `requiem_heal_most` in all.
+inline constexpr float requiem_radius = 7.0F;
+inline constexpr float requiem_stun_seconds = 2.0F;
+inline constexpr float requiem_heal_share = 0.05F;
+inline constexpr float requiem_heal_most = 0.3F;
 
 // The Shadowblade's five (2026-10-16, the keeper: "give him 5 skills").
 // Shadow Step: the living enemy nearest to where the crosshair points (within `shadow_step_aim_slack`
@@ -199,8 +244,9 @@ inline constexpr float fissure_stun_seconds = 1.2F;
 inline constexpr float bulwark_seconds = 6.0F;
 inline constexpr float bulwark_damage_share = 0.45F;
 // Ancestral Anvil: it stands `anvil_seconds` where it fell; every `anvil_tick_seconds` it hurts every
-// enemy within `anvil_radius` (skill_damage) and gives every hero within it `anvil_heal_share` of
-// their full health, him and his friends alike.
+// enemy within `anvil_radius` (skill_damage) and gives him, while he is within it, `anvil_heal_share`
+// of his full health. (Friends were healed too until 2026-10-16; the keeper: no skill helps another
+// player, "since we do PVP".)
 inline constexpr float anvil_seconds = 8.0F;
 inline constexpr float anvil_radius = 6.0F;
 inline constexpr float anvil_tick_seconds = 1.0F;
@@ -214,8 +260,8 @@ inline constexpr float stone_stun_seconds = 1.5F;
 // The new wizard's Dome of Protection (the keeper's own wish, 2026-10-13: "he summons a pink dome
 // of protection around him ... lasts for 6 seconds"), a stance: a dome rises round him and goes
 // with him for `dome_seconds` (it stood where he cast it at first; asked, the keeper chose this:
-// he is always inside). Nothing hurts a hero who is inside it, him or a friend who keeps near
-// him. Enemies walk in and out as they like.
+// he is always inside). Nothing hurts him while it stands; it shields nobody else (a friend inside
+// was shielded too until 2026-10-16: no skill helps another player). Enemies walk in and out.
 inline constexpr float dome_seconds = 6.0F;
 inline constexpr float dome_radius = 5.0F;
 

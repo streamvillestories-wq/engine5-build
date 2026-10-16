@@ -27,6 +27,16 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Arcane Bolt", .charges = false, .kind = SkillKind::Instant};
     case SkillId::SoulBolt:
         return {.name = "Soul Bolt", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BoneSpikes:
+        return {.name = "Bone Spikes", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::SoulDrain:
+        return {.name = "Soul Drain", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::CurseOfFrailty:
+        return {.name = "Curse of Frailty", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BoneArmor:
+        return {.name = "Bone Armor", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Requiem:
+        return {.name = "Requiem", .charges = false, .kind = SkillKind::Instant};
     case SkillId::Fireball:
         return {.name = "Fireball", .charges = false, .kind = SkillKind::Instant};
     case SkillId::FrostNova:
@@ -158,6 +168,12 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::ArcaneBolt:
     case SkillId::SoulBolt: // his standard attack, as the wizard's is
         return 22.0F;
+    case SkillId::BoneSpikes:
+        return 26.0F; // to each it catches; the hold does the rest
+    case SkillId::SoulDrain:
+        return 34.0F; // to the one; half of it heals him
+    case SkillId::Requiem:
+        return 40.0F; // to each round him: it takes a full charge, and stuns besides
     case SkillId::Fireball:
         return 50.0F;
     case SkillId::FrostNova:
@@ -233,6 +249,8 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::MirrorImage: // (his copy's spells are his own, at clone_damage_share)
     case SkillId::ProtectionDome:
     case SkillId::RunicBulwark:
+    case SkillId::CurseOfFrailty: // (it makes everyone's blows harder)
+    case SkillId::BoneArmor:
     case SkillId::VeilOfShadows: // (its ambush doubles the blow that ends it)
     case SkillId::VenomEdge:     // (its poison: venom_edge_tick_damage)
         return 0.0F;             // they strike nobody
@@ -383,6 +401,14 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 20.0F; // from the key: it lasts five of them
     case SkillId::VenomEdge:
         return 18.0F; // from the key: it lasts eight of them
+    case SkillId::BoneSpikes:
+        return 10.0F;
+    case SkillId::SoulDrain:
+        return 8.0F;
+    case SkillId::CurseOfFrailty:
+        return 16.0F; // it lasts eight of them
+    case SkillId::BoneArmor:
+        return 20.0F; // from the key: it lasts seven of them
     // The standard attacks, and the skills that take a charge instead.
     case SkillId::None:
     case SkillId::Shot:
@@ -398,6 +424,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
     case SkillId::CutInPieces:
     case SkillId::MirrorImage:
     case SkillId::ShadowFlurry:
+    case SkillId::Requiem:
         return 0.0F;
     }
     return 0.0F;
@@ -406,7 +433,7 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
 bool skill_needs_charge(SkillId skill) noexcept {
     return skill == SkillId::Kingfishers || skill == SkillId::BlackHole || skill == SkillId::StarWhirl ||
            skill == SkillId::Battlecry || skill == SkillId::CutInPieces || skill == SkillId::MirrorImage ||
-           skill == SkillId::ShadowFlurry;
+           skill == SkillId::ShadowFlurry || skill == SkillId::Requiem;
 }
 
 float firebolt_power(float charged_seconds) noexcept {
@@ -561,7 +588,8 @@ SkillBar::SkillBar(SkillSet set) noexcept {
                   SkillId::PoisonHydra, SkillId::Teleport,      SkillId::RovingHole, SkillId::Blizzard,
                   SkillId::MirrorImage, SkillId::ProtectionDome};
     } else if (set == SkillSet::Bone) {
-        slots_ = {SkillId::SoulBolt};
+        slots_ = {SkillId::SoulBolt,       SkillId::BoneSpikes, SkillId::SoulDrain,
+                  SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem};
     } else if (set == SkillSet::Shadow) {
         slots_ = {SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
                   SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
@@ -642,7 +670,8 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
         SkillId::Teleport,   SkillId::RovingHole, SkillId::Blizzard,   SkillId::MirrorImage, SkillId::ProtectionDome};
     static constexpr std::array shadow{SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
                                        SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
-    static constexpr std::array bone{SkillId::SoulBolt};
+    static constexpr std::array bone{SkillId::SoulBolt,       SkillId::BoneSpikes, SkillId::SoulDrain,
+                                     SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem};
     switch (set) {
     case SkillSet::Bone:
         return bone;
@@ -692,6 +721,21 @@ std::string_view skill_description(SkillId skill) noexcept {
     case SkillId::SoulBolt:
         return "His standard attack: a wailing soul torn from the skull in his lantern, thrown at what the "
                "crosshair covers.";
+    case SkillId::BoneSpikes:
+        return "A line of bone spikes breaks out of the ground ahead of him. Enemies it catches are hurt "
+               "and held where they stand for a moment.";
+    case SkillId::SoulDrain:
+        return "A beam of green light from his lantern tears at the soul of the enemy he aims at; half of "
+               "the damage heals him.";
+    case SkillId::CurseOfFrailty:
+        return "He curses the place he aims at: for eight seconds every enemy there takes more damage "
+               "from his blows.";
+    case SkillId::BoneArmor:
+        return "Bones circle him for seven seconds and take the blows meant for him, until they have "
+               "taken their share.";
+    case SkillId::Requiem:
+        return "Wailing souls burst out all round him: every enemy they reach is hurt and stunned, and "
+               "each heals him a little. The damage is to each.";
     case SkillId::Fireball:
         return "A ball of fire that explodes where it strikes.";
     case SkillId::FrostNova:
@@ -733,7 +777,7 @@ std::string_view skill_description(SkillId skill) noexcept {
                "its harm.";
     case SkillId::AncestralAnvil:
         return "He beats his chest, and an anvil forged with runes slams down where he stands. For eight "
-               "seconds it pulses: enemies near it are hurt, heroes near it are healed, his friends too. "
+               "seconds it pulses: enemies near it are hurt, and he is healed while he stands near it. "
                "The damage is one pulse.";
     case SkillId::Stonebreaker:
         return "He hurls a boulder at what he aims at. It bursts where it strikes and stuns what it "
@@ -822,8 +866,8 @@ std::string_view skill_description(SkillId skill) noexcept {
                "and waits; the first enemy that steps into it is hurt badly. Only so many lie at a time: with "
                "one more, the oldest is gone.";
     case SkillId::ProtectionDome:
-        return "A dome of pink light rises round him and goes with him for six seconds. Nothing hurts a hero "
-               "who is inside it: him, and a friend who keeps close to him.";
+        return "A dome of pink light rises round him and goes with him for six seconds. Nothing hurts him "
+               "while it stands.";
     case SkillId::MirrorImage:
         return "Takes a full charge. A copy of him in all the rainbow's colours appears where he aims and casts "
                "those of his spells that do damage at the enemies near it for a while, weaker than his own. "

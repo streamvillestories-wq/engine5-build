@@ -93,6 +93,17 @@ public:
         note_effect(effect_stun, seconds, 0.0F);
     }
     [[nodiscard]] bool is_stunned() const { return stunned_left_ > 0.0F; }
+    // Cursed (the Bonecaller's Curse of Frailty): every blow struck on THIS machine hurts it `factor`
+    // times as much for so many seconds, which is his alone: a shown hero's blows hurt nothing, and
+    // other players' are counted on their own machines. Not told to the machine that decides the
+    // enemy (no skill helps another player). A new curse replaces the old one if it is as strong.
+    void curse(float factor, float seconds) {
+        if (factor >= curse_factor_ || cursed_left_ <= 0.0F) {
+            curse_factor_ = factor;
+        }
+        cursed_left_ = std::max(cursed_left_, seconds);
+    }
+    [[nodiscard]] bool is_cursed() const { return cursed_left_ > 0.0F; }
     // Throws it: it flies under gravity until it lands, then carries on as before.
     void fling(const godot::Vector3& velocity);
 
@@ -332,6 +343,8 @@ private:
     float slowed_share_ = 0.0F; // of its pace, taken away while slowed_left_ runs
     float slowed_left_ = 0.0F;
     float stunned_left_ = 0.0F; // seconds it still stands stunned
+    float cursed_left_ = 0.0F;  // seconds it is still cursed ...
+    float curse_factor_ = 1.0F; // ... and how many times a blow hurts it meanwhile
     // Its pace now: move_speed_, less what slows it.
     [[nodiscard]] float pace() const { return move_speed_ * (slowed_left_ > 0.0F ? 1.0F - slowed_share_ : 1.0F); }
     bool remote_ = false;

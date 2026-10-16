@@ -295,6 +295,12 @@ constexpr const char* shadow_knife_path = "res://effects/shadow_knife.tscn";
 constexpr const char* veil_path = "res://effects/veil_of_shadows.tscn";
 constexpr const char* venom_edge_path = "res://effects/venom_edge.tscn";
 constexpr const char* poisoned_path = "res://effects/poisoned.tscn";
+// The Bonecaller's: his bone burst, the curse on an enemy, his armour, his requiem, a drained soul.
+constexpr const char* bone_burst_path = "res://effects/bone_burst.tscn";
+constexpr const char* curse_mark_path = "res://effects/curse_mark.tscn";
+constexpr const char* bone_armor_path = "res://effects/bone_armor.tscn";
+constexpr const char* requiem_path = "res://effects/requiem.tscn";
+constexpr const char* soul_impact_path = "res://effects/soul_impact.tscn";
 constexpr float shadow_step_remote_seconds = 0.6F; // another player's: his new place arrives within this
 constexpr int seismic_rows = 7; // (five at first, of one to five bursts: too thin to fill the wedge, bug report 33)
 constexpr float seismic_row_seconds = 0.07F; // from one row to the next
@@ -481,6 +487,10 @@ const SpellTiming* timing_of(gameplay::SkillId skill) {
     switch (skill) {
     case gameplay::SkillId::ArcaneBolt:
     case gameplay::SkillId::SoulBolt: // the same throw, of his lantern
+    case gameplay::SkillId::BoneSpikes:
+    case gameplay::SkillId::SoulDrain:
+    case gameplay::SkillId::CurseOfFrailty:
+    case gameplay::SkillId::Requiem:
     case gameplay::SkillId::Firebolt: // the same throw of the wand
     case gameplay::SkillId::ChainBolt:
     case gameplay::SkillId::PoisonHydra:
@@ -724,6 +734,8 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_knives_thrown"), &E5PlayerController::get_knives_thrown);
     ClassDB::bind_method(D_METHOD("get_ambushes"), &E5PlayerController::get_ambushes);
     ClassDB::bind_method(D_METHOD("get_poisonings"), &E5PlayerController::get_poisonings);
+    ClassDB::bind_method(D_METHOD("get_healed_by_skills"), &E5PlayerController::get_healed_by_skills);
+    ClassDB::bind_method(D_METHOD("get_cursed_count"), &E5PlayerController::get_cursed_count);
     ClassDB::bind_method(D_METHOD("get_anvil_pulses"), &E5PlayerController::get_anvil_pulses);
     ClassDB::bind_method(D_METHOD("get_anvil_healed"), &E5PlayerController::get_anvil_healed);
     ClassDB::bind_method(D_METHOD("get_towers_grown"), &E5PlayerController::get_towers_grown);
@@ -821,7 +833,7 @@ void E5PlayerController::_bind_methods() {
         PropertyInfo(godot::Variant::FLOAT, "jump_velocity", godot::PROPERTY_HINT_RANGE, "0,20,0.1,suffix:m/s"),
         "set_jump_velocity", "get_jump_velocity");
     ADD_PROPERTY(
-        PropertyInfo(godot::Variant::FLOAT, "fall_acceleration", godot::PROPERTY_HINT_RANGE, "0,50,0.1,suffix:m/s²"),
+        PropertyInfo(godot::Variant::FLOAT, "fall_acceleration", godot::PROPERTY_HINT_RANGE, "0,50,0.1,suffix:m/sÂ²"),
         "set_fall_acceleration", "get_fall_acceleration");
     ADD_PROPERTY(
         PropertyInfo(godot::Variant::FLOAT, "turn_speed", godot::PROPERTY_HINT_RANGE, "0.5,40,0.1,suffix:rad/s"),
@@ -3023,6 +3035,8 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
     } else if (skill == gameplay::SkillId::Kingfishers) {
         clip = &clip_summon_;
     } else if (skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::SoulBolt ||
+               skill == gameplay::SkillId::BoneSpikes || skill == gameplay::SkillId::SoulDrain ||
+               skill == gameplay::SkillId::CurseOfFrailty || skill == gameplay::SkillId::Requiem ||
                skill == gameplay::SkillId::Firebolt || skill == gameplay::SkillId::ChainBolt ||
                skill == gameplay::SkillId::PoisonHydra || skill == gameplay::SkillId::RovingHole ||
                skill == gameplay::SkillId::Blizzard) {
@@ -3165,6 +3179,8 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
             E5Effect::spawn(cast_glow(skill), right_hand_, casting_point(false));
         }
         const bool one_handed = skill == gameplay::SkillId::ArcaneBolt || skill == gameplay::SkillId::SoulBolt ||
+                                skill == gameplay::SkillId::BoneSpikes || skill == gameplay::SkillId::SoulDrain ||
+                                skill == gameplay::SkillId::CurseOfFrailty || skill == gameplay::SkillId::Requiem ||
                                 skill == gameplay::SkillId::ChainLightning || skill == gameplay::SkillId::Firebolt ||
                                 skill == gameplay::SkillId::ChainBolt || skill == gameplay::SkillId::PoisonHydra ||
                                 skill == gameplay::SkillId::RovingHole || skill == gameplay::SkillId::Blizzard;
@@ -3290,6 +3306,22 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
     }
     if (spell == gameplay::SkillId::ShadowStep) {
         strike_shadow_step();
+        return;
+    }
+    if (spell == gameplay::SkillId::BoneSpikes) {
+        strike_bone_spikes();
+        return;
+    }
+    if (spell == gameplay::SkillId::SoulDrain) {
+        drain_soul();
+        return;
+    }
+    if (spell == gameplay::SkillId::CurseOfFrailty) {
+        curse_area();
+        return;
+    }
+    if (spell == gameplay::SkillId::Requiem) {
+        sing_requiem();
         return;
     }
     if (spell == gameplay::SkillId::FanOfKnives) {
@@ -4107,7 +4139,9 @@ bool E5PlayerController::in_dome() const {
     const godot::TypedArray<godot::Node> domes = get_tree()->get_nodes_in_group(dome_group);
     for (const godot::Variant& node : domes) {
         const auto* const dome = godot::Object::cast_to<godot::Node3D>(node);
-        if (dome == nullptr || !static_cast<bool>(dome->get_meta("shields", false))) {
+        // Only his own: the dome hangs on the hero who raised it (no skill shields another player,
+        // the keeper's word, 2026-10-16: "we do PVP").
+        if (dome == nullptr || dome->get_parent() != this || !static_cast<bool>(dome->get_meta("shields", false))) {
             continue;
         }
         const godot::Vector3 away = get_global_position() - dome->get_global_position();
@@ -4146,7 +4180,14 @@ void E5PlayerController::start_stance(gameplay::SkillId skill) {
     } else if (skill == gameplay::SkillId::Stampede) {
         stampede_ = gameplay::open_wound({}, gameplay::stampede_seconds, gameplay::stampede_tick_seconds);
         E5Effect::spawn(effect_scene(stampede_path), this, get_global_position());
+    } else if (skill == gameplay::SkillId::BoneArmor) {
+        // The Frost Armor's barrier, without its frost.
+        armor_left_ = gameplay::bone_armor_seconds;
+        armor_barrier_ = effective_vitals().max_health * gameplay::bone_armor_share;
+        armor_slows_ = false;
+        E5Effect::spawn(effect_scene(bone_armor_path), this, get_global_position());
     } else if (skill == gameplay::SkillId::FrostArmor) {
+        armor_slows_ = true;
         armor_left_ = gameplay::frost_armor_seconds;
         armor_barrier_ = effective_vitals().max_health * gameplay::frost_armor_share;
         armor_tick_ = 0.0F; // those near are slowed at once
@@ -4254,7 +4295,7 @@ void E5PlayerController::update_counter(float delta) {
         // player: his own machine slows them, and says so to the one that decides them.)
         armor_left_ = std::max(armor_left_ - delta, 0.0F);
         armor_tick_ -= delta;
-        if (armor_tick_ <= 0.0F && !remote_ && !vitals_.dead) {
+        if (armor_tick_ <= 0.0F && armor_slows_ && !remote_ && !vitals_.dead) {
             armor_tick_ = gameplay::frost_armor_tick_seconds;
             const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
             for (const godot::Variant& node : enemies) {
@@ -5231,6 +5272,7 @@ void E5PlayerController::raise_anvil() {
     shake_ = std::max(shake_, seismic_shake);
     if (godot::Node3D* const anvil = E5Effect::spawn(effect_scene(anvil_path), get_parent(), anvil_at_)) {
         anvil->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+        anvil->set_meta("caster", static_cast<int64_t>(get_instance_id())); // it heals him alone
     }
 }
 
@@ -5247,8 +5289,8 @@ void E5PlayerController::update_anvil(float delta) {
             }
         }
     }
-    // Every anvil that stands heals the hero played here while she is near it (anyone's anvil: a
-    // friend's too). Its own script counts its seconds and says whether it still heals.
+    // The anvil he raised heals him while he is near it (only his own: no skill helps another player).
+    // Its own script counts its seconds and says whether it still heals.
     if (remote_ || clone_ || vitals_.dead || !is_inside_tree()) {
         return;
     }
@@ -5260,7 +5302,9 @@ void E5PlayerController::update_anvil(float delta) {
     const godot::TypedArray<godot::Node> anvils = get_tree()->get_nodes_in_group(anvil_group);
     for (const godot::Variant& node : anvils) {
         const auto* const anvil = godot::Object::cast_to<godot::Node3D>(node);
-        if (anvil == nullptr || !static_cast<bool>(anvil->get_meta("heals", false))) {
+        // Only the anvil he raised himself heals him (no skill heals another player: the keeper's word).
+        if (anvil == nullptr || !static_cast<bool>(anvil->get_meta("heals", false)) ||
+            static_cast<int64_t>(anvil->get_meta("caster", 0)) != static_cast<int64_t>(get_instance_id())) {
             continue;
         }
         const godot::Vector3 away = get_global_position() - anvil->get_global_position();
@@ -5446,6 +5490,156 @@ void E5PlayerController::envenom(E5Enemy* enemy) {
     ++poisonings_;
 }
 
+void E5PlayerController::heal_self(float amount) {
+    if (remote_ || vitals_.dead || amount <= 0.0F) {
+        return; // (a hero shown for another player: her health is counted where she is played)
+    }
+    const float full = effective_vitals().max_health;
+    const float gained = std::min(amount, std::max(full - vitals_.health, 0.0F));
+    vitals_.health += gained;
+    healed_by_skills_ += gained;
+}
+
+void E5PlayerController::strike_bone_spikes() {
+    // The Molten Fissure's line, in bone: one burst after another further out, each a little larger.
+    const godot::Vector3 ahead(-std::sin(look_.yaw), 0.0F, -std::cos(look_.yaw));
+    const godot::Vector3 feet = get_global_position();
+    shake_ = std::max(shake_, 0.12F);
+    constexpr int bursts = 8;
+    for (int index = 0; index < bursts; ++index) {
+        const float share = static_cast<float>(index) / static_cast<float>(bursts - 1);
+        const float out = 1.3F + (gameplay::bone_spikes_length - 1.3F) * share;
+        eruptions_.push_back({.molten = false,
+                              .bone = true,
+                              .in_seconds = 0.05F * static_cast<float>(index),
+                              .place = feet + ahead * out + godot::Vector3(0.0F, 0.04F, 0.0F),
+                              .size = 0.7F + 0.5F * share});
+    }
+    if (remote_) {
+        return; // decided where he is played
+    }
+    const float damage = dealt(gameplay::SkillId::BoneSpikes);
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_held()) {
+            continue;
+        }
+        const godot::Vector3 to = enemy->get_global_position() - feet;
+        if (std::abs(static_cast<float>(to.y)) > 6.0F ||
+            !gameplay::in_wedge(static_cast<float>(to.x), static_cast<float>(to.z), static_cast<float>(ahead.x),
+                                static_cast<float>(ahead.z), gameplay::bone_spikes_length,
+                                gameplay::bone_spikes_half_angle, gameplay::bone_spikes_near,
+                                enemy->get_body_radius())) {
+            continue;
+        }
+        combat::hit(enemy, enemy->get_aim_point(), damage);
+        enemy->root(gameplay::bone_spikes_root_seconds);
+    }
+}
+
+void E5PlayerController::drain_soul() {
+    // From the skull in his lantern to the enemy nearest where the crosshair points, if near enough.
+    const godot::Vector3 origin = casting_point(false);
+    const godot::Vector3 aimed = find_aim_point(origin).position;
+    E5Enemy* target = nullptr;
+    float nearest = gameplay::drain_aim_slack;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive() ||
+            static_cast<float>(enemy->get_global_position().distance_to(get_global_position())) >
+                gameplay::drain_reach + enemy->get_body_radius()) {
+            continue;
+        }
+        const float miss = static_cast<float>(enemy->get_aim_point().distance_to(aimed)) - enemy->get_body_radius();
+        if (miss <= nearest) {
+            nearest = miss;
+            target = enemy;
+        }
+    }
+    const godot::Color green(0.5F, 2.4F, 0.8F);
+    if (target == nullptr) {
+        E5LightningArc::spawn(get_parent(), origin, aimed, green); // into the air: nothing to drain
+        return;
+    }
+    const godot::Vector3 body = target->get_aim_point();
+    E5LightningArc::spawn(get_parent(), origin, body, green);
+    E5LightningArc::spawn(get_parent(), body, origin, green);
+    E5Effect::spawn(effect_scene(soul_impact_path), get_parent(), body);
+    E5Effect::spawn(effect_scene(soul_impact_path), get_parent(), origin);
+    const float damage = dealt(gameplay::SkillId::SoulDrain);
+    if (remote_) {
+        return;
+    }
+    combat::hit(target, body, damage);
+    heal_self(damage * gameplay::drain_heal_share);
+}
+
+void E5PlayerController::curse_area() {
+    // Where the crosshair points, on the ground there, no further than he may reach.
+    const godot::Vector3 here = get_global_position();
+    godot::Vector3 place = find_aim_point(here + godot::Vector3(0.0F, 1.3F, 0.0F)).position;
+    godot::Vector3 away = place - here;
+    away.y = 0.0F;
+    if (static_cast<float>(away.length()) > gameplay::curse_reach) {
+        place = here + away.normalized() * gameplay::curse_reach;
+    }
+    E5Effect::spawn(effect_scene(soul_impact_path), get_parent(),
+                    ground_under(place) + godot::Vector3(0.0F, 0.3F, 0.0F));
+    if (remote_) {
+        return; // the curse is laid where he is played, and told to whoever decides the enemy
+    }
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive()) {
+            continue;
+        }
+        godot::Vector3 to = enemy->get_global_position() - place;
+        to.y = 0.0F;
+        if (static_cast<float>(to.length()) - enemy->get_body_radius() > gameplay::curse_radius) {
+            continue;
+        }
+        enemy->curse(gameplay::curse_factor, gameplay::curse_seconds);
+        E5Effect::spawn(effect_scene(curse_mark_path), enemy, enemy->get_global_position());
+        ++cursed_count_;
+    }
+}
+
+void E5PlayerController::sing_requiem() {
+    const godot::Vector3 feet = get_global_position();
+    E5Effect::spawn(effect_scene(requiem_path), get_parent(), feet + godot::Vector3(0.0F, 0.1F, 0.0F));
+    shake_ = std::max(shake_, 0.18F);
+    if (remote_) {
+        return;
+    }
+    const float damage = dealt(gameplay::SkillId::Requiem);
+    const float full = effective_vitals().max_health;
+    float healed = 0.0F;
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || !enemy->is_alive()) {
+            continue;
+        }
+        godot::Vector3 to = enemy->get_global_position() - feet;
+        if (std::abs(static_cast<float>(to.y)) > 6.0F) {
+            continue;
+        }
+        to.y = 0.0F;
+        if (static_cast<float>(to.length()) - enemy->get_body_radius() > gameplay::requiem_radius) {
+            continue;
+        }
+        combat::hit(enemy, enemy->get_aim_point(), damage);
+        enemy->stun(gameplay::requiem_stun_seconds);
+        E5Effect::spawn(effect_scene(seismic_stun_path), enemy,
+                        enemy->get_aim_point() + godot::Vector3(0.0F, enemy->get_body_radius() + 0.7F, 0.0F));
+        healed = std::min(healed + full * gameplay::requiem_heal_share, full * gameplay::requiem_heal_most);
+    }
+    heal_self(healed);
+}
+
 void E5PlayerController::envenom_near(const godot::Vector3& centre, float radius) {
     const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
     for (const godot::Variant& node : enemies) {
@@ -5464,9 +5658,9 @@ void E5PlayerController::update_eruptions(float delta) {
     for (Eruption& eruption : eruptions_) {
         eruption.in_seconds -= delta;
         if (eruption.in_seconds <= 0.0F) {
-            if (godot::Node3D* const burst =
-                    E5Effect::spawn(effect_scene(eruption.molten ? molten_burst_path : seismic_burst_path),
-                                    get_parent(), eruption.place)) {
+            const char* const path =
+                eruption.bone ? bone_burst_path : (eruption.molten ? molten_burst_path : seismic_burst_path);
+            if (godot::Node3D* const burst = E5Effect::spawn(effect_scene(path), get_parent(), eruption.place)) {
                 burst->set_scale(godot::Vector3(eruption.size, eruption.size, eruption.size));
             }
         }

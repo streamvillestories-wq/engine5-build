@@ -277,6 +277,8 @@ public:
     [[nodiscard]] int get_knives_thrown() const { return knives_thrown_; }
     [[nodiscard]] int get_ambushes() const { return ambushes_; }
     [[nodiscard]] int get_poisonings() const { return poisonings_; }
+    [[nodiscard]] float get_healed_by_skills() const { return healed_by_skills_; }
+    [[nodiscard]] int get_cursed_count() const { return cursed_count_; }
     [[nodiscard]] float get_bulwark_spared() const { return bulwark_spared_; }
     // Ancestral Anvil: how often it has pulsed, and the health it gave this hero (for tests).
     [[nodiscard]] int get_anvil_pulses() const { return anvil_pulses_; }
@@ -522,6 +524,12 @@ private:
     float ambush();
     void envenom(E5Enemy* enemy);
     void envenom_near(const godot::Vector3& centre, float radius);
+    // The Bonecaller's (skills.hpp, "The Bonecaller's five").
+    void strike_bone_spikes();
+    void drain_soul();
+    void curse_area();
+    void sing_requiem();
+    void heal_self(float amount);
     void raise_anvil();
     void hurl_stone();
     void update_anvil(float delta);
@@ -824,6 +832,9 @@ private:
     int knives_thrown_ = 0;
     int ambushes_ = 0;
     int poisonings_ = 0;
+    bool armor_slows_ = true;       // Frost Armor slows what is near; Bone Armor, the same barrier, does not
+    float healed_by_skills_ = 0.0F; // the Bonecaller's drain and requiem: for the report
+    int cursed_count_ = 0;
     float bulwark_spared_ = 0.0F; // damage it has kept from him
     // His Ancestral Anvil: where it stands and how long more; the pulses are struck from here, the
     // healing is asked of every anvil in the world by each machine for its own hero.
@@ -848,6 +859,7 @@ private:
     // Bursts of the Seismic Slash still to come: the ground breaks open further and further out.
     struct Eruption {
         bool molten = false; // the Molten Fissure's: lava, not stone
+        bool bone = false;   // the Bonecaller's Bone Spikes: bone, not stone
         float in_seconds = 0.0F;
         godot::Vector3 place;
         float size = 1.0F;
@@ -856,7 +868,7 @@ private:
     godot::StringName clip_block_;
     godot::Ref<godot::PackedScene> block_spark_;
     // Seconds until each skill can be used again, by its number; and the charge, 0 to 1.
-    std::array<float, 64> cooldown_left_{};
+    std::array<float, gameplay::skill_id_limit> cooldown_left_{};
     float charge_ = 0.0F;
     bool charge_always_full_ = false;
     bool cooldowns_enabled_ = true;

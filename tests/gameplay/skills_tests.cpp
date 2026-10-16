@@ -562,7 +562,23 @@ TEST_CASE("the Bonecaller throws souls as his standard attack", "[skills]") {
     using e5::gameplay::SkillId;
     const e5::gameplay::SkillBar bar(e5::gameplay::SkillSet::Bone);
     CHECK(bar.slot(0) == SkillId::SoulBolt);
-    CHECK(bar.slot(1) == SkillId::None);
+    // His five of 2026-10-16.
+    CHECK(bar.slot(1) == SkillId::BoneSpikes);
+    CHECK(bar.slot(2) == SkillId::SoulDrain);
+    CHECK(bar.slot(3) == SkillId::CurseOfFrailty);
+    CHECK(bar.slot(4) == SkillId::BoneArmor);
+    CHECK(bar.slot(5) == SkillId::Requiem);
+    CHECK(bar.slot(6) == SkillId::None);
+    CHECK(e5::gameplay::skill_is_stance(SkillId::BoneArmor));
+    CHECK(e5::gameplay::skill_needs_charge(SkillId::Requiem));
+    for (const SkillId skill : {SkillId::BoneSpikes, SkillId::SoulDrain, SkillId::Requiem}) {
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+    }
+    for (const SkillId skill : {SkillId::BoneSpikes, SkillId::SoulDrain, SkillId::CurseOfFrailty, SkillId::BoneArmor}) {
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+    }
+    CHECK(e5::gameplay::curse_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::CurseOfFrailty));
+    CHECK(e5::gameplay::bone_armor_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::BoneArmor));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Bone) == e5::gameplay::open_slots);
     CHECK(e5::gameplay::skill_damage(SkillId::SoulBolt) == e5::gameplay::skill_damage(SkillId::ArcaneBolt));
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::SoulBolt) == 0.0F);

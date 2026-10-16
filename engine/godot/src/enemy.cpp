@@ -155,6 +155,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_aim_point"), &E5Enemy::get_aim_point);
     ClassDB::bind_method(D_METHOD("take_damage", "amount", "position"), &E5Enemy::take_damage);
     ClassDB::bind_method(D_METHOD("get_health"), &E5Enemy::get_health);
+    ClassDB::bind_method(D_METHOD("curse", "factor", "seconds"), &E5Enemy::curse);
+    ClassDB::bind_method(D_METHOD("is_cursed"), &E5Enemy::is_cursed);
     ClassDB::bind_method(D_METHOD("is_alive"), &E5Enemy::is_alive);
     ClassDB::bind_method(D_METHOD("set_remote", "remote"), &E5Enemy::set_remote);
     ClassDB::bind_method(D_METHOD("is_remote"), &E5Enemy::is_remote);
@@ -338,6 +340,7 @@ void E5Enemy::revive(const godot::Vector3& position) {
     rooted_left_ = 0.0F;
     slowed_left_ = 0.0F;
     stunned_left_ = 0.0F;
+    cursed_left_ = 0.0F;
     pending_damage_ = 0.0F;
     heaviest_pending_blow_ = 0.0F;
     set_shrink(1.0F);
@@ -403,6 +406,9 @@ godot::Vector3 E5Enemy::get_aim_point() const {
 void E5Enemy::take_damage(float amount, const godot::Vector3& position) {
     if (!is_alive() || amount <= 0.0F) {
         return;
+    }
+    if (cursed_left_ > 0.0F) {
+        amount *= curse_factor_; // the Bonecaller's Curse of Frailty
     }
     if (remote_) {
         // Seen here at once; counted where the enemy is decided.
@@ -875,6 +881,7 @@ void E5Enemy::_physics_process(double delta) {
     rooted_left_ = std::max(rooted_left_ - dt, 0.0F);
     slowed_left_ = std::max(slowed_left_ - dt, 0.0F);
     stunned_left_ = std::max(stunned_left_ - dt, 0.0F);
+    cursed_left_ = std::max(cursed_left_ - dt, 0.0F);
     if (held_) {
         animator_.update(dt);
         return; // the holder moves it
@@ -1154,6 +1161,7 @@ void E5Enemy::respawn() {
     rooted_left_ = 0.0F;
     slowed_left_ = 0.0F;
     stunned_left_ = 0.0F;
+    cursed_left_ = 0.0F;
     set_shrink(1.0F);
     pending_damage_ = 0.0F;
     heaviest_pending_blow_ = 0.0F;
