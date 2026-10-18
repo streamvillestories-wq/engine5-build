@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <vector>
 
 using Catch::Approx;
@@ -43,4 +44,41 @@ TEST_CASE("too short a path is nowhere", "[paths]") {
     CHECK(std::isinf(distance_to_path(one, 3.0F, 4.0F)));
     CHECK(smooth_path(one, 1.0F).size() == 1);
     CHECK(smooth_path({}, 1.0F).empty());
+}
+
+TEST_CASE("the path index answers as asking every path does", "[paths]") {
+    using e5::gameplay::distance_to_path;
+    using e5::gameplay::PathIndex;
+    using e5::gameplay::PathPoint;
+    std::vector<std::vector<PathPoint>> paths;
+    // A ring, a long straight road, a short spur and a single point (no line at all).
+    std::vector<PathPoint> ring;
+    for (int step = 0; step <= 64; ++step) {
+        const float angle = static_cast<float>(step) * 6.2831853F / 64.0F;
+        ring.push_back({.x = 60.0F * std::cos(angle), .z = 60.0F * std::sin(angle)});
+    }
+    paths.push_back(ring);
+    paths.push_back({{.x = -400.0F, .z = 300.0F}, {.x = 380.0F, .z = 260.0F}});
+    paths.push_back({{.x = 200.0F, .z = -150.0F}, {.x = 210.0F, .z = -140.0F}, {.x = 230.0F, .z = -160.0F}});
+    paths.push_back({{.x = 5.0F, .z = 5.0F}});
+    PathIndex index;
+    index.build(paths, 32.0F);
+    for (float x = -700.0F; x <= 700.0F; x += 37.0F) {
+        for (float z = -700.0F; z <= 700.0F; z += 41.0F) {
+            float all = std::numeric_limits<float>::infinity();
+            float first_two = std::numeric_limits<float>::infinity();
+            for (std::size_t path = 0; path < paths.size(); ++path) {
+                const float d = distance_to_path(paths[path], x, z);
+                all = std::min(all, d);
+                if (path < 2) {
+                    first_two = std::min(first_two, d);
+                }
+            }
+            CHECK(index.nearest(x, z) == Catch::Approx(all).margin(0.001));
+            CHECK(index.nearest(x, z, 2) == Catch::Approx(first_two).margin(0.001));
+        }
+    }
+    PathIndex empty;
+    empty.build({}, 32.0F);
+    CHECK(empty.nearest(0.0F, 0.0F) > 1e30F);
 }

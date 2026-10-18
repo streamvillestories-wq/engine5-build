@@ -52,6 +52,8 @@ public:
     [[nodiscard]] godot::String get_weapon_class() const;
     [[nodiscard]] gameplay::WeaponClass weapon_class() const;
     void add_gold(int amount);
+    // Takes `amount` gold if there is that much (building in a match); false and nothing taken if not.
+    bool spend_gold(int amount);
     [[nodiscard]] int get_gold() const { return inventory_.gold; }
     [[nodiscard]] bool has_room_for(int item) const;
 

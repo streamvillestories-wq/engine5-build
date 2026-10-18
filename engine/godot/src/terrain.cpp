@@ -456,11 +456,7 @@ float E5Terrain::ground(float x, float z) const {
     constexpr float causeway_height = 0.6F;
     constexpr float causeway_reach = 7.0F;
     if (height < causeway_height && height > -2.0F && path_count_ > 0) {
-        float nearest = causeway_reach;
-        for (int index = 0; index < path_count_; ++index) {
-            nearest =
-                std::min(nearest, gameplay::distance_to_path(smoothed_paths_[static_cast<std::size_t>(index)], x, z));
-        }
+        const float nearest = std::min(causeway_reach, path_index_.nearest(x, z, path_count_));
         if (nearest < causeway_reach) {
             const float open_water =
                 std::min(gameplay::island_river_distance(params_, x, z) - params_.river_width * 0.5F,
@@ -590,11 +586,7 @@ float E5Terrain::path_distance_at(float world_x, float world_z) const {
     const godot::Vector3 origin = get_global_position();
     const float x = world_x - static_cast<float>(origin.x);
     const float z = world_z - static_cast<float>(origin.z);
-    float nearest = std::numeric_limits<float>::max();
-    for (const std::vector<gameplay::PathPoint>& path : smoothed_paths_) {
-        nearest = std::min(nearest, gameplay::distance_to_path(path, x, z));
-    }
-    return nearest;
+    return smoothed_paths_.empty() ? std::numeric_limits<float>::max() : path_index_.nearest(x, z);
 }
 
 void E5Terrain::build_paths(int cells_across) {
@@ -615,6 +607,7 @@ void E5Terrain::build_paths(int cells_across) {
     smooth_all(paths_);
     path_count_ = static_cast<int>(smoothed_paths_.size());
     smooth_all(trails_);
+    path_index_.build(smoothed_paths_);
     // The trails are cut into the ground; from here on ground() gives the cut height.
     trail_field_.build(std::span(smoothed_paths_).subspan(static_cast<std::size_t>(path_count_)),
                        [this](float x, float z) { return gameplay::island_height(params_, x, z); },

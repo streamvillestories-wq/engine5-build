@@ -184,6 +184,7 @@ private:
     float trail_grade_ = 0.42F; // about 23 degrees
     gameplay::TrailField trail_field_;
     std::vector<std::vector<gameplay::PathPoint>> smoothed_paths_; // paths, then trails
+    gameplay::PathIndex path_index_; // over smoothed_paths_, for the many "how far is the nearest" questions
     int path_count_ = 0;
     std::vector<float> heights_; // the collision grid: one a metre, row by row
     int triangle_count_ = 0;

@@ -844,6 +844,7 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_input_blocked", "blocked"), &E5PlayerController::set_input_blocked);
     ClassDB::bind_method(D_METHOD("is_input_blocked"), &E5PlayerController::is_input_blocked);
     ClassDB::bind_method(D_METHOD("take_damage", "amount"), &E5PlayerController::take_damage);
+    ClassDB::bind_method(D_METHOD("take_remote_damage", "amount", "position"), &E5PlayerController::take_remote_damage);
     ClassDB::bind_method(D_METHOD("take_damage_from", "amount", "from"), &E5PlayerController::take_damage_from);
     ClassDB::bind_method(D_METHOD("can_block"), &E5PlayerController::can_block);
     ClassDB::bind_method(D_METHOD("is_blocking"), &E5PlayerController::is_blocking);

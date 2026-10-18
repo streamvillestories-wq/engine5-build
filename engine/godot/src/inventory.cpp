@@ -81,6 +81,7 @@ void E5Inventory::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_item_count"), &E5Inventory::get_item_count);
     ClassDB::bind_method(D_METHOD("add", "item", "count"), &E5Inventory::add);
     ClassDB::bind_method(D_METHOD("add_gold", "amount"), &E5Inventory::add_gold);
+    ClassDB::bind_method(D_METHOD("spend_gold", "amount"), &E5Inventory::spend_gold);
     ClassDB::bind_method(D_METHOD("get_gold"), &E5Inventory::get_gold);
     ClassDB::bind_method(D_METHOD("has_room_for", "item"), &E5Inventory::has_room_for);
     ClassDB::bind_method(D_METHOD("move", "from", "to"), &E5Inventory::move);
@@ -178,6 +179,15 @@ godot::String E5Inventory::get_weapon_class() const {
 godot::String E5Inventory::get_weapon_key() const {
     const gameplay::ItemStack held = gameplay::stack_at(inventory_, gameplay::weapon_slot);
     return held.empty() ? godot::String() : text(gameplay::item_info(held.item).key);
+}
+
+bool E5Inventory::spend_gold(int amount) {
+    if (amount < 0 || inventory_.gold < amount) {
+        return false;
+    }
+    inventory_.gold -= amount;
+    emit_signal("changed");
+    return true;
 }
 
 void E5Inventory::add_gold(int amount) {

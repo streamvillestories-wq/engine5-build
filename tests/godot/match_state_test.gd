@@ -18,6 +18,8 @@ func _initialize() -> void:
 	_away_and_back()
 	_back_to_lobby()
 	_free_build()
+	_veins()
+	_buildings()
 	print("MATCH TESTS: %d of %d failed" % [_failed, _checked])
 	quit(_failed)
 
@@ -33,6 +35,7 @@ func _check(what: String, good: bool) -> void:
 func _three() -> RefCounted:
 	var state: RefCounted = MatchState.new()
 	state.free_build = false  # the rounds (free building has its own test below)
+	state.use_veins = false   # (the veins too)
 	state.join("a", 11, "Anna", 0)
 	state.join("b", 12, "Bert", 1)
 	state.join("c", 13, "Cleo", 2)
@@ -59,6 +62,7 @@ func _host_and_start() -> void:
 	_check("not twice", state.start(11, 1.0) != "")
 	var alone: RefCounted = MatchState.new()
 	alone.free_build = false
+	alone.use_veins = false
 	alone.join("a", 11, "Anna", 0)
 	_check("one player is not enough", alone.start(11, 0.0) != "")
 	state.leave(11, 2.0)
@@ -80,7 +84,7 @@ func _placement() -> void:
 	_check("only one each", state.place(11, Vector3(200, 0, 0)) != "")
 	_check("not within the spacing", state.place(12, Vector3(50, 0, 0)) == "Too close to another core")
 	_check("80 m is enough", state.place(12, Vector3(80, 0, 0)) == "")
-	_check("not off the island", state.place(13, Vector3(900, 0, 0)) != "")
+	_check("not off the island", state.place(13, Vector3(1200, 0, 0)) != "")
 	_check("a watcher places nothing", state.place(99, Vector3(0, 0, 300)) != "")
 	state.tick(89.0)
 	_check("placement lasts its time", state.phase == MatchState.PLACEMENT)
@@ -175,6 +179,7 @@ func _back_to_lobby() -> void:
 
 func _free_build() -> void:
 	var state: RefCounted = MatchState.new()
+	state.use_veins = false
 	state.join("a", 11, "Anna", 0)
 	state.join("b", 12, "Bert", 1)
 	_check("building freely there are no rounds", state.phase == MatchState.FIGHT and state.start(11, 0.0) != "")
@@ -197,3 +202,57 @@ func _free_build() -> void:
 	_check("and it may be built again", state.place(11, Vector3(-150, 0, 0), now) == "")
 	state.leave(12, now)
 	_check("who leaves takes his core with him", not state.players.has("b") and state.healths()[0].size() == 1)
+
+
+func _veins() -> void:
+	var state: RefCounted = MatchState.new()
+	state.join("a", 11, "Anna", 0)
+	state.join("b", 12, "Bert", 1)
+	var first: Dictionary = MatchState.VEINS[0]
+	var second: Dictionary = MatchState.VEINS[1]
+	_check("there are twice as many veins as players can be", MatchState.VEINS.size() >= 2 * int(state.rules["max_players"]))
+	var apart := 1e9
+	for i in MatchState.VEINS.size():
+		for j in range(i + 1, MatchState.VEINS.size()):
+			var u: Dictionary = MatchState.VEINS[i]
+			var v: Dictionary = MatchState.VEINS[j]
+			apart = minf(apart, Vector2(u["x"] - v["x"], u["z"] - v["z"]).length())
+	_check("the veins keep the cores' spacing", apart >= float(state.rules["spacing"]))
+	_check("no core away from a vein", state.place(11, Vector3(first["x"] + 40.0, 0, first["z"]), 1.0) != "")
+	_check("a core near a vein is set on it", state.place(11, Vector3(first["x"] + 6.0, 3.0, first["z"]), 1.0) == ""
+			and state.players["a"]["core"] == Vector3(first["x"], 3.0, first["z"]))
+	_check("a taken vein is refused", state.place(12, Vector3(first["x"], 0, first["z"] + 4.0), 2.0) == "This vein is taken")
+	_check("another vein is free", state.place(12, Vector3(second["x"], 0, second["z"]), 2.0) == "")
+	_check("who owns which", state.vein_taken(0) == "a" and state.vein_taken(1) == "b" and state.vein_taken(2) == "")
+
+
+func _buildings() -> void:
+	var state: RefCounted = MatchState.new()
+	state.use_veins = false
+	state.join("a", 11, "Anna", 0)
+	state.join("b", 12, "Bert", 1)
+	_check("nothing is built without a core", state.build(11, "wall", Vector3(10, 0, 0), 0.0) != "")
+	state.place(11, Vector3(0, 0, 0), 0.0)
+	state.place(12, Vector3(200, 0, 0), 0.0)
+	_check("a wall in the ring", state.build(11, "wall", Vector3(10, 0, 0), 0.5) == "")
+	_check("not outside the ring", state.build(11, "wall", Vector3(40, 0, 0), 0.0) != "")
+	_check("not on the core", state.build(11, "wall", Vector3(1, 0, 1), 0.0) != "")
+	_check("not on another building", state.build(11, "watchtower", Vector3(10.5, 0, 0), 0.0) != "")
+	_check("walls may stand end to end", state.build(11, "wall", Vector3(10, 0, 6), 0.5) == "")
+	_check("a tower is set onto an anchor stone", state.build(11, "tower", Vector3(5, 0, 25), 0.0) == "")
+	var tower: Dictionary = state.buildings.values().filter(func(b: Dictionary) -> bool: return b["kind"] == "tower")[0]
+	_check("... exactly onto it", Vector2(tower["x"], tower["z"]).distance_to(state.anchor_spots(Vector3.ZERO)[0]) < 0.01)
+	_check("one watchtower", state.build(11, "watchtower", Vector3(-15, 0, 0), 0.0) == ""
+			and state.build(11, "watchtower", Vector3(0, 0, -15), 0.0) != "")
+	_check("a drill beside the core", state.build(11, "drill", Vector3(2, 0, 0), 0.0) == "")
+	state.players["a"]["protected_until"] = 0.0
+	state.position(12, Vector3(15, 0, 0))
+	var wall_id: int = state.buildings.keys()[0]
+	_check("the owner does not hurt his own", state.building_damage(11, wall_id, 50.0, 1.0) == 0.0)
+	_check("an enemy does", state.building_damage(12, wall_id, 200.0, 1.0) == 200.0)
+	for second in range(2, 8):
+		state.building_damage(12, wall_id, 250.0, float(second))
+	_check("a wall is razed", not state.buildings.has(wall_id))
+	_check("the snapshot has the buildings", state.snapshot(10.0)["buildings"].size() == state.buildings.size())
+	state.leave(11, 20.0)
+	_check("who leaves takes his buildings with him", state.buildings.is_empty())
