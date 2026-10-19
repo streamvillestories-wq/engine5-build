@@ -27,7 +27,12 @@ void credit(E5Enemy* enemy, float damage) {
     }
     if (auto* const hero = godot::Object::cast_to<E5PlayerController>(
             enemy->get_tree()->get_first_node_in_group(E5PlayerController::group_name))) {
-        hero->credit_damage(std::min(damage, enemy->get_health()), enemy->get_health() <= damage);
+        const bool killed = enemy->get_health() <= damage;
+        hero->credit_damage(std::min(damage, enemy->get_health()), killed);
+        if (killed) {
+            // For what a kill leaves the hero who made it (blueprint fragments in a match: net/match.gd).
+            hero->emit_signal("enemy_killed", enemy->get_global_position(), enemy->get_max_health());
+        }
     }
 }
 

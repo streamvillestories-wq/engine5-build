@@ -975,6 +975,9 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("clear_skill_slot", "slot"), &E5PlayerController::clear_skill_slot);
     ClassDB::bind_method(D_METHOD("get_selected_skill_name"), &E5PlayerController::get_selected_skill_name);
     ADD_SIGNAL(godot::MethodInfo("skill_bar_changed"));
+    // The hero played here killed an enemy (through combat::hit / blast): where, and its full health.
+    ADD_SIGNAL(godot::MethodInfo("enemy_killed", PropertyInfo(godot::Variant::VECTOR3, "position"),
+                                 PropertyInfo(godot::Variant::FLOAT, "max_health")));
     ClassDB::bind_method(D_METHOD("get_last_skill"), &E5PlayerController::get_last_skill);
     ClassDB::bind_method(D_METHOD("get_skills_used"), &E5PlayerController::get_skills_used);
     ClassDB::bind_method(D_METHOD("is_standard_attack_in_use"), &E5PlayerController::is_standard_attack_in_use);

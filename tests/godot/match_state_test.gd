@@ -20,6 +20,7 @@ func _initialize() -> void:
 	_free_build()
 	_veins()
 	_buildings()
+	_blueprints()
 	print("MATCH TESTS: %d of %d failed" % [_failed, _checked])
 	quit(_failed)
 
@@ -229,6 +230,7 @@ func _veins() -> void:
 func _buildings() -> void:
 	var state: RefCounted = MatchState.new()
 	state.use_veins = false
+	state.use_blueprints = false
 	state.join("a", 11, "Anna", 0)
 	state.join("b", 12, "Bert", 1)
 	_check("nothing is built without a core", state.build(11, "wall", Vector3(10, 0, 0), 0.0) != "")
@@ -239,7 +241,7 @@ func _buildings() -> void:
 	_check("not on the core", state.build(11, "wall", Vector3(1, 0, 1), 0.0) != "")
 	_check("not on another building", state.build(11, "watchtower", Vector3(10.5, 0, 0), 0.0) != "")
 	_check("walls may stand end to end", state.build(11, "wall", Vector3(10, 0, 6), 0.5) == "")
-	_check("a tower is set onto an anchor stone", state.build(11, "tower", Vector3(5, 0, 25), 0.0) == "")
+	_check("a tower is set onto an anchor stone", state.build(11, "tower", Vector3(7, 0, 28), 0.0) == "")
 	var tower: Dictionary = state.buildings.values().filter(func(b: Dictionary) -> bool: return b["kind"] == "tower")[0]
 	_check("... exactly onto it", Vector2(tower["x"], tower["z"]).distance_to(state.anchor_spots(Vector3.ZERO)[0]) < 0.01)
 	_check("one watchtower", state.build(11, "watchtower", Vector3(-15, 0, 0), 0.0) == ""
@@ -256,3 +258,40 @@ func _buildings() -> void:
 	_check("the snapshot has the buildings", state.snapshot(10.0)["buildings"].size() == state.buildings.size())
 	state.leave(11, 20.0)
 	_check("who leaves takes his buildings with him", state.buildings.is_empty())
+
+
+func _blueprints() -> void:
+	var state: RefCounted = MatchState.new()
+	state.use_veins = false
+	state.join("a", 11, "Anna", 0)
+	state.place(11, Vector3(0, 0, 0), 0.0)
+	_check("without its blueprint a wall is refused", state.build(11, "wall", Vector3(10, 0, 0), 0.0) != "")
+	_check("the archive needs none", state.build(11, "archive", Vector3(-12, 0, 0), 0.0) == "")
+	_check("three fragments are not enough", state.add_fragment(11, "wall") and state.add_fragment(11, "wall")
+			and state.add_fragment(11, "wall") and state.research(11, "wall") != "")
+	state.add_fragment(11, "wall")
+	_check("four are, at one's archive", state.research(11, "wall") == "")
+	_check("they are used up", int(state.progress["a"]["fragments"]["wall"]) == 0)
+	_check("and the wall may be built", state.build(11, "wall", Vector3(10, 0, 0), 0.0) == "")
+	_check("not twice", state.research(11, "wall") != "")
+	var other: RefCounted = MatchState.new()
+	other.use_veins = false
+	other.join("b", 12, "Bert", 0)
+	other.place(12, Vector3(0, 0, 0), 0.0)
+	for n in 4:
+		other.add_fragment(12, "ballista")
+	_check("no research without an archive", other.research(12, "ballista") != "")
+	state.leave(11, 5.0)
+	state.join("a", 21, "Anna", 0)
+	_check("what was found and learnt stays when one leaves", state.is_unlocked("a", "wall"))
+	_check("the state tells each player his own", state.snapshot(6.0)["players"][0]["unlocked"].has("wall"))
+	state.place(21, Vector3(0, 0, 0), 7.0)  # (leaving took his core and archive with him)
+	state.build(21, "archive", Vector3(-12, 0, 0), 0.0)
+	for n in 4:
+		state.add_fragment(21, "frost")
+	state.research(21, "frost")
+	var spot: Vector2 = state.anchor_spots(Vector3.ZERO)[2]
+	_check("a tower near an anchor stone goes onto it", state.build(21, "frost", Vector3(spot.x + 2.0, 0, spot.y - 2.0), 0.0) == ""
+			and state.buildings.values().any(func(b: Dictionary) -> bool:
+				return b["kind"] == "frost" and Vector2(b["x"], b["z"]).distance_to(spot) < 0.01))
+	_check("a tower may also stand anywhere in the ring", state.build(21, "frost", Vector3(-15, 0, 10), 0.0) == "")

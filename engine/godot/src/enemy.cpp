@@ -156,6 +156,8 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("take_damage", "amount", "position"), &E5Enemy::take_damage);
     ClassDB::bind_method(D_METHOD("get_health"), &E5Enemy::get_health);
     ClassDB::bind_method(D_METHOD("curse", "factor", "seconds"), &E5Enemy::curse);
+    ClassDB::bind_method(D_METHOD("slow", "share", "seconds"), &E5Enemy::slow);
+    ClassDB::bind_method(D_METHOD("stun", "seconds"), &E5Enemy::stun);
     ClassDB::bind_method(D_METHOD("is_cursed"), &E5Enemy::is_cursed);
     ClassDB::bind_method(D_METHOD("is_alive"), &E5Enemy::is_alive);
     ClassDB::bind_method(D_METHOD("set_remote", "remote"), &E5Enemy::set_remote);
