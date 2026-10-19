@@ -843,6 +843,8 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_inventory"), &E5PlayerController::get_inventory);
     ClassDB::bind_method(D_METHOD("set_input_blocked", "blocked"), &E5PlayerController::set_input_blocked);
     ClassDB::bind_method(D_METHOD("is_input_blocked"), &E5PlayerController::is_input_blocked);
+    ClassDB::bind_method(D_METHOD("set_attacks_blocked", "blocked"), &E5PlayerController::set_attacks_blocked);
+    ClassDB::bind_method(D_METHOD("is_attacks_blocked"), &E5PlayerController::is_attacks_blocked);
     ClassDB::bind_method(D_METHOD("take_damage", "amount"), &E5PlayerController::take_damage);
     ClassDB::bind_method(D_METHOD("take_remote_damage", "amount", "position"), &E5PlayerController::take_remote_damage);
     ClassDB::bind_method(D_METHOD("take_damage_from", "amount", "from"), &E5PlayerController::take_damage_from);
@@ -2226,7 +2228,7 @@ void E5PlayerController::take_damage(float amount) {
 }
 
 bool E5PlayerController::aim_held() const {
-    if (input_blocked_) {
+    if (input_blocked_ || attacks_blocked_) {
         return false;
     }
     godot::Input* const input = godot::Input::get_singleton();
@@ -2355,7 +2357,7 @@ void E5PlayerController::set_skill_bar_visible(bool visible) {
 }
 
 bool E5PlayerController::attack_held() const {
-    return !input_blocked_ && godot::Input::get_singleton()->is_action_pressed(action_attack_);
+    return !input_blocked_ && !attacks_blocked_ && godot::Input::get_singleton()->is_action_pressed(action_attack_);
 }
 
 void E5PlayerController::set_use_button(UseButton next) {

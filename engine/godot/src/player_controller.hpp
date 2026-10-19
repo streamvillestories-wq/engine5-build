@@ -410,6 +410,10 @@ public:
     [[nodiscard]] float get_model_yaw() const { return model_yaw_; }
     // While a menu is open: she takes no movement, aiming or camera input.
     void set_input_blocked(bool blocked) { input_blocked_ = blocked; }
+    // While a building is placed with the left button (game/match/match_hud.gd): no attack and no
+    // aiming, but she walks and turns as always.
+    void set_attacks_blocked(bool blocked) { attacks_blocked_ = blocked; }
+    [[nodiscard]] bool is_attacks_blocked() const { return attacks_blocked_; }
     [[nodiscard]] bool is_input_blocked() const { return input_blocked_; }
     void set_max_health(float health) { vitals_params_.max_health = health; }
     [[nodiscard]] float get_max_health() const { return vitals_params_.max_health; }
@@ -1116,6 +1120,7 @@ private:
     E5HealthHud* health_hud_ = nullptr; // non-owning child
     E5Inventory* inventory_ = nullptr;  // non-owning child
     bool input_blocked_ = false;
+    bool attacks_blocked_ = false;
     godot::Node* interface_ = nullptr; // non-owning child
     godot::StringName action_use_potion_;
     godot::StringName clip_death_;
