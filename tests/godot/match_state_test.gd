@@ -21,6 +21,8 @@ func _initialize() -> void:
 	_veins()
 	_buildings()
 	_blueprints()
+	_shrines()
+	_units()
 	print("MATCH TESTS: %d of %d failed" % [_failed, _checked])
 	quit(_failed)
 
@@ -295,3 +297,167 @@ func _blueprints() -> void:
 			and state.buildings.values().any(func(b: Dictionary) -> bool:
 				return b["kind"] == "frost" and Vector2(b["x"], b["z"]).distance_to(spot) < 0.01))
 	_check("a tower may also stand anywhere in the ring", state.build(21, "frost", Vector3(-15, 0, 10), 0.0) == "")
+
+
+## Ticks `state` every half second from `from` to `to` (seconds); returns the events of that time.
+func _run(state: RefCounted, from: float, to: float) -> Array:
+	var events := []
+	var now := from
+	while now <= to + 0.001:
+		state.tick(now)
+		events.append_array(state.take_events())
+		now += 0.5
+	return events
+
+
+func _count(events: Array, what: String) -> int:
+	var count := 0
+	for event: Dictionary in events:
+		if event["what"] == what:
+			count += 1
+	return count
+
+
+func _shrines() -> void:
+	var state: RefCounted = MatchState.new()
+	state.use_veins = false
+	state.use_blueprints = false
+	state.shrines.clear()
+	state.add_shrine({"name": "Test", "kind": "stone", "x": 100.0, "z": 100.0, "region": "shroom"})
+	state.add_shrine({"name": "Wood", "kind": "wood", "x": 300.0, "z": 300.0, "region": "wild"})
+	for who: Array in [["a", 11, Vector3(0, 0, 0)], ["b", 12, Vector3(200, 0, 0)], ["c", 13, Vector3(400, 0, 0)]]:
+		state.join(who[0], who[1], who[0], 0)
+		state.place(who[1], who[2], 0.0)
+	var at := Vector3(100, 0, 105)
+	var away := Vector3(150, 0, 150)
+	state.position(11, at)
+	state.position(12, away)
+	state.position(13, away)
+	var events := _run(state, 0.0, 19.0)
+	_check("a capture starts, and a monster comes every 2 s", _count(events, "shrine_capture") == 1
+			and _count(events, "shrine_wave") == 9)
+	_check("not taken before 20 s", state.shrine_owner(0) == "")
+	events = _run(state, 19.5, 20.5)
+	_check("taken after 20 s", state.shrine_owner(0) == "a" and _count(events, "shrine_taken") == 1)
+	events = _run(state, 21.0, 30.0)
+	_check("it gives its owner stone every 3 s (at 21, 24, 27 and 30 s)", int(state.progress["a"].get("stone", 0)) == 4)
+	_check("and nobody wood", int(state.progress["a"].get("wood", 0)) == 0)
+	# b tries to take it over; a stands in it: blocked.
+	state.position(12, at)
+	events = _run(state, 30.5, 55.0)
+	_check("the owner inside blocks a takeover", state.shrine_owner(0) == "a" and state.shrines[0]["blocked"]
+			and _count(events, "shrine_capture") == 0)
+	state.position(11, away)
+	events = _run(state, 55.5, 70.0)
+	_check("with the owner gone b takes it over in 20 s", state.shrine_owner(0) == "" or state.shrine_owner(0) == "a")
+	_check("... not yet at 14.5 s", state.shrine_owner(0) == "a")
+	events = _run(state, 70.5, 76.0)
+	_check("... and then", state.shrine_owner(0) == "b" and _count(events, "shrine_taken") == 1)
+	# c starts and leaves at 19 s: reset.
+	state.position(12, away)
+	state.position(13, at)
+	_run(state, 76.5, 95.0)
+	state.position(13, away)
+	events = _run(state, 95.5, 96.0)
+	_check("leaving before the end cancels it", _count(events, "shrine_cancelled") == 1
+			and float(state.shrines[0]["progress"]) == 0.0 and state.shrine_owner(0) == "b")
+	# c dies during a capture.
+	state.position(13, at)
+	_run(state, 96.5, 100.0)
+	state.position(13, at, false)
+	events = _run(state, 100.5, 101.0)
+	_check("dying cancels it", _count(events, "shrine_cancelled") == 1 and events.filter(
+			func(e: Dictionary) -> bool: return e["what"] == "shrine_cancelled")[0]["why"] == "died")
+	# A second player walks in during c's capture.
+	state.position(13, at, true)
+	_run(state, 101.5, 105.0)
+	state.position(11, at)
+	events = _run(state, 105.5, 106.0)
+	_check("a second player in the radius blocks it", events.filter(
+			func(e: Dictionary) -> bool: return e["what"] == "shrine_cancelled")[0]["why"] == "blocked"
+			and state.shrines[0]["blocked"])
+	# A player without a core cannot capture.
+	state.position(11, away)
+	state.position(13, away)
+	state.players["c"]["core"] = null
+	state.position(13, Vector3(300, 0, 300))
+	_run(state, 106.5, 130.0)
+	_check("without a core nobody captures", state.shrine_owner(1) == "")
+	# b's core is destroyed: his shrine is neutral again.
+	state.players["b"]["protected_until"] = 0.0
+	state.players["a"]["position"] = Vector3(200, 0, 10)
+	state.players["b"]["health"] = 100.0
+	state.core_damage(11, "b", 150.0, 131.0)
+	_check("a destroyed core frees its shrines", state.shrine_owner(0) == "")
+	# One who leaves keeps his shrine but earns nothing.
+	var keep: RefCounted = MatchState.new()
+	keep.use_veins = false
+	keep.free_build = false
+	keep.shrines.clear()
+	keep.add_shrine({"name": "W", "kind": "wood", "x": 0.0, "z": 0.0, "region": "wild"})
+	keep.join("d", 21, "d", 0)
+	keep.join("e", 22, "e", 0)
+	keep.start(21, 0.0)
+	keep.place(21, Vector3(100, 0, 0), 1.0)
+	keep.place(22, Vector3(-100, 0, 0), 1.0)
+	_run(keep, 1.0, 95.0)
+	keep.position(21, Vector3(0, 0, 3))
+	keep.position(22, Vector3(-100, 0, 0))
+	_run(keep, 95.5, 116.0)
+	_check("(rounds) d holds it", keep.shrine_owner(0) == "d")
+	var before := int(keep.progress["d"].get("wood", 0))
+	keep.leave(21, 117.0)
+	_run(keep, 117.0, 130.0)
+	_check("one who left keeps his shrine", keep.shrine_owner(0) == "d")
+	_check("but earns nothing while away", int(keep.progress["d"].get("wood", 0)) == before)
+	_check("the state tells each player his stone and wood", state.snapshot(131.0)["players"][0].has("stone")
+			and state.snapshot(131.0)["shrines"].size() == 2)
+
+
+func _units() -> void:
+	var state: RefCounted = MatchState.new()
+	state.use_veins = false
+	state.use_blueprints = false
+	state.shrines.clear()
+	state.join("a", 11, "a", 0)
+	state.join("b", 12, "b", 0)
+	_check("no units without a core", state.make_unit(11, "wolf") != "")
+	state.place(11, Vector3(0, 0, 0), 0.0)
+	state.place(12, Vector3(200, 0, 0), 0.0)
+	_check("no units without a Soul Forge", state.make_unit(11, "wolf") != "")
+	state.build(11, "forge", Vector3(10, 0, 10), 0.0)
+	state.take_events()
+	_check("a wolf at the forge", state.make_unit(11, "wolf") == "")
+	var made: Array = state.take_events()
+	_check("... told with its place in the pool", made.size() == 1 and made[0]["what"] == "unit_made" and made[0]["slot"] == 0)
+	for n in 7:
+		state.make_unit(11, "troll")
+	_check("eight at most", state.make_unit(11, "spider") != "" and state.count_units("a") == 8)
+	_check("each in its own place of its kind", state.units.values().filter(
+			func(u: Dictionary) -> bool: return u["kind"] == "troll").map(func(u: Dictionary) -> int: return u["slot"]) == [0, 1, 2, 3, 4, 5, 6])
+	_check("nothing of an unknown kind", state.make_unit(12, "dragon") != "")
+	_check("orders", state.set_order(11, "attack") == "" and state.set_order(11, "dance") != ""
+			and state.snapshot(1.0)["players"][0]["order"] == "attack")
+	var first: int = state.units.keys()[0]
+	state.unit_died(12, first)
+	_check("a unit that fell frees its place", state.count_units("a") == 7)
+	# Units strike b's core: counted, no reach check; not while protected.
+	state.players["b"]["protected_until"] = 0.0
+	var before: float = state.players["b"]["health"]
+	_check("a unit's blow on a core counts", state.unit_strike(12, "a", "core", "b", 30.0, 5.0) == 30.0
+			and state.players["b"]["health"] == before - 30.0)
+	_check("only for an owner with units", state.unit_strike(11, "b", "core", "a", 30.0, 5.0) == 0.0)
+	state.players["b"]["protected_until"] = 100.0
+	_check("not while the core is protected", state.unit_strike(12, "a", "core", "b", 30.0, 6.0) == 0.0)
+	state.build(12, "wall", Vector3(210, 0, 10), 0.0)
+	state.players["b"]["protected_until"] = 0.0
+	var wall: int = state.buildings.keys().filter(func(id: int) -> bool: return state.buildings[id]["owner"] == "b")[0]
+	_check("nor a wall", state.unit_strike(12, "a", "building", wall, 40.0, 7.0) == 40.0)
+	state.take_events()
+	# a's core is destroyed: his units crumble.
+	state.players["a"]["protected_until"] = 0.0
+	state.players["b"]["position"] = Vector3(0, 0, 5)
+	state.players["a"]["health"] = 10.0
+	state.core_damage(12, "a", 50.0, 8.0)
+	_check("a lost core: the units crumble", state.count_units("a") == 0 and state.take_events().any(
+			func(e: Dictionary) -> bool: return e["what"] == "units_lost"))

@@ -90,6 +90,7 @@ void E5Inventory::_bind_methods() {
     ClassDB::bind_method(D_METHOD("drop", "slot"), &E5Inventory::drop);
     ClassDB::bind_method(D_METHOD("sort"), &E5Inventory::sort);
     ClassDB::bind_method(D_METHOD("count_of", "item"), &E5Inventory::count_of);
+    ClassDB::bind_method(D_METHOD("take_item", "item", "count"), &E5Inventory::take_item);
     ClassDB::bind_method(D_METHOD("get_potion_count"), &E5Inventory::get_potion_count);
     ClassDB::bind_method(D_METHOD("get_bonuses"), &E5Inventory::get_bonuses);
     ClassDB::bind_method(D_METHOD("get_potion_cooldown"), &E5Inventory::get_potion_cooldown);
@@ -273,6 +274,21 @@ void E5Inventory::sort() {
 
 int E5Inventory::count_of(int item) const {
     return gameplay::count_of(inventory_, item_from(item));
+}
+
+bool E5Inventory::take_item(int item, int count) {
+    const gameplay::ItemId wanted = item_from(item);
+    if (count <= 0 || gameplay::count_of(inventory_, wanted) < count) {
+        return false;
+    }
+    int left = count;
+    for (int slot = 0; slot < static_cast<int>(inventory_.slots.size()) && left > 0; ++slot) {
+        if (inventory_.slots.at(static_cast<std::size_t>(slot)).item == wanted) {
+            left -= gameplay::take_from(inventory_, slot, left).count;
+        }
+    }
+    emit_signal("changed");
+    return left <= 0;
 }
 
 int E5Inventory::get_potion_count() const {

@@ -29,7 +29,7 @@ void credit(E5Enemy* enemy, float damage) {
             enemy->get_tree()->get_first_node_in_group(E5PlayerController::group_name))) {
         const bool killed = enemy->get_health() <= damage;
         hero->credit_damage(std::min(damage, enemy->get_health()), killed);
-        if (killed) {
+        if (killed && enemy->get_team() == 0) {
             // For what a kill leaves the hero who made it (blueprint fragments in a match: net/match.gd).
             hero->emit_signal("enemy_killed", enemy->get_global_position(), enemy->get_max_health());
         }
@@ -40,6 +40,9 @@ void credit(E5Enemy* enemy, float damage) {
 
 bool hit(godot::Object* struck, const godot::Vector3& position, float damage, int score_multiplier) {
     if (auto* const enemy = godot::Object::cast_to<E5Enemy>(struck)) {
+        if (enemy->is_friend_of_local()) {
+            return true; // one's own unit: struck, but not hurt
+        }
         credit(enemy, damage);
         enemy->take_damage(damage, position);
         return true;
@@ -71,7 +74,7 @@ int chain(godot::Node* parent, const godot::Vector3& from, godot::Object* first,
     const godot::TypedArray<godot::Node> enemies = parent->get_tree()->get_nodes_in_group(E5Enemy::group_name);
     for (const godot::Variant& node : enemies) {
         auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
-        if (enemy != nullptr && enemy->is_alive() && enemy != first) {
+        if (enemy != nullptr && enemy->is_alive() && enemy != first && !enemy->is_friend_of_local()) {
             untouched.push_back(enemy);
         }
     }
@@ -105,7 +108,7 @@ int blast(godot::Node* context, const godot::Vector3& centre, float radius, floa
     const godot::TypedArray<godot::Node> enemies = context->get_tree()->get_nodes_in_group(E5Enemy::group_name);
     for (const godot::Variant& node : enemies) {
         auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
-        if (enemy == nullptr || !enemy->is_alive()) {
+        if (enemy == nullptr || !enemy->is_alive() || enemy->is_friend_of_local()) {
             continue;
         }
         // Measured to the middle of the body, with the body's own width as allowance.

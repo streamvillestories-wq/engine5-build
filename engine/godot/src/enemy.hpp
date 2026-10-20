@@ -8,6 +8,8 @@
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/core/object_id.hpp>
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector3.hpp>
@@ -44,6 +46,28 @@ class E5Enemy : public godot::CharacterBody3D {
 public:
     // Every enemy is in this group.
     static constexpr const char* group_name = "e5_enemy";
+    // A player's units (the keeper's Soul Forge, game/match/unit_pool.gd) are also in this one.
+    static constexpr const char* unit_group = "e5_unit";
+
+    // SIDES (2026-10-20). An enemy's team: 0 = wild (it fights every hero and every unit), or the
+    // connection number of the player it belongs to (a unit: it fights wild enemies, and the heroes,
+    // units, cores and buildings of the other players in the fight). The hero played here is of the
+    // team set_local_team says; the others' heroes carry theirs in the metadata `team`, cores and
+    // buildings in `team` and `open` (open: may be struck now). net/match.gd sets all of that.
+    void set_team(int team) { team_ = team; }
+    [[nodiscard]] int get_team() const { return team_; }
+    static void set_local_team(int team) { local_team_ = team; }
+    [[nodiscard]] static int get_local_team() { return local_team_; }
+    // The teams in the fight now: units fight only heroes, units and buildings of these.
+    static void set_fighting_teams(const godot::PackedInt32Array& teams);
+    // Whether teams `a` and `b` fight each other (0 = wild, below 0 = nobody's: no unit fights it).
+    [[nodiscard]] static bool teams_hostile(int a, int b);
+    // A unit of the hero played here: her skills and blows leave it alone.
+    [[nodiscard]] bool is_friend_of_local() const { return team_ != 0 && team_ == local_team_; }
+    // A blow from another enemy (a unit on a wild one or the other way): no friend check.
+    void take_blow(float amount, const godot::Vector3& position);
+    // Back to health by so much (a unit at home), up to its full health; where it is decided.
+    void heal(float amount);
 
     void _ready() override;
     void _process(double delta) override;
@@ -63,6 +87,9 @@ public:
     // Holds it where it stands for so many seconds (brambles): it cannot walk or fly on, but
     // it still strikes and casts at what is in its reach, and can be hit.
     void root(float seconds) {
+        if (shielded()) {
+            return;
+        }
         rooted_left_ = std::max(rooted_left_, seconds);
         note_effect(effect_root, seconds, 0.0F);
     }
@@ -70,6 +97,9 @@ public:
     // Drawn along by something (a whirlwind) for the next step, on top of where it goes by
     // itself: to be said again every step. Not while it is rooted; only those that walk.
     void drag(const godot::Vector3& velocity) {
+        if (shielded()) {
+            return;
+        }
         dragged_ = velocity;
         if (remote_) {
             outgoing_drag_ = velocity; // the latest: told to the deciding machine a few times a second
@@ -89,6 +119,9 @@ public:
     // Stuns it for so many seconds: it stands, neither walks nor strikes nor casts, and sees
     // nobody. It can be hit meanwhile, and goes for the hero again when it is over.
     void stun(float seconds) {
+        if (shielded()) {
+            return;
+        }
         stunned_left_ = std::max(stunned_left_, seconds);
         note_effect(effect_stun, seconds, 0.0F);
     }
@@ -98,6 +131,9 @@ public:
     // other players' are counted on their own machines. Not told to the machine that decides the
     // enemy (no skill helps another player). A new curse replaces the old one if it is as strong.
     void curse(float factor, float seconds) {
+        if (shielded()) {
+            return;
+        }
         if (factor >= curse_factor_ || cursed_left_ <= 0.0F) {
             curse_factor_ = factor;
         }
@@ -124,6 +160,7 @@ public:
     void drop_loot_seeded(int seed);
     // The same, arriving where the enemy is decided.
     void apply_effect(int what, float a, float b);
+    void apply_effect_now(int what, float a, float b);
 
     // A boss's great attacks (EnemyPhase::Special): with a `special_range` it does one of
     // `special_count` in turn, plays the clip `special_<n>` for as long as that clip is, and
@@ -288,15 +325,28 @@ private:
     // Where its spells come from: in front of its chest.
     [[nodiscard]] godot::Vector3 cast_origin() const;
     void throw_bolt(const godot::Vector3& player_position);
-    void update_blow(bool attack_started, float dt, float distance_to_player);
+    void update_blow(bool attack_started, float dt, float distance_to_player, bool deciding = false);
     void update_remote(float dt);
     // The hero nearest to it, of all players: the one it goes for. Null if there is none.
     [[nodiscard]] godot::Node3D* nearest_player() const;
+    // What it goes for, by its team (see set_team): the nearest hero, unit, wild enemy, core or
+    // building it fights; `extent` gets how far its middle is from its edge (a core is wide).
+    [[nodiscard]] godot::Node3D* nearest_foe(float& extent) const;
+    // A hero's team: the local one for the hero played here, the metadata for the others; -1 none.
+    [[nodiscard]] static int hero_team(const godot::Node* hero);
+    // The hero played here's skills leave her own units alone (not what arrives from elsewhere).
+    [[nodiscard]] bool shielded() const { return is_friend_of_local() && !applying_; }
     // Metres to the hero played on this machine; very far if there is none.
     [[nodiscard]] float distance_to_local_player() const;
     void respawn();
     void play_phase_animation(bool moving);
 
+    int team_ = 0;
+    bool applying_ = false; // apply_effect: another machine's word, not the local hero's skill
+    godot::ObjectID target_id_;
+    float target_extent_ = 0.0F;
+    static inline int local_team_ = 0;
+    static inline std::vector<int> fighting_teams_;
     godot::Ref<godot::AnimationLibrary> animation_library_;
     godot::Ref<godot::Shader> health_bar_shader_;
     godot::Ref<godot::PackedScene> hit_effect_;

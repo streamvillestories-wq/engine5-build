@@ -67,6 +67,9 @@ public:
     void sort();
 
     [[nodiscard]] int count_of(int item) const;
+    // Takes `count` of an item out of the bag (souls for the Soul Forge), from wherever they lie.
+    // Nothing is taken unless there are that many: returns whether they were.
+    bool take_item(int item, int count);
     [[nodiscard]] int get_potion_count() const;
     // { health, regen, speed, damage, draw_speed, crit_chance, crit_damage } from what is worn and held.
     [[nodiscard]] godot::Dictionary get_bonuses() const;

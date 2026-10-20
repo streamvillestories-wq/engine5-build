@@ -158,6 +158,15 @@ void E5Enemy::_bind_methods() {
     ClassDB::bind_method(D_METHOD("curse", "factor", "seconds"), &E5Enemy::curse);
     ClassDB::bind_method(D_METHOD("slow", "share", "seconds"), &E5Enemy::slow);
     ClassDB::bind_method(D_METHOD("stun", "seconds"), &E5Enemy::stun);
+    ClassDB::bind_method(D_METHOD("set_team", "team"), &E5Enemy::set_team);
+    ClassDB::bind_method(D_METHOD("get_team"), &E5Enemy::get_team);
+    ClassDB::bind_static_method("E5Enemy", D_METHOD("set_local_team", "team"), &E5Enemy::set_local_team);
+    ClassDB::bind_static_method("E5Enemy", D_METHOD("get_local_team"), &E5Enemy::get_local_team);
+    ClassDB::bind_static_method("E5Enemy", D_METHOD("set_fighting_teams", "teams"), &E5Enemy::set_fighting_teams);
+    ClassDB::bind_static_method("E5Enemy", D_METHOD("teams_hostile", "a", "b"), &E5Enemy::teams_hostile);
+    ClassDB::bind_method(D_METHOD("is_friend_of_local"), &E5Enemy::is_friend_of_local);
+    ClassDB::bind_method(D_METHOD("take_blow", "amount", "position"), &E5Enemy::take_blow);
+    ClassDB::bind_method(D_METHOD("heal", "amount"), &E5Enemy::heal);
     ClassDB::bind_method(D_METHOD("is_cursed"), &E5Enemy::is_cursed);
     ClassDB::bind_method(D_METHOD("is_alive"), &E5Enemy::is_alive);
     ClassDB::bind_method(D_METHOD("set_remote", "remote"), &E5Enemy::set_remote);
@@ -240,6 +249,10 @@ void E5Enemy::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "on_terrain"), "set_on_terrain", "get_on_terrain");
 
     ADD_SIGNAL(godot::MethodInfo("special_started", PropertyInfo(godot::Variant::INT, "index")));
+    ADD_PROPERTY(PropertyInfo(godot::Variant::INT, "team"), "set_team", "get_team");
+    // A unit's blow on a core or a building (where it is decided): scripts tell the server.
+    ADD_SIGNAL(godot::MethodInfo("struck_structure", PropertyInfo(godot::Variant::OBJECT, "structure"),
+                                 PropertyInfo(godot::Variant::FLOAT, "amount")));
 }
 
 void E5Enemy::_ready() {
@@ -405,8 +418,56 @@ godot::Vector3 E5Enemy::get_aim_point() const {
     return get_global_position() + godot::Vector3(0.0F, body_height_ * 0.55F, 0.0F);
 }
 
+void E5Enemy::set_fighting_teams(const godot::PackedInt32Array& teams) {
+    fighting_teams_.assign(teams.ptr(), teams.ptr() + teams.size());
+}
+
+bool E5Enemy::teams_hostile(int a, int b) {
+    if (a == b) {
+        return false;
+    }
+    if (a == 0 || b == 0) {
+        return true; // the wild fight everyone, in a match or not
+    }
+    if (a < 0 || b < 0) {
+        return false;
+    }
+    const auto fights = [](int team) { return std::ranges::find(fighting_teams_, team) != fighting_teams_.end(); };
+    return fights(a) && fights(b);
+}
+
+int E5Enemy::hero_team(const godot::Node* hero) {
+    if (hero == nullptr) {
+        return -1;
+    }
+    if (hero->is_in_group(E5PlayerController::group_name)) {
+        return local_team_ > 0 ? local_team_ : -1;
+    }
+    const godot::Variant team = hero->get_meta("team", -1);
+    return static_cast<int>(team);
+}
+
+void E5Enemy::take_blow(float amount, const godot::Vector3& position) {
+    if (!is_alive() || amount <= 0.0F || remote_) {
+        return;
+    }
+    pending_damage_ += amount;
+    heaviest_pending_blow_ = std::max(heaviest_pending_blow_, amount);
+    damage_taken_ += amount;
+    show_damage_number(amount, position);
+    E5Effect::spawn(hit_effect_, get_parent(), position);
+}
+
+void E5Enemy::heal(float amount) {
+    if (!is_alive() || remote_ || amount <= 0.0F) {
+        return;
+    }
+    state_.health = std::min(state_.health + amount, params_.max_health);
+    update_health_bar();
+}
+
 void E5Enemy::take_damage(float amount, const godot::Vector3& position) {
-    if (!is_alive() || amount <= 0.0F) {
+    if (!is_alive() || amount <= 0.0F || shielded()) {
         return;
     }
     if (cursed_left_ > 0.0F) {
@@ -529,7 +590,7 @@ void E5Enemy::update_remote(float dt) {
         }
         update_health_bar();
         if (is_alive()) {
-            update_blow(false, dt, distance_to_local_player());
+            update_blow(false, dt, distance_to_local_player(), false);
             if (bolts_thrown_ != bolts_shown_) {
                 bolts_shown_ = bolts_thrown_;
                 throw_bolt(target_position_);
@@ -555,7 +616,7 @@ constexpr float sleep_check_interval = 0.4F;
 
 bool E5Enemy::should_sleep(float dt) {
     // Anything that hurts it, holds it or throws it wakes it at once.
-    if (strolls_ || pending_damage_ > 0.0F || held_ || flung_ || !is_alive() || state_.aggro ||
+    if (team_ != 0 || strolls_ || pending_damage_ > 0.0F || held_ || flung_ || !is_alive() || state_.aggro ||
         state_.phase != gameplay::EnemyPhase::Idle) {
         sleep_check_seconds_ = 0.0F;
         return false;
@@ -610,6 +671,73 @@ godot::Node3D* E5Enemy::nearest_player() const {
                 nearest_distance = distance;
             }
         }
+    }
+    return nearest;
+}
+
+godot::Node3D* E5Enemy::nearest_foe(float& extent) const {
+    extent = 0.0F;
+    if (team_ == 0) {
+        // Wild: every hero (as before), and every player's unit.
+        godot::Node3D* nearest = nearest_player();
+        float best = nearest != nullptr
+                         ? static_cast<float>(get_global_position().distance_squared_to(nearest->get_global_position()))
+                         : 1.0e12F;
+        const godot::TypedArray<godot::Node> units = get_tree()->get_nodes_in_group(unit_group);
+        for (const godot::Variant& node : units) {
+            auto* const unit = godot::Object::cast_to<E5Enemy>(node);
+            if (unit == nullptr || unit == this || !unit->is_alive()) {
+                continue;
+            }
+            const auto distance = static_cast<float>(get_global_position().distance_squared_to(unit->get_global_position()));
+            if (distance < best) {
+                best = distance;
+                nearest = unit;
+            }
+        }
+        return nearest;
+    }
+    godot::Node3D* nearest = nullptr;
+    float best = 1.0e12F;
+    const godot::Vector3 here = get_global_position();
+    const auto consider = [&](godot::Node3D* node, float width) {
+        const float distance = std::max(static_cast<float>(here.distance_to(node->get_global_position())) - width, 0.0F);
+        if (distance < best) {
+            best = distance;
+            nearest = node;
+            extent = width;
+        }
+    };
+    for (const char* const group : {E5PlayerController::group_name, E5PlayerController::remote_group_name}) {
+        const godot::TypedArray<godot::Node> heroes = get_tree()->get_nodes_in_group(group);
+        for (const godot::Variant& node : heroes) {
+            auto* const hero = godot::Object::cast_to<godot::Node3D>(node);
+            if (hero == nullptr || !teams_hostile(team_, hero_team(hero))) {
+                continue;
+            }
+            if (const auto* const player = godot::Object::cast_to<E5PlayerController>(hero);
+                player != nullptr && (player->is_disguised() || player->is_veiled() || player->is_dead())) {
+                continue;
+            }
+            consider(hero, 0.0F);
+        }
+    }
+    const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(group_name);
+    for (const godot::Variant& node : enemies) {
+        auto* const enemy = godot::Object::cast_to<E5Enemy>(node);
+        if (enemy == nullptr || enemy == this || !enemy->is_alive() || !teams_hostile(team_, enemy->team_)) {
+            continue;
+        }
+        consider(enemy, 0.0F);
+    }
+    const godot::TypedArray<godot::Node> structures = get_tree()->get_nodes_in_group("e5_crystal_core");
+    for (const godot::Variant& node : structures) {
+        auto* const thing = godot::Object::cast_to<godot::Node3D>(node);
+        if (thing == nullptr || !static_cast<bool>(thing->get_meta("open", false)) ||
+            !teams_hostile(team_, static_cast<int>(thing->get_meta("team", -1)))) {
+            continue;
+        }
+        consider(thing, static_cast<float>(thing->get("body_radius")));
     }
     return nearest;
 }
@@ -692,6 +820,12 @@ void E5Enemy::apply_effect(int what, float a, float b) {
     if (remote_ || !is_alive()) {
         return; // only where it is decided
     }
+    applying_ = true; // another machine's hero: not stopped by this machine's friend check
+    apply_effect_now(what, a, b);
+    applying_ = false;
+}
+
+void E5Enemy::apply_effect_now(int what, float a, float b) {
     // Another machine's word: within what any skill of the game does.
     switch (what) {
     case effect_stun:
@@ -720,6 +854,9 @@ void E5Enemy::apply_effect(int what, float a, float b) {
 }
 
 void E5Enemy::slow(float share, float seconds) {
+    if (shielded()) {
+        return;
+    }
     note_effect(effect_slow, share, seconds);
     const float wanted = std::clamp(share, 0.0F, 0.9F);
     if (slowed_left_ <= 0.0F || wanted >= slowed_share_) {
@@ -729,6 +866,9 @@ void E5Enemy::slow(float share, float seconds) {
 }
 
 void E5Enemy::fling(const godot::Vector3& velocity) {
+    if (shielded()) {
+        return;
+    }
     if (remote_) {
         // Where it flies is decided elsewhere: told there, not done here.
         note_effect(effect_fling, static_cast<float>(velocity.x), static_cast<float>(velocity.z));
@@ -783,7 +923,7 @@ void E5Enemy::_process(double delta) {
 
 // The blow lands part-way through the attack, and only on a player who is still in reach
 // of an enemy that is still attacking: stepping back or staggering it avoids it.
-void E5Enemy::update_blow(bool attack_started, float dt, float distance_to_player) {
+void E5Enemy::update_blow(bool attack_started, float dt, float distance_to_player, bool deciding) {
     if (attack_started) {
         blow_in_seconds_ = params_.attack_seconds * blow_at_share;
         return;
@@ -804,11 +944,30 @@ void E5Enemy::update_blow(bool attack_started, float dt, float distance_to_playe
         const godot::Vector3 forward(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
         E5Effect::spawn(blow_effect_, get_parent(), get_global_position() + forward * (params_.attack_range * 0.6F));
     }
-    if (distance_to_player <= params_.attack_range * blow_reach_share) {
+    const float reach = params_.attack_range * blow_reach_share;
+    if (distance_to_player <= reach) {
         auto* const target = godot::Object::cast_to<E5PlayerController>(
             get_tree()->get_first_node_in_group(E5PlayerController::group_name));
-        if (target != nullptr) {
+        // Only on a foe: a player's own units do not strike him.
+        if (target != nullptr && teams_hostile(team_, hero_team(target))) {
             target->take_damage_from(attack_damage_, get_global_position());
+        }
+    }
+    // What it goes for besides heroes, struck where it is decided: another enemy at once, a core or
+    // a building through the scripts (they tell the server).
+    if (deciding && target_id_.is_valid()) {
+        auto* const node = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(target_id_));
+        if (node != nullptr && node != this) {
+            godot::Vector3 away = node->get_global_position() - get_global_position();
+            away.y = 0.0F;
+            if (static_cast<float>(away.length()) - target_extent_ <= reach) {
+                if (auto* const other = godot::Object::cast_to<E5Enemy>(node)) {
+                    other->take_blow(attack_damage_, other->get_aim_point());
+                } else if (!node->is_in_group(E5PlayerController::group_name) &&
+                           !node->is_in_group(E5PlayerController::remote_group_name)) {
+                    emit_signal("struck_structure", node, attack_damage_);
+                }
+            }
         }
     }
     // A hero's copy (the new wizard's Whose Ur Mommy?) is struck like the hero played here: it
@@ -906,19 +1065,25 @@ void E5Enemy::_physics_process(double delta) {
         return;
     }
 
-    // It goes for the nearest hero, whoever plays her.
-    const godot::Node3D* const player = nearest_player();
+    // It goes for the nearest of those it fights: a hero, whoever plays her; for a unit also wild
+    // enemies, other players' units, cores and buildings; for a wild one also units.
+    float extent = 0.0F;
+    const godot::Node3D* const player = nearest_foe(extent);
+    target_id_ = player != nullptr ? godot::ObjectID(player->get_instance_id()) : godot::ObjectID();
+    target_extent_ = extent;
     godot::Vector3 to_player;
     if (player != nullptr) {
         target_position_ = player->get_global_position();
         to_player = player->get_global_position() - get_global_position();
         to_player.y = 0.0F;
     }
+    // (A wide thing is reached at its edge.)
+    const float to_reach = std::max(static_cast<float>(to_player.length()) - extent, 0.0F);
     // Stunned, it sees nobody: it neither comes on nor strikes. What hits it still counts.
     const bool stunned = stunned_left_ > 0.0F;
     const gameplay::EnemyInput input{
         .has_player = player != nullptr && !stunned,
-        .distance_to_player = static_cast<float>(to_player.length()),
+        .distance_to_player = to_reach,
         .damage = pending_damage_,
         .heaviest_blow = heaviest_pending_blow_,
     };
@@ -933,7 +1098,7 @@ void E5Enemy::_physics_process(double delta) {
         return;
     }
     // Whether the blow lands is asked of the hero played here only (see set_remote).
-    update_blow(step.attack_started, dt, distance_to_local_player());
+    update_blow(step.attack_started, dt, distance_to_local_player(), true);
     if (step.special_started) {
         begin_special((state_.specials_started - 1) % special_count_);
     }
