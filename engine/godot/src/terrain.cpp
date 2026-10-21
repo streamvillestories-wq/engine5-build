@@ -12,6 +12,7 @@
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -32,6 +33,7 @@
 #include <limits>
 #include <numbers>
 #include <span>
+#include <thread>
 #include <vector>
 
 namespace e5::bridge {
@@ -660,7 +662,7 @@ void E5Terrain::build_chunk(int first_column, int first_row, int cells) {
     float highest = -1000.0F;
     for (int row = 0; row <= cells; row += 4) {
         for (int column = 0; column <= cells; column += 4) {
-            highest = std::max(highest, ground(x0 + static_cast<float>(column), z0 + static_cast<float>(row)));
+            highest = std::max(highest, grid_height(first_column + column, first_row + row));
         }
     }
     const int step = highest < submerged_below ? submerged_step : 1;
@@ -673,13 +675,16 @@ void E5Terrain::build_chunk(int first_column, int first_row, int cells) {
     normals.resize(vertices.size());
     for (int row = 0; row < points; ++row) {
         for (int column = 0; column < points; ++column) {
+            const int gx = first_column + column * step;
+            const int gz = first_row + row * step;
             const float x = x0 + static_cast<float>(column * step);
             const float z = z0 + static_cast<float>(row * step);
             const std::int64_t index = static_cast<std::int64_t>(row) * points + column;
-            vertices.set(index, godot::Vector3(x, ground(x, z), z));
-            // The normal comes from the function, not from the triangles: chunks then meet without a visible seam.
-            const float rise_x = ground(x + 1.0F, z) - ground(x - 1.0F, z);
-            const float rise_z = ground(x, z + 1.0F) - ground(x, z - 1.0F);
+            vertices.set(index, godot::Vector3(x, grid_height(gx, gz), z));
+            // The normal comes from the heights a metre either side, not from the triangles: chunks then
+            // meet without a visible seam.
+            const float rise_x = grid_height(gx + 1, gz) - grid_height(gx - 1, gz);
+            const float rise_z = grid_height(gx, gz + 1) - grid_height(gx, gz - 1);
             normals.set(index, godot::Vector3(-rise_x, 2.0F, -rise_z).normalized());
         }
     }
@@ -719,14 +724,7 @@ void E5Terrain::build_collision(int cells_across) {
     const int samples = cells_across + 1;
     godot::PackedFloat32Array heights;
     heights.resize(static_cast<std::int64_t>(samples) * samples);
-    const float half = static_cast<float>(cells_across) * 0.5F;
-    for (int row = 0; row < samples; ++row) {
-        for (int column = 0; column < samples; ++column) {
-            heights.set(static_cast<std::int64_t>(row) * samples + column,
-                        static_cast<double>(ground(static_cast<float>(column) - half, static_cast<float>(row) - half)));
-        }
-    }
-    heights_.assign(heights.ptr(), heights.ptr() + heights.size()); // kept for the map
+    std::ranges::copy(heights_, heights.ptrw()); // the grid of build_heights: the same samples
     godot::Ref<godot::HeightMapShape3D> shape;
     shape.instantiate();
     shape->set_map_width(samples);
@@ -737,6 +735,34 @@ void E5Terrain::build_collision(int cells_across) {
     add_child(collision);
 }
 
+void E5Terrain::build_heights(int cells_across) {
+    grid_side_ = cells_across + 1;
+    grid_half_ = cells_across / 2;
+    heights_.assign(static_cast<std::size_t>(grid_side_) * static_cast<std::size_t>(grid_side_), 0.0F);
+    // Rows shared out over the cores; ground() only reads what build_paths made.
+    const unsigned workers = std::max(1U, std::min(std::thread::hardware_concurrency(), 16U));
+    std::vector<std::jthread> threads;
+    threads.reserve(workers);
+    for (unsigned worker = 0; worker < workers; ++worker) {
+        threads.emplace_back([this, worker, workers] {
+            for (int row = static_cast<int>(worker); row < grid_side_; row += static_cast<int>(workers)) {
+                const auto z = static_cast<float>(row - grid_half_);
+                float* const line = heights_.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(grid_side_);
+                for (int column = 0; column < grid_side_; ++column) {
+                    line[column] = ground(static_cast<float>(column - grid_half_), z);
+                }
+            }
+        });
+    }
+}
+
+float E5Terrain::grid_height(int x, int z) const {
+    const int column = std::clamp(x + grid_half_, 0, grid_side_ - 1);
+    const int row = std::clamp(z + grid_half_, 0, grid_side_ - 1);
+    return heights_[static_cast<std::size_t>(row) * static_cast<std::size_t>(grid_side_) +
+                    static_cast<std::size_t>(column)];
+}
+
 void E5Terrain::_ready() {
     E5_PROFILE_SCOPE("E5Terrain::_ready");
     add_to_group(group_name);
@@ -744,8 +770,12 @@ void E5Terrain::_ready() {
     const int cells_across = this->cells_across();
     const int chunks_across = cells_across / chunk_cells;
     const int first = -cells_across / 2;
+    const std::uint64_t began = godot::Time::get_singleton()->get_ticks_msec();
     build_paths(cells_across);
+    const std::uint64_t paths_done = godot::Time::get_singleton()->get_ticks_msec();
     build_regions(cells_across);
+    build_heights(cells_across);
+    const std::uint64_t heights_done = godot::Time::get_singleton()->get_ticks_msec();
     for (int row = 0; row < chunks_across; ++row) {
         for (int column = 0; column < chunks_across; ++column) {
             build_chunk(first + column * chunk_cells, first + row * chunk_cells, chunk_cells);
@@ -762,8 +792,10 @@ void E5Terrain::_ready() {
             node->set_global_position(position);
         }
     }
-    logger().info("terrain '{}': {} x {} m, {} chunks, {} triangles", godot::String(get_name()).utf8().get_data(),
-                  cells_across, cells_across, chunks_across * chunks_across, triangle_count_);
+    logger().info("terrain '{}': {} x {} m, {} chunks, {} triangles; built in {} ms (paths {}, heights {}, meshes {})",
+                  godot::String(get_name()).utf8().get_data(), cells_across, cells_across, chunks_across * chunks_across,
+                  triangle_count_, godot::Time::get_singleton()->get_ticks_msec() - began, paths_done - began,
+                  heights_done - paths_done, godot::Time::get_singleton()->get_ticks_msec() - heights_done);
 }
 
 } // namespace e5::bridge

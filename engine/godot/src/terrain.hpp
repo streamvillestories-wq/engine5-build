@@ -164,6 +164,11 @@ protected:
 private:
     void build_chunk(int first_column, int first_row, int cells);
     void build_collision(int cells_across);
+    // The ground's height at every metre of the island, worked out once on every core (the
+    // keeper, 2026-10-21: the island took 48 s to build on one core, five heights a vertex).
+    void build_heights(int cells_across);
+    // The height at a corner of the grid (local metres; clamped at the edge).
+    [[nodiscard]] float grid_height(int x, int z) const;
     // Smooths the paths and hands the material a picture of where they run.
     void build_paths(int cells_across);
     // Hands the material a picture of the regions: red pine forest, green dry highland, blue marsh.
@@ -188,6 +193,8 @@ private:
     int path_count_ = 0;
     std::vector<float> heights_; // the collision grid: one a metre, row by row
     int triangle_count_ = 0;
+    int grid_side_ = 0;       // samples along a side of heights_
+    int grid_half_ = 0;       // local metres from the middle to the first sample
 };
 
 } // namespace e5::bridge
