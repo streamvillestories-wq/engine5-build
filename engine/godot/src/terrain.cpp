@@ -741,7 +741,7 @@ void E5Terrain::build_heights(int cells_across) {
     heights_.assign(static_cast<std::size_t>(grid_side_) * static_cast<std::size_t>(grid_side_), 0.0F);
     // Rows shared out over the cores; ground() only reads what build_paths made.
     const unsigned workers = std::max(1U, std::min(std::thread::hardware_concurrency(), 16U));
-    std::vector<std::jthread> threads;
+    std::vector<std::thread> threads; // not jthread: Apple's libc++ has none
     threads.reserve(workers);
     for (unsigned worker = 0; worker < workers; ++worker) {
         threads.emplace_back([this, worker, workers] {
@@ -753,6 +753,9 @@ void E5Terrain::build_heights(int cells_across) {
                 }
             }
         });
+    }
+    for (std::thread& thread : threads) {
+        thread.join();
     }
 }
 
