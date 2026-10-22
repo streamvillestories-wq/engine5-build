@@ -58,6 +58,12 @@ enum class ItemId : std::uint8_t {
     SoulWarden,
     SoulQueen,
     SoulHydra,
+    // The Crystal Heart (the keeper, 2026-10-22: "implement the crystal heart as an item"): what the
+    // island's ordinary monsters leave now and then (`heart_chance`), a boss always several
+    // (`boss_hearts`). `hearts_for_core` of them let a hero past the Stone Golem at the Great Tree,
+    // who trades them for the Crystal Core, the item a player must hold to place his core.
+    CrystalHeart,
+    CrystalCore,
     Count,
 };
 
@@ -195,7 +201,16 @@ struct Loot {
 // Nothing else for now. Weapons are not found: every hero starts with hers.
 inline constexpr float soul_chance = 0.4F;
 inline constexpr float potion_chance = 0.8F;
+// And a Crystal Heart `heart_chance` of the times from an enemy with a soul (the island's ordinary
+// monsters: nothing from an enemy that has none, so a player's own units leave none); a boss
+// (the Warden, the Queen, the Hydra) leaves `boss_hearts` every time.
+inline constexpr float heart_chance = 0.3F;
+inline constexpr int boss_hearts = 3;
+// How many the Stone Golem wants for a Crystal Core.
+inline constexpr int hearts_for_core = 10;
 [[nodiscard]] Loot roll_loot(std::uint32_t seed, ItemId soul = ItemId::None) noexcept;
+// Whether a soul is a boss's.
+[[nodiscard]] bool is_boss_soul(ItemId soul) noexcept;
 
 // The soul of a family of enemies ("shroomling", "hydra" ...: the item whose key is "soul_" and
 // that); None when there is none.

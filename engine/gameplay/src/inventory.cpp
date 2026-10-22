@@ -344,6 +344,22 @@ constexpr std::array<ItemInfo, static_cast<std::size_t>(Count)> items{{
      .rarity = Rarity::Legendary,
      .max_stack = 99,
      .value = 300},
+    {.key = "crystal_heart",
+     .name = "Crystal Heart",
+     .description = "A shard of the island's own heart, cut out of a monster. The Stone Golem at the Great Tree "
+                    "lets whoever carries ten of them pass, and trades them for a Crystal Core.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Rare,
+     .max_stack = 99,
+     .value = 60},
+    {.key = "crystal_core",
+     .name = "Crystal Core",
+     .description = "The heart of a base, grown by the Stone Golem from ten Crystal Hearts. Place it on a crystal "
+                    "vein (B), and it is spent.",
+     .kind = ItemKind::Material,
+     .rarity = Rarity::Legendary,
+     .max_stack = 1,
+     .value = 1000},
 }};
 
 [[nodiscard]] constexpr bool valid_slot(int slot) noexcept {
@@ -599,7 +615,18 @@ Loot roll_loot(std::uint32_t seed, ItemId soul) noexcept {
     if (leaves_potion) {
         loot.items.at(used++) = {.item = HealthPotion, .count = 1};
     }
+    // (Asked last, so that every kill leaves the gold, soul and potion it left before hearts were.)
+    const bool leaves_heart = chance(state) < heart_chance;
+    if (soul != ItemId::None && is_boss_soul(soul)) {
+        loot.items.at(used++) = {.item = CrystalHeart, .count = boss_hearts};
+    } else if (soul != ItemId::None && leaves_heart) {
+        loot.items.at(used++) = {.item = CrystalHeart, .count = 1};
+    }
     return loot;
+}
+
+bool is_boss_soul(ItemId soul) noexcept {
+    return soul == SoulWarden || soul == SoulQueen || soul == SoulHydra;
 }
 
 } // namespace e5::gameplay

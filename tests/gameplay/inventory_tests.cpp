@@ -140,6 +140,7 @@ TEST_CASE("loot: always gold, a soul four times in ten, a health potion eight ti
 
     int souls = 0;
     int potions = 0;
+    int hearts = 0;
     const int kills = 4000;
     for (std::uint32_t seed = 0; seed < static_cast<std::uint32_t>(kills); ++seed) {
         const Loot loot = roll_loot(seed, soul);
@@ -159,18 +160,42 @@ TEST_CASE("loot: always gold, a soul four times in ten, a health potion eight ti
                 continue;
             }
             REQUIRE(stack.count == 1);
-            REQUIRE((stack.item == soul || stack.item == ItemId::HealthPotion));
+            REQUIRE((stack.item == soul || stack.item == ItemId::HealthPotion || stack.item == ItemId::CrystalHeart));
             souls += stack.item == soul ? 1 : 0;
             here += stack.item == ItemId::HealthPotion ? 1 : 0;
+            hearts += stack.item == ItemId::CrystalHeart ? 1 : 0;
         }
         REQUIRE(here == plain_potions);
         potions += here;
     }
-    // The chances are 40 % and 80 %; the bounds leave room for the generator's noise.
+    // The chances are 40 %, 80 % and 30 %; the bounds leave room for the generator's noise.
     CHECK(souls > kills * 34 / 100);
     CHECK(souls < kills * 46 / 100);
     CHECK(potions > kills * 75 / 100);
     CHECK(potions < kills * 85 / 100);
+    CHECK(hearts > kills * 25 / 100);
+    CHECK(hearts < kills * 35 / 100);
+}
+
+TEST_CASE("crystal hearts: three from a boss, none from what has no soul, ten for a core", "[inventory]") {
+    CHECK(item_info(ItemId::CrystalHeart).key == "crystal_heart");
+    CHECK(item_info(ItemId::CrystalCore).key == "crystal_core");
+    CHECK(item_info(ItemId::CrystalCore).max_stack == 1);
+    CHECK(hearts_for_core == 10);
+    CHECK(is_boss_soul(soul_item("hydra")));
+    CHECK(is_boss_soul(soul_item("warden")));
+    CHECK(is_boss_soul(soul_item("queen")));
+    CHECK_FALSE(is_boss_soul(soul_item("troll")));
+    for (std::uint32_t seed = 0; seed < 200; ++seed) {
+        int from_boss = 0;
+        for (const ItemStack& stack : roll_loot(seed, soul_item("hydra")).items) {
+            from_boss += stack.item == ItemId::CrystalHeart ? stack.count : 0;
+        }
+        CHECK(from_boss == boss_hearts);
+        for (const ItemStack& stack : roll_loot(seed).items) {
+            CHECK(stack.item != ItemId::CrystalHeart);
+        }
+    }
 }
 
 TEST_CASE("a weapon goes into the weapon slot and is only ever changed for another", "[inventory][weapon]") {
