@@ -1,5 +1,6 @@
 #pragma once
 
+#include <godot_cpp/classes/animation.hpp>
 #include <godot_cpp/classes/animation_library.hpp>
 #include <godot_cpp/classes/animation_node_transition.hpp>
 #include <godot_cpp/classes/curve.hpp>
@@ -32,6 +33,10 @@ public:
 
     [[nodiscard]] bool is_ready() const { return tree_ != nullptr; }
     [[nodiscard]] bool has_clip(const godot::StringName& clip) const;
+    // The clip itself (its meta: the Animation Studio's attack marks), or null.
+    [[nodiscard]] godot::Ref<godot::Animation> animation(const godot::StringName& clip) const {
+        return has_clip(clip) ? library_->get_animation(clip) : godot::Ref<godot::Animation>();
+    }
     [[nodiscard]] float clip_length(const godot::StringName& clip) const;
 
     // Cross-fades the whole body to `clip`. Asking for the clip that is already

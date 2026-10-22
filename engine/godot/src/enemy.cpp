@@ -1265,6 +1265,7 @@ void E5Enemy::throw_bolt(const godot::Vector3& player_position) {
     bolt->set_impact_effect(bolt_impact_);
     bolt->set_damage(cast_damage_);
     bolt->set_hostile(true);
+    bolt->set_team(team_); // a unit's bolt is its side's
     bolt->launch((target - from).normalized() * bolt_speed_, get_rid());
     ++cast_count_;
 }

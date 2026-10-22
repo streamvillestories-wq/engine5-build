@@ -18,11 +18,11 @@ TEST_CASE("the archer has her shot, the skills wished for her and slots to fill"
     CHECK(bar.slot(3) == SkillId::BearTrap);   // "the first free slot" too
     CHECK(bar.slot(5) == SkillId::GatlingGun); // wished for key 6
     // Key 5 and keys 7 to 10 hold her five of 2026-10-16 (see "the Archer's five ..." below); the
-    // last two are free.
-    for (std::size_t slot = 10; slot < SkillBar::slot_count; ++slot) {
-        CHECK(bar.slot(slot) == SkillId::None);
-    }
-    CHECK_FALSE(bar.select(10)); // an empty slot is not chosen
+    // last two the first of her five more of 2026-10-22 (learnt at levels 3 and 6).
+    CHECK(bar.slot(10) == SkillId::PiercingVolley);
+    CHECK(bar.slot(11) == SkillId::SmokeArrow);
+    CHECK(e5::gameplay::skill_level_needed(SkillId::PiercingVolley) == 3);
+    CHECK(e5::gameplay::skill_level_needed(SkillId::Shot) == 1);
     CHECK(bar.select(5));
     CHECK(open_slot_count(SkillSet::Archer) == 11);
     CHECK(open_slot_count(SkillSet::ArcherFull) == 0);
@@ -571,7 +571,18 @@ TEST_CASE("the Bonecaller throws souls as his standard attack", "[skills]") {
     CHECK(bar.slot(3) == SkillId::CurseOfFrailty);
     CHECK(bar.slot(4) == SkillId::BoneArmor);
     CHECK(bar.slot(5) == SkillId::Requiem);
-    CHECK(bar.slot(6) == SkillId::None);
+    CHECK(bar.slot(6) == SkillId::BansheeWail);
+    CHECK(bar.slot(7) == SkillId::GraveGrasp);
+    CHECK(bar.slot(8) == SkillId::SpectralForm);
+    CHECK(bar.slot(9) == SkillId::DeathCoil); // the first of his five more (2026-10-22)
+    CHECK(bar.slot(11) == SkillId::Plague);
+    CHECK(e5::gameplay::skill_is_stance(SkillId::SpectralForm));
+    CHECK(e5::gameplay::skill_damage(SkillId::SpectralForm) == 0.0F);
+    CHECK(e5::gameplay::spectral_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::SpectralForm));
+    for (const SkillId skill : {SkillId::BansheeWail, SkillId::GraveGrasp}) {
+        CHECK(e5::gameplay::skill_damage(skill) > 0.0F);
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+    }
     CHECK(e5::gameplay::skill_is_stance(SkillId::BoneArmor));
     CHECK(e5::gameplay::skill_needs_charge(SkillId::Requiem));
     for (const SkillId skill : {SkillId::BoneSpikes, SkillId::SoulDrain, SkillId::Requiem}) {
@@ -600,7 +611,7 @@ TEST_CASE("the Archer's five of 2026-10-16 fill her players' bar", "[skills]") {
     CHECK(bar.slot(7) == SkillId::SpiritWolf);
     CHECK(bar.slot(8) == SkillId::OwlSentinel);
     CHECK(bar.slot(9) == SkillId::EvasiveShot);
-    CHECK(bar.slot(10) == SkillId::None);
+    CHECK(bar.slot(10) == SkillId::PiercingVolley);
     // The full bar of the test runs is what it was.
     CHECK(e5::gameplay::SkillBar(e5::gameplay::SkillSet::ArcherFull).slot(4) == SkillId::FireArrow);
     // The two arrows are drawn and loosed with her bow; the others play through on the key.
@@ -799,7 +810,18 @@ TEST_CASE("the Shadowblade has his five skills on the bar", "[skills]") {
     CHECK(bar.slot(3) == SkillId::VeilOfShadows);
     CHECK(bar.slot(4) == SkillId::VenomEdge);
     CHECK(bar.slot(5) == SkillId::ShadowFlurry);
-    CHECK(bar.slot(6) == SkillId::None);
+    CHECK(bar.slot(6) == SkillId::SmokeBomb);
+    CHECK(bar.slot(7) == SkillId::DeathMark);
+    CHECK(bar.slot(8) == SkillId::BladeDance);
+    CHECK(bar.slot(9) == SkillId::Caltrops); // the first of his five more (2026-10-22)
+    CHECK(bar.slot(11) == SkillId::Garrote);
+    CHECK(e5::gameplay::skill_damage(SkillId::BladeDance) > 0.0F);
+    CHECK(e5::gameplay::skill_damage(SkillId::SmokeBomb) == 0.0F);
+    CHECK(e5::gameplay::death_mark_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::DeathMark));
+    for (const SkillId skill : {SkillId::SmokeBomb, SkillId::DeathMark, SkillId::BladeDance}) {
+        CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+        CHECK(!e5::gameplay::skill_is_stance(skill));
+    }
     CHECK(e5::gameplay::skill_is_stance(SkillId::VeilOfShadows));
     CHECK(e5::gameplay::skill_is_stance(SkillId::VenomEdge));
     CHECK(e5::gameplay::skill_needs_charge(SkillId::ShadowFlurry));
@@ -1318,4 +1340,39 @@ TEST_CASE("whose ur mommy is the new wizard's skill for a full charge", "[skills
     // It has time for one round of them, and no more.
     CHECK(e5::gameplay::clone_seconds / e5::gameplay::clone_cast_seconds <
           static_cast<float>(e5::gameplay::clone_spells) + 1.0F);
+}
+
+TEST_CASE("the five more of every hero (2026-10-22) are gated by level, numbered and in the book") {
+    using e5::gameplay::skill_catalogue;
+    using e5::gameplay::skill_level_needed;
+    const std::array fives{
+        std::array{SkillId::Caltrops, SkillId::ShadowDash, SkillId::Garrote, SkillId::CripplingStrike, SkillId::Assassinate},
+        std::array{SkillId::DeathCoil, SkillId::BoneSentinel, SkillId::Plague, SkillId::GraveChill, SkillId::LichForm},
+        std::array{SkillId::ShieldBash, SkillId::Cleave, SkillId::BattleShout, SkillId::Hamstring, SkillId::HeroicStrike},
+        std::array{SkillId::ForgeHammer, SkillId::RuneTrap, SkillId::EarthenGrip, SkillId::RallyHorn, SkillId::Avalanche},
+        std::array{SkillId::FlameWall, SkillId::ArcaneSurge, SkillId::StaticTrap, SkillId::MeteorShower, SkillId::TimeWarp},
+        std::array{SkillId::PiercingVolley, SkillId::SmokeArrow, SkillId::TrapLine, SkillId::HawkEye, SkillId::PhoenixArrow},
+    };
+    const std::array sets{SkillSet::Shadow, SkillSet::Bone, SkillSet::Blade, SkillSet::Dwarf, SkillSet::Mage, SkillSet::Archer};
+    for (std::size_t hero = 0; hero < fives.size(); ++hero) {
+        const std::span<const SkillId> book = skill_catalogue(sets.at(hero));
+        for (std::size_t index = 0; index < 5; ++index) {
+            const SkillId skill = fives.at(hero).at(index);
+            CHECK(skill_level_needed(skill) == 3 * static_cast<int>(index + 1));
+            CHECK(e5::gameplay::skill_cooldown_seconds(skill) > 0.0F);
+            CHECK(!e5::gameplay::skill_info(skill).name.empty());
+            CHECK(!e5::gameplay::skill_description(skill).empty());
+            CHECK(std::ranges::find(book, skill) != book.end());
+        }
+    }
+    for (const SkillId stance : {SkillId::LichForm, SkillId::BattleShout, SkillId::RallyHorn, SkillId::ArcaneSurge,
+                                 SkillId::TimeWarp, SkillId::HawkEye}) {
+        CHECK(e5::gameplay::skill_is_stance(stance));
+        CHECK(e5::gameplay::skill_damage(stance) == 0.0F);
+    }
+    for (const SkillId blow : {SkillId::Garrote, SkillId::DeathCoil, SkillId::Cleave, SkillId::Avalanche,
+                               SkillId::MeteorShower, SkillId::PhoenixArrow}) {
+        CHECK(e5::gameplay::skill_damage(blow) > 0.0F);
+    }
+    CHECK(e5::gameplay::skill_info(SkillId::SmokeArrow).kind == e5::gameplay::SkillKind::Bow);
 }

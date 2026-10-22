@@ -43,6 +43,8 @@ public:
         stun_visual_ = visual;
     }
     void set_damage(float damage) { damage_ = damage; }
+    // This share of the damage it does heals the hero played here (the Bonecaller's Death Coil).
+    void set_heal_share(float share) { heal_share_ = share; }
     void set_blast_radius(float radius) { blast_radius_ = radius; }
     // Makes the spell steer towards a place in the world: it may start in any direction and
     // bends its path there, speeding up to `speed`. `turn` is how hard it steers (m/s^2).
@@ -52,6 +54,9 @@ public:
     void set_homing_on(const godot::Node3D* target);
     // Thrown by an enemy: it hurts the player and nothing else, and flies through other enemies.
     void set_hostile(bool hostile) { hostile_ = hostile; }
+    // Thrown by a player's unit (E5Enemy::team, 2026-10-22): it hurts what that side fights, heroes
+    // of other sides and the wild and other sides' units, and flies through its own side.
+    void set_team(int team) { team_ = team; }
     // Seconds the spell hangs where it is before it starts to fly.
     void set_launch_delay(float seconds) { launch_delay_ = seconds; }
 
@@ -69,6 +74,7 @@ private:
     godot::Ref<godot::PackedScene> impact_effect_;
     godot::Node3D* trail_ = nullptr; // non-owning child
     float damage_ = 0.0F;
+    float heal_share_ = 0.0F;
     float blast_radius_ = 0.0F;
     float impact_scale_ = 1.0F;
     float poison_tick_damage_ = 0.0F;
@@ -85,6 +91,7 @@ private:
     double age_seconds_ = 0.0;
     bool flying_ = false;
     bool hostile_ = false;
+    int team_ = 0;
 };
 
 } // namespace e5::bridge

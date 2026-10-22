@@ -107,11 +107,13 @@ void E5SpellBolt::_physics_process(double delta) {
     godot::TypedArray<godot::RID> excluded;
     excluded.push_back(caster_);
     if (hostile_) {
-        // Its own kind does not stop it.
+        // Its own kind does not stop it (a unit's: its own side; it strikes the wild and other sides).
         const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
         for (const godot::Variant& node : enemies) {
             if (const auto* const enemy = godot::Object::cast_to<E5Enemy>(node)) {
-                excluded.push_back(enemy->get_rid());
+                if (team_ == 0 || !E5Enemy::teams_hostile(team_, enemy->get_team())) {
+                    excluded.push_back(enemy->get_rid());
+                }
             }
         }
     }
@@ -147,8 +149,13 @@ void E5SpellBolt::burst(const godot::Vector3& position, godot::Object* collider)
     }
     if (hostile_) {
         if (auto* const player = godot::Object::cast_to<E5PlayerController>(collider)) {
-            // From where it came: back along its flight.
-            player->take_damage_from(damage_, position - velocity_.normalized() * 2.0F);
+            // From where it came: back along its flight. (A unit's spares the heroes of its own side.)
+            if (team_ == 0 || E5Enemy::teams_hostile(team_, E5Enemy::get_local_team())) {
+                player->take_damage_from(damage_, position - velocity_.normalized() * 2.0F);
+            }
+        } else if (auto* const struck = godot::Object::cast_to<E5Enemy>(collider);
+                   struck != nullptr && team_ != 0 && E5Enemy::teams_hostile(team_, struck->get_team())) {
+            struck->take_blow(damage_, position); // a unit's bolt on what it fights
         }
         return;
     }
@@ -156,6 +163,12 @@ void E5SpellBolt::burst(const godot::Vector3& position, godot::Object* collider)
         combat::blast(this, position, blast_radius_, damage_);
     } else {
         combat::hit(collider, position, damage_);
+    }
+    if (heal_share_ > 0.0F && damage_ > 0.0F && godot::Object::cast_to<E5Enemy>(collider) != nullptr) {
+        if (auto* const hero = godot::Object::cast_to<E5PlayerController>(
+                get_tree()->get_first_node_in_group(E5PlayerController::group_name))) {
+            hero->heal_from_spell(damage_ * heal_share_);
+        }
     }
     if (stun_seconds_ > 0.0F && damage_ > 0.0F) {
         const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);

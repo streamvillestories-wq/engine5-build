@@ -436,6 +436,21 @@ func _units() -> void:
 	_check("each in its own place of its kind", state.units.values().filter(
 			func(u: Dictionary) -> bool: return u["kind"] == "troll").map(func(u: Dictionary) -> int: return u["slot"]) == [0, 1, 2, 3, 4, 5, 6])
 	_check("nothing of an unknown kind", state.make_unit(12, "dragon") != "")
+	# Every monster of the island (2026-10-22): each kind names its family's soul and its own pool.
+	_check("twenty kinds", MatchState.UNIT_KINDS.size() == 20)
+	_check("a kind's family", MatchState.unit_family_of("spider_crystal") == "spider" and MatchState.unit_family_of("wolf") == "wolf")
+	_check("a kind's pool", MatchState.unit_pool_of("troll") == 8 and MatchState.unit_pool_of("undead") == 6)
+	var pools: RefCounted = MatchState.new()
+	pools.use_veins = false
+	pools.use_blueprints = false
+	pools.shrines.clear()
+	pools.join("c", 13, "c", 0)
+	pools.place(13, Vector3(0, 0, 0), 0.0)
+	pools.build(13, "forge", Vector3(10, 0, 10), 0.0)
+	for n in 6:
+		pools.make_unit(13, "undead")
+	_check("a kind's pool is its own", pools.count_units("c") == 6 and pools.make_unit(13, "undead").begins_with("No more")
+			and pools.make_unit(13, "wolf") == "")
 	_check("orders", state.set_order(11, "attack") == "" and state.set_order(11, "dance") != ""
 			and state.snapshot(1.0)["players"][0]["order"] == "attack")
 	var first: int = state.units.keys()[0]

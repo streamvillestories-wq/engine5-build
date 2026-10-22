@@ -177,6 +177,78 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Venom Edge", .charges = false, .kind = SkillKind::Instant};
     case SkillId::ShadowFlurry:
         return {.name = "Shadow Flurry", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::SmokeBomb:
+        return {.name = "Smoke Bomb", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::DeathMark:
+        return {.name = "Death Mark", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BladeDance:
+        return {.name = "Blade Dance", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BansheeWail:
+        return {.name = "Banshee Wail", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::GraveGrasp:
+        return {.name = "Grave Grasp", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::SpectralForm:
+        return {.name = "Spectral Form", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Caltrops:
+        return {.name = "Caltrops", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ShadowDash:
+        return {.name = "Shadow Dash", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Garrote:
+        return {.name = "Garrote", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::CripplingStrike:
+        return {.name = "Crippling Strike", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Assassinate:
+        return {.name = "Assassinate", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::DeathCoil:
+        return {.name = "Death Coil", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BoneSentinel:
+        return {.name = "Bone Sentinel", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Plague:
+        return {.name = "Plague", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::GraveChill:
+        return {.name = "Grave Chill", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::LichForm:
+        return {.name = "Lich Form", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ShieldBash:
+        return {.name = "Shield Bash", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Cleave:
+        return {.name = "Cleave", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BattleShout:
+        return {.name = "Battle Shout", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Hamstring:
+        return {.name = "Hamstring", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::HeroicStrike:
+        return {.name = "Heroic Strike", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ForgeHammer:
+        return {.name = "Forge Hammer", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::RuneTrap:
+        return {.name = "Rune Trap", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::EarthenGrip:
+        return {.name = "Earthen Grip", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::RallyHorn:
+        return {.name = "Rally Horn", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::Avalanche:
+        return {.name = "Avalanche", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::FlameWall:
+        return {.name = "Flame Wall", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::ArcaneSurge:
+        return {.name = "Arcane Surge", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::StaticTrap:
+        return {.name = "Static Trap", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::MeteorShower:
+        return {.name = "Meteor Shower", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::TimeWarp:
+        return {.name = "Time Warp", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::PiercingVolley:
+        return {.name = "Piercing Volley", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::SmokeArrow:
+        return {.name = "Smoke Arrow", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::TrapLine:
+        return {.name = "Trap Line", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::HawkEye:
+        return {.name = "Hawk Eye", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::PhoenixArrow:
+        return {.name = "Phoenix Arrow", .charges = false, .kind = SkillKind::Bow};
     case SkillId::MirrorImage:
         return {.name = "Whose Ur Mommy?", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
@@ -295,6 +367,57 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 16.0F; // each knife: one in the face is less than a dagger blow, five into a crowd are more
     case SkillId::ShadowFlurry:
         return 13.0F; // each of its fourteen blows in three and a half seconds: 182 in all
+    case SkillId::BladeDance:
+        return 22.0F; // each of its three blows, to everyone round him: 66 in all
+    case SkillId::BansheeWail:
+        return 24.0F; // to each in the cone, and the stun
+    case SkillId::GraveGrasp:
+        return 20.0F; // to each held; the hold does the rest
+    // The five more of every hero (2026-10-22).
+    case SkillId::Caltrops:
+        return 5.0F; // every half second to each in the field: 80 over its eight seconds
+    case SkillId::ShadowDash:
+        return 22.0F; // to each he passes
+    case SkillId::Garrote:
+        return 11.0F; // each of its five ticks: 55, while the victim is held
+    case SkillId::Assassinate:
+        return 40.0F; // or three times that on one below a third of its health
+    case SkillId::DeathCoil:
+        return 26.0F; // and half of it heals him
+    case SkillId::BoneSentinel:
+        return 12.0F; // each throw, every 1.2 s for twelve seconds: up to 120
+    case SkillId::Plague:
+        return 6.0F; // every second for six, on each it spreads to
+    case SkillId::GraveChill:
+        return 18.0F; // to each in the cone, and the slowing
+    case SkillId::ShieldBash:
+        return 24.0F; // and the stun
+    case SkillId::Cleave:
+        return 30.0F; // to each in the sweep
+    case SkillId::HeroicStrike:
+        return 90.0F; // three slashes in one, and a stun
+    case SkillId::ForgeHammer:
+        return 28.0F; // and the stun
+    case SkillId::RuneTrap:
+        return 30.0F; // to the one that springs it, and the stun
+    case SkillId::EarthenGrip:
+        return 20.0F; // to each held
+    case SkillId::Avalanche:
+        return 24.0F; // each boulder, to each it catches
+    case SkillId::FlameWall:
+        return 6.0F; // every half second to each in the wall: 72 over its six seconds
+    case SkillId::StaticTrap:
+        return 25.0F; // to each in it when it springs, and the stun
+    case SkillId::MeteorShower:
+        return 18.0F; // each meteor, to each it catches
+    case SkillId::PiercingVolley:
+        return 20.0F; // each of its three arrows
+    case SkillId::SmokeArrow:
+        return 15.0F; // to each in the burst; the stun is the point
+    case SkillId::TrapLine:
+        return 30.0F; // each trap, as the Bear Trap's
+    case SkillId::PhoenixArrow:
+        return 66.0F; // three shots in one, in a burst that burns
     // The archer's arrows to choose from: not yet weighed against the others (the user picks
     // among them first).
     case SkillId::VenomArrow:
@@ -329,6 +452,17 @@ float skill_damage(SkillId skill, float power) noexcept {
     case SkillId::BoneArmor:
     case SkillId::VeilOfShadows: // (its ambush doubles the blow that ends it)
     case SkillId::VenomEdge:     // (its poison: venom_edge_tick_damage)
+    case SkillId::SmokeBomb:     // (it blinds and slows)
+    case SkillId::DeathMark:     // (it makes his blows harder: death_mark_factor)
+    case SkillId::SpectralForm:  // (it speeds him and spares him)
+    case SkillId::CripplingStrike: // (it sharpens the next blows)
+    case SkillId::Hamstring:       // (it arms the next blow: hamstring_bleed)
+    case SkillId::LichForm:        // (the stances of the five more)
+    case SkillId::BattleShout:
+    case SkillId::RallyHorn:
+    case SkillId::ArcaneSurge:
+    case SkillId::TimeWarp:
+    case SkillId::HawkEye:
     case SkillId::WarBanner:     // (her blows near it: banner_blow_factor)
     case SkillId::StoneBrew:     // (it hardens and heals him)
         return 0.0F;             // they strike nobody
@@ -479,6 +613,79 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 20.0F; // from the key: it lasts five of them
     case SkillId::VenomEdge:
         return 18.0F; // from the key: it lasts eight of them
+    case SkillId::SmokeBomb:
+        return 16.0F;
+    case SkillId::DeathMark:
+        return 14.0F; // the mark lasts eight of them
+    case SkillId::BladeDance:
+        return 12.0F;
+    case SkillId::BansheeWail:
+        return 12.0F;
+    case SkillId::GraveGrasp:
+        return 14.0F;
+    case SkillId::SpectralForm:
+        return 20.0F; // from the key: it lasts six of them
+    // The five more of every hero (2026-10-22).
+    case SkillId::Caltrops:
+        return 14.0F;
+    case SkillId::ShadowDash:
+        return 10.0F;
+    case SkillId::Garrote:
+        return 16.0F;
+    case SkillId::CripplingStrike:
+        return 15.0F;
+    case SkillId::Assassinate:
+        return 20.0F;
+    case SkillId::DeathCoil:
+        return 8.0F;
+    case SkillId::BoneSentinel:
+        return 24.0F;
+    case SkillId::Plague:
+        return 18.0F;
+    case SkillId::GraveChill:
+        return 12.0F;
+    case SkillId::LichForm:
+        return 40.0F;
+    case SkillId::ShieldBash:
+        return 10.0F;
+    case SkillId::Cleave:
+        return 9.0F;
+    case SkillId::BattleShout:
+        return 24.0F;
+    case SkillId::Hamstring:
+        return 14.0F;
+    case SkillId::HeroicStrike:
+        return 25.0F;
+    case SkillId::ForgeHammer:
+        return 9.0F;
+    case SkillId::RuneTrap:
+        return 14.0F;
+    case SkillId::EarthenGrip:
+        return 16.0F;
+    case SkillId::RallyHorn:
+        return 28.0F;
+    case SkillId::Avalanche:
+        return 30.0F;
+    case SkillId::FlameWall:
+        return 16.0F;
+    case SkillId::ArcaneSurge:
+        return 26.0F;
+    case SkillId::StaticTrap:
+        return 18.0F;
+    case SkillId::MeteorShower:
+        return 22.0F;
+    case SkillId::TimeWarp:
+        return 36.0F;
+    case SkillId::PiercingVolley:
+        return 8.0F;
+    case SkillId::SmokeArrow:
+        return 14.0F;
+    case SkillId::TrapLine:
+        return 20.0F;
+    case SkillId::HawkEye:
+        return 26.0F;
+    case SkillId::PhoenixArrow:
+        return 30.0F;
     case SkillId::BoneSpikes:
         return 10.0F;
     case SkillId::SoulDrain:
@@ -701,7 +908,7 @@ SkillBar::SkillBar(SkillSet set) noexcept {
         // (The Gatling Arrow Gun was wished for key 6. Her five of 2026-10-16 fill key 5 and follow it.)
         slots_ = {SkillId::Shot,          SkillId::VineTower,  SkillId::Disguise,    SkillId::BearTrap,
                   SkillId::RicochetArrow, SkillId::GatlingGun, SkillId::HuntersMark, SkillId::SpiritWolf,
-                  SkillId::OwlSentinel,   SkillId::EvasiveShot};
+                  SkillId::OwlSentinel,   SkillId::EvasiveShot, SkillId::PiercingVolley, SkillId::SmokeArrow};
     } else if (set == SkillSet::Warrior) {
         slots_ = {SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave, SkillId::StarWhirl};
     } else if (set == SkillSet::Mage) {
@@ -712,10 +919,14 @@ SkillBar::SkillBar(SkillSet set) noexcept {
                   SkillId::MirrorImage, SkillId::ProtectionDome, SkillId::ArcaneOrb,  SkillId::GravityWell};
     } else if (set == SkillSet::Bone) {
         slots_ = {SkillId::SoulBolt,       SkillId::BoneSpikes, SkillId::SoulDrain,
-                  SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem};
+                  SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem,
+                  SkillId::BansheeWail,    SkillId::GraveGrasp, SkillId::SpectralForm,
+                  SkillId::DeathCoil,      SkillId::BoneSentinel, SkillId::Plague};
     } else if (set == SkillSet::Shadow) {
         slots_ = {SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
-                  SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
+                  SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry,
+                  SkillId::SmokeBomb,     SkillId::DeathMark,  SkillId::BladeDance,
+                  SkillId::Caltrops,      SkillId::ShadowDash, SkillId::Garrote};
     } else if (set == SkillSet::Wizard) {
         slots_ = {SkillId::ArcaneBolt, SkillId::Fireball,    SkillId::FrostNova, SkillId::ChainLightning,
                   SkillId::Meteor,     SkillId::StarBarrage, SkillId::BlackHole};
@@ -767,6 +978,48 @@ bool SkillBar::clear(std::size_t index) noexcept {
     return true;
 }
 
+int skill_level_needed(SkillId skill) noexcept {
+    switch (skill) {
+    case SkillId::Caltrops:
+    case SkillId::DeathCoil:
+    case SkillId::ShieldBash:
+    case SkillId::ForgeHammer:
+    case SkillId::FlameWall:
+    case SkillId::PiercingVolley:
+        return 3;
+    case SkillId::ShadowDash:
+    case SkillId::BoneSentinel:
+    case SkillId::Cleave:
+    case SkillId::RuneTrap:
+    case SkillId::ArcaneSurge:
+    case SkillId::SmokeArrow:
+        return 6;
+    case SkillId::Garrote:
+    case SkillId::Plague:
+    case SkillId::BattleShout:
+    case SkillId::EarthenGrip:
+    case SkillId::StaticTrap:
+    case SkillId::TrapLine:
+        return 9;
+    case SkillId::CripplingStrike:
+    case SkillId::GraveChill:
+    case SkillId::Hamstring:
+    case SkillId::RallyHorn:
+    case SkillId::MeteorShower:
+    case SkillId::HawkEye:
+        return 12;
+    case SkillId::Assassinate:
+    case SkillId::LichForm:
+    case SkillId::HeroicStrike:
+    case SkillId::Avalanche:
+    case SkillId::TimeWarp:
+    case SkillId::PhoenixArrow:
+        return 15;
+    default:
+        return 1;
+    }
+}
+
 std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
     // The Archer's: what was made from wishes, then the skills she had before (kept "in the
     // back" since 2026-10-10 and offered again in the book).
@@ -775,12 +1028,14 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
         SkillId::RicochetArrow, SkillId::HuntersMark, SkillId::SpiritWolf, SkillId::OwlSentinel, SkillId::EvasiveShot,
         SkillId::PowerShot,     SkillId::ArrowRain,   SkillId::FrostFan,   SkillId::FireArrow,   SkillId::ThunderKick,
         SkillId::Kingfishers,   SkillId::VenomArrow,  SkillId::GaleArrow,  SkillId::StormArrow,  SkillId::BrambleArrow,
-        SkillId::DaggerCombo,
+        SkillId::DaggerCombo,   SkillId::PiercingVolley, SkillId::SmokeArrow, SkillId::TrapLine, SkillId::HawkEye,
+        SkillId::PhoenixArrow,
     };
     static constexpr std::array blade{
         SkillId::Slash,        SkillId::CounterAttack, SkillId::BladeWhirl, SkillId::JumpAttack,  SkillId::SeismicSlash,
         SkillId::Enrage,       SkillId::NeverGiveUp,   SkillId::Stampede,   SkillId::CutInPieces, SkillId::Charge,
         SkillId::RainOfBlades, SkillId::Execute,       SkillId::WarBanner,  SkillId::SwordThrow,
+        SkillId::ShieldBash,   SkillId::Cleave,        SkillId::BattleShout, SkillId::Hamstring,  SkillId::HeroicStrike,
     };
     static constexpr std::array warrior{SkillId::Slash, SkillId::FlameBlade, SkillId::FrostEdge, SkillId::ThunderCleave,
                                         SkillId::StarWhirl};
@@ -788,7 +1043,8 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
         SkillId::AxeCombo,     SkillId::Whirlwind,     SkillId::Earthbreaker,  SkillId::LeapStrike,
         SkillId::Battlecry,    SkillId::MoltenFissure, SkillId::RunicBulwark,  SkillId::AncestralAnvil,
         SkillId::Stonebreaker, SkillId::Tremor,        SkillId::DwarvenCannon, SkillId::ThrowingAxe,
-        SkillId::StoneBrew,    SkillId::PowderKeg,
+        SkillId::StoneBrew,    SkillId::PowderKeg,     SkillId::ForgeHammer,   SkillId::RuneTrap,
+        SkillId::EarthenGrip,  SkillId::RallyHorn,     SkillId::Avalanche,
     };
     static constexpr std::array wizard{SkillId::ArcaneBolt,     SkillId::Fireball, SkillId::FrostNova,
                                        SkillId::ChainLightning, SkillId::Meteor,   SkillId::StarBarrage,
@@ -797,11 +1053,19 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
                                      SkillId::ChainBolt,      SkillId::PoisonHydra, SkillId::Teleport,
                                      SkillId::RovingHole,     SkillId::Blizzard,    SkillId::MirrorImage,
                                      SkillId::ProtectionDome, SkillId::ArcaneOrb,   SkillId::GravityWell,
-                                     SkillId::LightningPylon, SkillId::IcePrison,   SkillId::ArcaneMissiles};
+                                     SkillId::LightningPylon, SkillId::IcePrison,   SkillId::ArcaneMissiles,
+                                     SkillId::FlameWall,      SkillId::ArcaneSurge, SkillId::StaticTrap,
+                                     SkillId::MeteorShower,   SkillId::TimeWarp};
     static constexpr std::array shadow{SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
-                                       SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry};
+                                       SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry,
+                                       SkillId::SmokeBomb,     SkillId::DeathMark,  SkillId::BladeDance,
+                                       SkillId::Caltrops,      SkillId::ShadowDash, SkillId::Garrote,
+                                       SkillId::CripplingStrike, SkillId::Assassinate};
     static constexpr std::array bone{SkillId::SoulBolt,       SkillId::BoneSpikes, SkillId::SoulDrain,
-                                     SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem};
+                                     SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem,
+                                     SkillId::BansheeWail,    SkillId::GraveGrasp, SkillId::SpectralForm,
+                                     SkillId::DeathCoil,      SkillId::BoneSentinel, SkillId::Plague,
+                                     SkillId::GraveChill,     SkillId::LichForm};
     switch (set) {
     case SkillSet::Bone:
         return bone;
@@ -857,6 +1121,108 @@ std::string_view skill_description(SkillId skill) noexcept {
     case SkillId::SoulDrain:
         return "A beam of green light from his lantern tears at the soul of the enemy he aims at; half of "
                "the damage heals him.";
+    case SkillId::BansheeWail:
+        return "A wail from the skull of his lantern: every enemy in a cone ahead of him is hurt and stands "
+               "stunned for two seconds. The damage is to each.";
+    case SkillId::GraveGrasp:
+        return "Skeletal hands break out of the ground where he aims: every enemy there is hurt and held "
+               "where it stands for three seconds. The damage is to each.";
+    case SkillId::SpectralForm:
+        return "He is a wraith for six seconds: he moves faster, and only half of what would hurt him "
+               "gets through.";
+    // The five more of every hero (2026-10-22).
+    case SkillId::Caltrops:
+        return "He scatters spikes over the ground where he aims. For eight seconds everything that walks "
+               "in them is slowed by half and cut every half second. The damage is one cut.";
+    case SkillId::ShadowDash:
+        return "He dashes ahead through his enemies as a shadow, cutting each he passes and leaving it "
+               "stunned for a moment. The damage is to each.";
+    case SkillId::Garrote:
+        return "He seizes the enemy he aims at from behind and strangles it: held fast and hurt five times "
+               "over two and a half seconds. The damage is one tick.";
+    case SkillId::CripplingStrike:
+        return "His next three dagger blows cut deeper, 40 % harder, and lame what they strike: slowed by "
+               "more than half for three seconds.";
+    case SkillId::Assassinate:
+        return "A killing stab at the enemy he aims at: three times the damage on one below a third of its "
+               "health, and it stands stunned for a moment. The damage is the stab itself.";
+    case SkillId::DeathCoil:
+        return "A coil of souls flies from the skull at what he aims at. It hurts what it strikes, and half "
+               "of that heals him.";
+    case SkillId::BoneSentinel:
+        return "A sentinel of bone rises where he aims and for twelve seconds throws bone at the nearest "
+               "enemy, every second or so. The damage is one throw.";
+    case SkillId::Plague:
+        return "The enemy he aims at sickens: hurt every second for six, and every two seconds the plague "
+               "passes to the enemies beside it. The damage is one second of it.";
+    case SkillId::GraveChill:
+        return "A breath of grave-cold from the lantern: every enemy in the cone ahead is hurt and slowed "
+               "by more than half for four seconds. The damage is to each.";
+    case SkillId::LichForm:
+        return "He becomes a lich for eight seconds: his spells do half as much again, and blows on him do "
+               "less than three quarters of their harm.";
+    case SkillId::ShieldBash:
+        return "A blow with the shield's edge at what stands before her: hurt and stunned for a second and "
+               "a half.";
+    case SkillId::Cleave:
+        return "One wide sweep of the sword that cuts everything before her. The damage is to each.";
+    case SkillId::BattleShout:
+        return "She roars: for eight seconds her blows do a quarter more and she runs faster.";
+    case SkillId::Hamstring:
+        return "Her next sword blow cuts the legs: the victim is held where it stands for two seconds and "
+               "bleeds for more.";
+    case SkillId::HeroicStrike:
+        return "One crushing blow, three slashes in one, at what stands before her; it leaves the victim "
+               "stunned for a second.";
+    case SkillId::ForgeHammer:
+        return "He hurls a hammer glowing from the forge at what he aims at: hurt and stunned for a second.";
+    case SkillId::RuneTrap:
+        return "A rune trap at his feet. The first enemy to step on it is hurt and stands stunned for two "
+               "seconds.";
+    case SkillId::EarthenGrip:
+        return "The earth seizes every enemy within five metres of him: held where it stands for two and a "
+               "half seconds, and hurt. The damage is to each.";
+    case SkillId::RallyHorn:
+        return "He sounds his horn: for ten seconds his blows do a fifth more and his wounds close, three "
+               "health a second.";
+    case SkillId::Avalanche:
+        return "Six boulders fall in a line ahead of him, one after another. Each is a blow to all it "
+               "catches, and slows them. The damage is one boulder.";
+    case SkillId::FlameWall:
+        return "A wall of fire rises ahead of him for six seconds: everything that stands in it burns, "
+               "every half second. The damage is one burn.";
+    case SkillId::ArcaneSurge:
+        return "His spells surge: for eight seconds everything he casts does a third more.";
+    case SkillId::StaticTrap:
+        return "A trap of lightning lies where he aims for ten seconds. The first enemy to walk into it "
+               "springs it: everything in it is hurt and stands stunned for two seconds.";
+    case SkillId::MeteorShower:
+        return "Five meteors fall on the place he aims at over two and a half seconds, each a burst. The "
+               "damage is one meteor, to each it catches.";
+    case SkillId::TimeWarp:
+        return "Time slows round him for six seconds: every enemy within eight metres crawls at less than "
+               "half its pace, and he moves a third faster.";
+    case SkillId::PiercingVolley:
+        return "Three heavy arrows in a fan, the middle one at the crosshair. The damage is one arrow.";
+    case SkillId::SmokeArrow:
+        return "An arrow that bursts into smoke where it strikes: everything in the smoke is hurt a little "
+               "and stands stunned for two seconds.";
+    case SkillId::TrapLine:
+        return "Three bear traps laid in a line before her, open. Each is a Bear Trap.";
+    case SkillId::HawkEye:
+        return "For eight seconds her arrows do a third more and fly faster and flatter.";
+    case SkillId::PhoenixArrow:
+        return "One burning arrow of great weight. Where it strikes it bursts in fire that catches everything "
+               "near, and what it catches goes on burning.";
+    case SkillId::SmokeBomb:
+        return "Black smoke bursts round him: every enemy in it stands blind for a moment, and stumbles "
+               "slowed for a while after. It hurts nobody.";
+    case SkillId::DeathMark:
+        return "The enemy he aims at is marked for eight seconds: every blow struck on it hurts half as much "
+               "again. With nobody to mark the key does nothing.";
+    case SkillId::BladeDance:
+        return "He whirls with both blades: every enemy round him is cut three times in a moment. The damage "
+               "is one cut, to each.";
     case SkillId::CurseOfFrailty:
         return "He curses the place he aims at: for eight seconds every enemy there takes more damage "
                "from his blows.";

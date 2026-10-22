@@ -12,6 +12,7 @@ add_library(e5_gameplay STATIC
     src/projectile.cpp
     src/scatter.cpp
     src/skills.cpp
+    src/skill_trees.cpp
     src/vitals.cpp
     src/inventory.cpp
     src/day_cycle.cpp

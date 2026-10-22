@@ -18,6 +18,7 @@ add_executable(e5_unit_tests
     gameplay/projectile_tests.cpp
     gameplay/scatter_tests.cpp
     gameplay/skills_tests.cpp
+    gameplay/skill_trees_tests.cpp
     gameplay/vitals_tests.cpp
     gameplay/inventory_tests.cpp
     gameplay/day_cycle_tests.cpp

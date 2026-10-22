@@ -508,6 +508,14 @@ bool E5Diagnostics::write_report() {
         player_info["shadow_steps"] = player->get_shadow_steps();
         player_info["knives_thrown"] = player->get_knives_thrown();
         player_info["ambushes"] = player->get_ambushes();
+        player_info["smoke_bombs"] = player->get_smoke_bombs();
+        player_info["hero_level"] = player->get_hero_level();
+        player_info["five_uses"] = player->get_five_uses();
+        player_info["hero_points"] = player->get_hero_points();
+        player_info["wails"] = player->get_wails();
+        player_info["grasps"] = player->get_grasps();
+        player_info["death_marks"] = player->get_death_marks();
+        player_info["blade_dances"] = player->get_blade_dances();
         player_info["poisonings"] = player->get_poisonings();
         player_info["veiled"] = player->is_veiled();
         player_info["healed_by_skills"] = player->get_healed_by_skills();

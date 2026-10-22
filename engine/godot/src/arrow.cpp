@@ -248,6 +248,21 @@ void E5Arrow::leave_behind(const godot::Vector3& hit_position, godot::Object* co
                                 .cage = {}},
                                caught);
         }
+    } else if (special_ == Special::Stun) {
+        // The Archer's Smoke Arrow: what the burst caught stands stunned in the smoke.
+        const godot::TypedArray<godot::Node> enemies = get_tree()->get_nodes_in_group(E5Enemy::group_name);
+        for (const godot::Variant& node : enemies) {
+            auto* const caught = godot::Object::cast_to<E5Enemy>(node);
+            if (caught == nullptr || !caught->is_alive() ||
+                caught->get_aim_point().distance_to(hit_position) > blast_radius_ + caught->get_body_radius()) {
+                continue;
+            }
+            caught->stun(special_damage_);
+            if (special_first_.is_valid()) {
+                E5Effect::spawn(special_first_, caught,
+                                caught->get_aim_point() + godot::Vector3(0.0F, caught->get_body_radius() + 0.7F, 0.0F));
+            }
+        }
     } else if (special_ == Special::Storm) {
         combat::chain(get_parent(), hit_position, collider, special_damage_, gameplay::storm_jumps,
                       gameplay::storm_jump_reach, godot::Color(0.5F, 0.9F, 3.0F), special_first_);

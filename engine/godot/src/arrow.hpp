@@ -53,6 +53,7 @@ public:
         Burn,    // every enemy its blast caught goes on burning
         // The Archer's of 2026-10-16:
         Ricochet, // bounces on to the enemies nearby, weaker each time (a pale gold streak)
+        Stun,     // its burst leaves what it caught stunned for `damage` seconds (the Smoke Arrow)
         Mark,     // the enemy it struck takes her blows harder for a while (only on her machine)
     };
     // `damage`: of the cloud's or the fire's ticks, of each leap of the lightning, of the first bounce

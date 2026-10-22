@@ -3,7 +3,10 @@
 #include "character_animator.hpp"
 #include "e5/gameplay/bow_state.hpp"
 #include "e5/gameplay/character_motor.hpp"
+#include "e5/gameplay/skill_trees.hpp"
 #include "e5/gameplay/skills.hpp"
+
+#include <functional>
 #include "e5/gameplay/vitals.hpp"
 
 #include <godot_cpp/classes/animation_library.hpp>
@@ -17,6 +20,7 @@
 #include <godot_cpp/variant/vector3.hpp>
 
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -33,7 +37,13 @@ class SpringArm3D;
 
 namespace e5::bridge {
 
-struct SpellTiming; // player_controller.cpp
+// How a spell or blow is timed against its clip (the tables are in player_controller.cpp; a clip made in
+// the Animation Studio carries its own as meta).
+struct SpellTiming {
+    float playback_scale = 1.0F; // how much faster than authored the clip is played
+    float strike_at = 0.0F;      // seconds into the clip: the hands are furthest out
+    float end_at = 0.0F;         // seconds into the clip: he is free to move again
+};
 class E5Enemy;
 
 class E5AimOffset;
@@ -239,7 +249,24 @@ public:
     [[nodiscard]] float get_cast_seconds() const;
     [[nodiscard]] float get_cast_power() const;
     // What she did to an enemy: fills the charge. Called by whatever does damage for her.
-    void credit_damage(float damage, bool killed);
+    void credit_damage(float damage, bool killed, float enemy_max_health = 0.0F);
+    void heal_from_spell(float amount); // a spell of his that heals (the Death Coil)
+    [[nodiscard]] int get_skill_level_needed(int slot) const;
+    [[nodiscard]] godot::Dictionary get_five_uses() const; // the five more's uses by name (the report)
+    void set_hero_level(int level); // trials: --menu-hero-level=N
+    // Hero growth (gameplay/skill_trees.hpp): experience from kills, levels, points, the tree.
+    [[nodiscard]] int get_hero_level() const { return growth_.level; }
+    [[nodiscard]] int get_hero_xp() const { return growth_.xp; }
+    [[nodiscard]] int get_hero_xp_next() const;
+    [[nodiscard]] int get_hero_points() const { return growth_.points; }
+    [[nodiscard]] godot::Array get_skill_tree() const; // every node of this hero's tree, with its state
+    [[nodiscard]] bool can_choose_tree_node(int id) const;
+    bool choose_tree_node(int id);
+    void grant_hero_points(int points); // tests and the keeper's trials
+    [[nodiscard]] bool has_twist(gameplay::TwistId twist) const { return mods_.has(twist); }
+    [[nodiscard]] float reach_of(gameplay::SkillId skill) const { return mods_.reach.at(static_cast<std::size_t>(skill)); }
+    [[nodiscard]] float lasts_of(gameplay::SkillId skill) const { return mods_.duration.at(static_cast<std::size_t>(skill)); }
+    [[nodiscard]] int more_of(gameplay::SkillId skill) const { return mods_.count.at(static_cast<std::size_t>(skill)); }
     // Tests that use one skill again and again switch the waiting off.
     void set_cooldowns_enabled(bool enabled) { cooldowns_enabled_ = enabled; }
     // Damage that comes from somewhere: a raised shield stops it if it is not behind her.
@@ -276,6 +303,13 @@ public:
     [[nodiscard]] int get_shadow_steps() const { return shadow_steps_; }
     [[nodiscard]] int get_knives_thrown() const { return knives_thrown_; }
     [[nodiscard]] int get_ambushes() const { return ambushes_; }
+    [[nodiscard]] int get_smoke_bombs() const { return smoke_bombs_; }
+    [[nodiscard]] int get_wails() const { return wails_; }
+    [[nodiscard]] int get_grasps() const { return grasps_; }
+    [[nodiscard]] float get_spectral_seconds() const { return spectral_left_; }
+    [[nodiscard]] bool is_spectral() const { return spectral_left_ > 0.0F; }
+    [[nodiscard]] int get_death_marks() const { return death_marks_; }
+    [[nodiscard]] int get_blade_dances() const { return blade_dances_; }
     [[nodiscard]] int get_poisonings() const { return poisonings_; }
     [[nodiscard]] float get_healed_by_skills() const { return healed_by_skills_; }
     [[nodiscard]] int get_cursed_count() const { return cursed_count_; }
@@ -562,6 +596,43 @@ private:
     void strike_fissure();
     // The Shadowblade's (skills.hpp, "The Shadowblade's five").
     [[nodiscard]] E5Enemy* shadow_step_target() const;
+    // The living enemy nearest to where the crosshair points, if that is near it and it is within `reach`
+    // (`on_ground`: standing on the ground and not held, for a step behind it).
+    [[nodiscard]] E5Enemy* aimed_enemy(float reach, bool on_ground) const;
+    void throw_smoke_bomb();
+    void wail();
+    void grasp_graves();
+    void mark_death();
+    void dance_blades();
+    void tick_blade_dance(float delta);
+    // The five more of every hero (2026-10-22; docs/HERO_SKILLS.md).
+    void cast_field(gameplay::SkillId skill); // Caltrops, Flame Wall, Static Trap
+    void update_field(float delta);
+    void start_garrote();
+    void update_garrote(float delta);
+    void strike_assassinate();
+    void throw_coil();
+    void raise_sentinel();
+    void update_sentinel(float delta);
+    void cast_plague();
+    void update_plague(float delta);
+    void breathe_chill();
+    void grip_earth();
+    void throw_hammer();
+    void lay_rune_trap();
+    void fire_volley();
+    void fire_smoke_arrow();
+    void fire_phoenix_arrow();
+    void lay_trap_line();
+    void update_new_stances(float delta);
+    [[nodiscard]] bool stance_on(gameplay::SkillId skill) const {
+        return stance_left_.at(static_cast<std::size_t>(skill)) > 0.0F;
+    }
+    [[nodiscard]] float stance_damage_factor(gameplay::SkillId skill) const;
+    void for_enemies_near(const godot::Vector3& centre, float radius, const std::function<void(E5Enemy*)>& act);
+    // A clip of the hero's library named after a skill (snake case), made in the Animation Studio with its
+    // attack marks: it plays for that skill instead of the borrowed one, with the marks as its timing.
+    void scan_recipe_clips();
     void shadow_step();
     void strike_shadow_step();
     void throw_knives();
@@ -1058,6 +1129,55 @@ private:
     int shadow_steps_ = 0;
     int knives_thrown_ = 0;
     int ambushes_ = 0;
+    int smoke_bombs_ = 0;
+    int wails_ = 0;
+    int grasps_ = 0;
+    float spectral_left_ = 0.0F; // seconds the Bonecaller's Spectral Form still lasts
+    int death_marks_ = 0;
+    int blade_dances_ = 0;
+    // The five more of every hero (2026-10-22).
+    struct Field { // a ground area: Caltrops, Flame Wall (a line along `way`), Static Trap, (none)
+        gameplay::SkillId skill = gameplay::SkillId::None;
+        godot::Vector3 at;
+        godot::Vector3 way;
+        float left = 0.0F;
+        float until_tick = 0.0F;
+        std::vector<std::uint64_t> looks; // its effects, to end with it
+    };
+    Field field_;
+    struct Garrote {
+        std::uint64_t target = 0;
+        int ticks = 0;
+        float until = 0.0F;
+    };
+    Garrote garrote_;
+    struct Plagued {
+        std::uint64_t enemy = 0;
+        float left = 0.0F;
+        float until_tick = 0.0F;
+        float until_spread = 0.0F;
+    };
+    std::vector<Plagued> plague_;
+    struct Sentinel {
+        std::uint64_t look = 0;
+        float left = 0.0F;
+        float until = 0.0F;
+    };
+    Sentinel sentinel_;
+    std::array<float, gameplay::skill_id_limit> stance_left_{}; // the five's stances, by skill
+    float warp_until_slow_ = 0.0F;
+    int cripple_blows_ = 0;   // Crippling Strike: dagger blows still sharpened
+    int hamstring_blows_ = 0; // Hamstring: sword blows still armed
+    gameplay::SkillId dash_skill_ = gameplay::SkillId::Charge;       // whose dash runs
+    gameplay::SkillId rain_skill_ = gameplay::SkillId::RainOfBlades; // whose fall runs
+    std::vector<std::uint64_t> rune_traps_;                          // of traps_, the rune ones
+    std::array<int, gameplay::skill_id_limit> five_uses_{};          // the five's uses, for the report
+    std::array<godot::StringName, gameplay::skill_id_limit> recipe_clip_{};
+    std::array<SpellTiming, gameplay::skill_id_limit> recipe_timing_{};
+    std::bitset<gameplay::skill_id_limit> has_recipe_;
+    bool recipes_scanned_ = false;
+    int dance_blows_left_ = 0; // his Blade Dance's blows still to come
+    float dance_next_ = 0.0F;  // seconds to the next of them
     int poisonings_ = 0;
     bool armor_slows_ = true;       // Frost Armor slows what is near; Bone Armor, the same barrier, does not
     float healed_by_skills_ = 0.0F; // the Bonecaller's drain and requiem: for the report
@@ -1141,6 +1261,9 @@ private:
     gameplay::BowState bow_;
     gameplay::BowTimings bow_timings_;
     gameplay::SkillBar skills_;
+    gameplay::Growth growth_;   // this match's levels and points
+    gameplay::SkillMods mods_;  // what the chosen nodes do; remade when one is chosen
+    void refresh_mods();
     // After a cancel the aim button must be let go before it draws again.
     bool aim_blocked_ = false;
     bool aim_was_pressed_ = false;

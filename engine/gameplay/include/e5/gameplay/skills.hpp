@@ -115,13 +115,60 @@ enum class SkillId : unsigned char {
     ThrowingAxe,   // he hurls a spinning copy of his axe ahead; it flies back to him, striking twice
     StoneBrew,     // a stance: he drinks, his skin turns to stone; blows do half their harm and his wounds close
     PowderKeg,     // he kicks a keg of black powder ahead; it blows up when its fuse burns down or an enemy comes near
+    // The Shadowblade's three more (the keeper, 2026-10-21: "give him more skills").
+    SmokeBomb,  // black smoke bursts round him: the enemies in it stand blind, then stumble slowed
+    DeathMark,  // the enemy he aims at is marked: every blow on it hurts half as much again for a while
+    BladeDance, // he whirls with both blades: every enemy round him is cut three times
+    // The Bonecaller's three more (the keeper, 2026-10-21: "rework the Bonecaller like the hero before").
+    BansheeWail,  // a wail from the skull: everything in a cone ahead is hurt and stands stunned
+    GraveGrasp,   // skeletal hands break out of the ground where he aims: what stands there is held and hurt
+    SpectralForm, // a stance: he is a wraith for a while, faster, and blows do half their harm
+    // FIVE MORE FOR EVERY HERO (2026-10-22, the keeper: "5 complete new skills each, state of the art,
+    // like a real MMO, in sense with the skill tree"): each learnt at a hero level (skill_level_needed:
+    // 3, 6, 9, 12, 15), in the book from the start and on the bar's free slots.
+    // The Shadowblade's.
+    Caltrops,        // a field of spikes on the ground: what walks in it is slowed and cut
+    ShadowDash,      // he dashes ahead through his enemies, cutting each he passes
+    Garrote,         // he seizes the enemy he aims at and strangles it: held and hurt over seconds
+    CripplingStrike, // his next three blows cut deeper and leave their victim lamed
+    Assassinate,     // a killing stab: far harder on an enemy that is already low
+    // The Bonecaller's.
+    DeathCoil,    // a coil of souls that hurts what it strikes and heals him by half of it
+    BoneSentinel, // a sentinel of bone rises where he aims and throws bone at what comes near
+    Plague,       // the enemy he aims at sickens, and the plague spreads to those beside it
+    GraveChill,   // a breath of grave-cold ahead: hurt and slowed
+    LichForm,     // a stance: a lich for a while, his spells far harder, blows weaker on him
+    // The Warrior's.
+    ShieldBash,   // a blow with the shield's edge: hurt and stunned
+    Cleave,       // one wide sweep that cuts everything before her
+    BattleShout,  // a stance: her blows harder and her feet faster
+    Hamstring,    // her next blow cuts the legs: the victim is held and bleeds
+    HeroicStrike, // one crushing blow, three times her slash, that stuns
+    // The Dwarf's.
+    ForgeHammer, // he hurls a glowing hammer that hurts and stuns what it strikes
+    RuneTrap,    // a rune trap at his feet: the first to step on it is hurt and stunned
+    EarthenGrip, // the earth seizes every enemy round him: held and hurt
+    RallyHorn,   // a stance: a horn's call; his blows harder and his wounds closing
+    Avalanche,   // boulders fall in a line ahead of him, each a blow and a slowing
+    // The Wizard's.
+    FlameWall,    // a wall of fire ahead of him for a while: what stands in it burns
+    ArcaneSurge,  // a stance: his spells surge, far harder for a while
+    StaticTrap,   // a trap of lightning where he aims: the first enemy into it is stunned, all in it hurt
+    MeteorShower, // meteors fall on the place he aims at, one after another
+    TimeWarp,     // a stance: time slows round him, enemies crawl and he moves quick
+    // The Archer's.
+    PiercingVolley, // three heavy arrows in a fan
+    SmokeArrow,     // an arrow that bursts into smoke: what stands in it is stunned
+    TrapLine,       // three bear traps laid in a line before her
+    HawkEye,        // a stance: her arrows harder and faster
+    PhoenixArrow,   // one burning arrow of great weight that bursts in fire
 };
 
 // Room for this many skills in anything indexed by SkillId (the player's cooldowns). It was 64 until
 // the Bonecaller's five took the count to 66 and every use of a skill threw: the check below fails
 // the build instead. Name the LAST SkillId in it when adding one.
 inline constexpr std::size_t skill_id_limit = 128;
-static_assert(static_cast<std::size_t>(SkillId::PowderKeg) < skill_id_limit, "more skills than skill_id_limit");
+static_assert(static_cast<std::size_t>(SkillId::PhoenixArrow) < skill_id_limit, "more skills than skill_id_limit");
 
 // Which skills a character has on the bar.
 // `Blade` is the new warrior (2026-10-10): her sword's combo and nothing else yet. Her other
@@ -199,7 +246,9 @@ inline constexpr float counter_bleed_tick_damage = 4.0F;  // ... this much: 12 i
     return skill == SkillId::CounterAttack || skill == SkillId::NeverGiveUp || skill == SkillId::Stampede ||
            skill == SkillId::FrostArmor || skill == SkillId::ProtectionDome || skill == SkillId::RunicBulwark ||
            skill == SkillId::VeilOfShadows || skill == SkillId::VenomEdge || skill == SkillId::BoneArmor ||
-           skill == SkillId::StoneBrew;
+           skill == SkillId::StoneBrew || skill == SkillId::SpectralForm || skill == SkillId::LichForm ||
+           skill == SkillId::BattleShout || skill == SkillId::RallyHorn || skill == SkillId::ArcaneSurge ||
+           skill == SkillId::TimeWarp || skill == SkillId::HawkEye;
 }
 
 // The Bonecaller's five (2026-10-16, the keeper: "give him more skills"), all cast with his Soul
@@ -386,6 +435,170 @@ inline constexpr float shadow_step_behind = 0.75F;
 inline constexpr int fan_knife_count = 5;
 inline constexpr float fan_knife_spread = 0.16F;
 inline constexpr float fan_knife_speed = 32.0F; // metres a second
+// The Shadowblade's three more (the keeper, 2026-10-21: "give him more skills").
+// Smoke Bomb: black smoke `smoke_radius` round where he stands for `smoke_seconds`; every enemy in it
+// as it bursts stands blind for `smoke_stun_seconds` (stunned) and is slowed by `smoke_slow_share` of
+// its pace for `smoke_slow_seconds` after that.
+inline constexpr float smoke_radius = 5.0F;
+inline constexpr float smoke_seconds = 5.0F;
+inline constexpr float smoke_stun_seconds = 2.5F;
+inline constexpr float smoke_slow_share = 0.5F;
+inline constexpr float smoke_slow_seconds = 4.0F;
+// Death Mark: the living enemy nearest to where the crosshair points (within `shadow_step_aim_slack`
+// of it, no further than `death_mark_reach` from him) is marked for `death_mark_seconds`: every blow
+// struck on it hurts `death_mark_factor` times as much (E5Enemy::curse, as the Bonecaller's curse:
+// his own blows, where he is played). With nobody there the key does nothing.
+inline constexpr float death_mark_reach = 22.0F;
+inline constexpr float death_mark_seconds = 8.0F;
+inline constexpr float death_mark_factor = 1.5F;
+// Blade Dance: every enemy within `blade_dance_radius` of him is struck `blade_dance_blows` times,
+// `blade_dance_blow_gap` seconds apart (skill_damage each), the first out of the veil doubled.
+inline constexpr float blade_dance_radius = 3.2F;
+inline constexpr int blade_dance_blows = 3;
+inline constexpr float blade_dance_blow_gap = 0.22F;
+// The Bonecaller's three more (the keeper, 2026-10-21).
+// Banshee Wail: every enemy in a cone ahead of him (`wail_length` long, `wail_half_angle` either side)
+// is hurt (skill_damage) and stands stunned for `wail_stun_seconds`.
+inline constexpr float wail_length = 9.0F;
+inline constexpr float wail_half_angle = 0.55F;
+inline constexpr float wail_near = 0.8F;
+inline constexpr float wail_stun_seconds = 2.0F;
+// Grave Grasp: on the ground where the crosshair points (no further than `curse_reach`), every enemy
+// within `grasp_radius` is hurt (skill_damage) and held where it stands for `grasp_root_seconds`.
+inline constexpr float grasp_radius = 3.5F;
+inline constexpr float grasp_root_seconds = 3.0F;
+// Spectral Form, a stance: for `spectral_seconds` he moves `spectral_move_share` times as fast and
+// only `spectral_damage_share` of what would hurt him gets through.
+inline constexpr float spectral_seconds = 6.0F;
+inline constexpr float spectral_move_share = 1.4F;
+inline constexpr float spectral_damage_share = 0.5F;
+
+// FIVE MORE FOR EVERY HERO (2026-10-22; docs/HERO_SKILLS.md). The hero level each is learnt at.
+[[nodiscard]] int skill_level_needed(SkillId skill) noexcept;
+// The Shadowblade's. Caltrops: a field `caltrops_radius` wide for `caltrops_seconds`; what stands in
+// it is slowed by `caltrops_slow_share` and hurt (skill_damage) every `caltrops_tick_seconds`.
+inline constexpr float caltrops_radius = 4.0F;
+inline constexpr float caltrops_seconds = 8.0F;
+inline constexpr float caltrops_slow_share = 0.5F;
+inline constexpr float caltrops_tick_seconds = 0.5F;
+inline constexpr float caltrops_reach = 14.0F; // from him to where it is thrown, at most
+// Shadow Dash: as the Warrior's Charge, `shadow_dash_seconds` long; each enemy passed is cut
+// (skill_damage) and stunned `shadow_dash_stun_seconds`, not thrown.
+inline constexpr float shadow_dash_seconds = 0.45F;
+inline constexpr float shadow_dash_stun_seconds = 0.6F;
+// Garrote: the enemy nearest the crosshair within `garrote_reach` is held (stunned) and hurt
+// (skill_damage) `garrote_ticks` times, `garrote_tick_seconds` apart.
+inline constexpr float garrote_reach = 3.5F;
+inline constexpr int garrote_ticks = 5;
+inline constexpr float garrote_tick_seconds = 0.5F;
+// Crippling Strike: his next `cripple_blows` dagger blows do `cripple_damage_factor` times their damage
+// and slow by `cripple_slow_share` for `cripple_slow_seconds`.
+inline constexpr int cripple_blows = 3;
+inline constexpr float cripple_damage_factor = 1.4F;
+inline constexpr float cripple_slow_share = 0.6F;
+inline constexpr float cripple_slow_seconds = 3.0F;
+// Assassinate: the enemy nearest the crosshair within `assassinate_reach`: skill_damage, times
+// `assassinate_low_factor` when it is below `assassinate_low_share` of its health; stunned a moment.
+inline constexpr float assassinate_reach = 3.0F;
+inline constexpr float assassinate_low_share = 0.35F;
+inline constexpr float assassinate_low_factor = 3.0F;
+inline constexpr float assassinate_stun_seconds = 0.5F;
+// The Bonecaller's. Death Coil: a bolt; `coil_heal_share` of its damage heals him.
+inline constexpr float coil_heal_share = 0.5F;
+inline constexpr float coil_speed = 28.0F;
+// Bone Sentinel: stands `sentinel_seconds` where he aims (no further than curse_reach), throws at the
+// nearest enemy within `sentinel_range` every `sentinel_shot_seconds` (skill_damage).
+inline constexpr float sentinel_seconds = 12.0F;
+inline constexpr float sentinel_range = 8.0F;
+inline constexpr float sentinel_shot_seconds = 1.2F;
+// Plague: the aimed enemy (within curse_reach) sickens for `plague_seconds`: skill_damage every
+// `plague_tick_seconds`; every `plague_spread_seconds` it passes to enemies within `plague_spread_radius`.
+inline constexpr float plague_seconds = 6.0F;
+inline constexpr float plague_tick_seconds = 1.0F;
+inline constexpr float plague_spread_seconds = 2.0F;
+inline constexpr float plague_spread_radius = 3.0F;
+// Grave Chill: a cone ahead (the wail's shape, `chill_length` long): skill_damage and slowed by
+// `chill_slow_share` for `chill_slow_seconds`.
+inline constexpr float chill_length = 8.0F;
+inline constexpr float chill_slow_share = 0.6F;
+inline constexpr float chill_slow_seconds = 4.0F;
+// Lich Form, a stance: `lich_seconds`; his damage times `lich_damage_factor`, blows on him times
+// `lich_damage_taken_share`.
+inline constexpr float lich_seconds = 8.0F;
+inline constexpr float lich_damage_factor = 1.5F;
+inline constexpr float lich_damage_taken_share = 0.7F;
+// The Warrior's. Shield Bash: a blow (bash_blow in the controller) that stuns `bash_stun_seconds`.
+inline constexpr float bash_stun_seconds = 1.5F;
+// Cleave: a wide blow (cleave_blow). Battle Shout, a stance: `shout_seconds`, damage times
+// `shout_damage_factor`, `shout_move_share` faster.
+inline constexpr float shout_seconds = 8.0F;
+inline constexpr float shout_damage_factor = 1.25F;
+inline constexpr float shout_move_share = 1.15F;
+// Hamstring: her next sword blow roots `hamstring_root_seconds` and adds `hamstring_bleed` damage.
+inline constexpr float hamstring_root_seconds = 2.0F;
+inline constexpr float hamstring_bleed = 15.0F;
+// Heroic Strike: a blow (heroic_blow) that stuns `heroic_stun_seconds`.
+inline constexpr float heroic_stun_seconds = 1.0F;
+// The Dwarf's. Forge Hammer: a bolt that stuns `hammer_stun_seconds`. Rune Trap: the bear trap's
+// jaws with a stun of `rune_trap_stun_seconds`. Earthen Grip: all within `grip_radius` rooted
+// `grip_root_seconds` and hurt.
+inline constexpr float hammer_stun_seconds = 1.0F;
+inline constexpr float hammer_speed = 26.0F;
+inline constexpr float rune_trap_stun_seconds = 2.0F;
+inline constexpr float grip_radius = 5.0F;
+inline constexpr float grip_root_seconds = 2.5F;
+// Rally Horn, a stance: `horn_seconds`, damage times `horn_damage_factor`, `horn_regen` health a second.
+inline constexpr float horn_seconds = 10.0F;
+inline constexpr float horn_damage_factor = 1.2F;
+inline constexpr float horn_regen = 3.0F;
+// Avalanche: `avalanche_count` boulders over `avalanche_seconds` in a line ahead `avalanche_length`
+// long; each a blast of `avalanche_radius` (skill_damage) that slows by half for `avalanche_slow_seconds`.
+inline constexpr int avalanche_count = 6;
+inline constexpr float avalanche_seconds = 2.5F;
+inline constexpr float avalanche_length = 10.0F;
+inline constexpr float avalanche_radius = 2.2F;
+inline constexpr float avalanche_slow_seconds = 3.0F;
+// The Wizard's. Flame Wall: a line `wall_length` ahead for `wall_seconds`: what stands in it (within
+// `wall_width`) takes skill_damage every `wall_tick_seconds`.
+inline constexpr float wall_length = 8.0F;
+inline constexpr float wall_width = 1.2F;
+inline constexpr float wall_seconds = 6.0F;
+inline constexpr float wall_tick_seconds = 0.5F;
+// Arcane Surge, a stance: `surge_seconds`, his spells times `surge_damage_factor`.
+inline constexpr float surge_seconds = 8.0F;
+inline constexpr float surge_damage_factor = 1.35F;
+// Static Trap: lies `static_trap_seconds` where he aims (within curse_reach), `static_trap_radius`
+// wide; the first enemy to come in springs it: all in it hurt (skill_damage) and stunned
+// `static_trap_stun_seconds`.
+inline constexpr float static_trap_seconds = 10.0F;
+inline constexpr float static_trap_radius = 3.0F;
+inline constexpr float static_trap_stun_seconds = 2.0F;
+// Meteor Shower: `shower_count` meteors over `shower_seconds` on the place he aims at (blade_rain_range),
+// spread `shower_spread`, each a blast of `shower_radius`.
+inline constexpr int shower_count = 5;
+inline constexpr float shower_seconds = 2.5F;
+inline constexpr float shower_spread = 3.0F;
+inline constexpr float shower_radius = 2.5F;
+// Time Warp, a stance: `warp_seconds`; enemies within `warp_radius` go `warp_slow_share` slower
+// (renewed every half second), he `warp_move_share` faster.
+inline constexpr float warp_seconds = 6.0F;
+inline constexpr float warp_radius = 8.0F;
+inline constexpr float warp_slow_share = 0.6F;
+inline constexpr float warp_move_share = 1.3F;
+// The Archer's. Piercing Volley: `volley_count` arrows `volley_spread` apart. Smoke Arrow: a blast of
+// `smoke_arrow_radius` that stuns `smoke_arrow_stun_seconds`. Trap Line: `trap_line_count` traps
+// `trap_line_gap` apart. Hawk Eye, a stance: `hawk_seconds`, her shots times `hawk_damage_factor`,
+// `hawk_speed_share` faster. Phoenix Arrow: a blast of `phoenix_radius` that burns.
+inline constexpr int volley_count = 3;
+inline constexpr float volley_spread = 0.12F;
+inline constexpr float smoke_arrow_radius = 3.0F;
+inline constexpr float smoke_arrow_stun_seconds = 2.0F;
+inline constexpr int trap_line_count = 3;
+inline constexpr float trap_line_gap = 1.4F;
+inline constexpr float hawk_seconds = 8.0F;
+inline constexpr float hawk_damage_factor = 1.3F;
+inline constexpr float hawk_speed_share = 1.4F;
+inline constexpr float phoenix_radius = 3.0F;
 // Veil of Shadows, a stance: for `veil_seconds` no enemy sees him (they pass him over as they pass
 // over a disguised Archer), he is `veil_move_share` times as fast, and the first blow he lands out of
 // it does `veil_ambush_factor` times its damage and ends the veil.
