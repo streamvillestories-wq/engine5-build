@@ -1,6 +1,7 @@
 name: Build
 
-# Builds the game library for macOS (universal: Apple Silicon and Intel), for shipping.
+# Builds the game library for macOS (universal: Apple Silicon and Intel), for shipping, and for
+# Linux x86_64 (the world that runs headless on the game server).
 on:
   push:
     branches: [main]
@@ -42,4 +43,33 @@ jobs:
         with:
           name: engine5-macos-template_release
           path: game/bin/*.dylib
+          if-no-files-found: error
+
+  linux:
+    name: Linux release library
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Set up vcpkg
+        run: |
+          git clone --depth 1 --branch "$VCPKG_TAG" https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+
+      - name: Build extension
+        run: |
+          cmake --preset linux-release
+          cmake --build --preset linux-release -- -k 0
+          ls -l game/bin/*.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine5-linux-template_release
+          path: game/bin/*.so
           if-no-files-found: error

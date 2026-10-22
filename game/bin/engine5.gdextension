@@ -13,3 +13,6 @@ windows.release.x86_64 = "res://bin/engine5.windows.template_release.x86_64.dll"
 ; Universal (arm64 + x86_64) libraries from the macos-* presets.
 macos.debug = "res://bin/engine5.macos.template_debug.universal.dylib"
 macos.release = "res://bin/engine5.macos.template_release.universal.dylib"
+; Linux: the world on the server (the game server machine runs the island headless), from the linux-* presets.
+linux.debug.x86_64 = "res://bin/engine5.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://bin/engine5.linux.template_release.x86_64.so"

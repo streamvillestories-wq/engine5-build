@@ -23,6 +23,7 @@ func _initialize() -> void:
 	_blueprints()
 	_shrines()
 	_units()
+	_wilds()
 	print("MATCH TESTS: %d of %d failed" % [_failed, _checked])
 	quit(_failed)
 
@@ -412,6 +413,98 @@ func _shrines() -> void:
 	_check("but earns nothing while away", int(keep.progress["d"].get("wood", 0)) == before)
 	_check("the state tells each player his stone and wood", state.snapshot(131.0)["players"][0].has("stone")
 			and state.snapshot(131.0)["shrines"].size() == 2)
+
+
+func _wilds() -> void:
+	var state: RefCounted = MatchState.new()
+	state.use_veins = false
+	state.use_blueprints = false
+	state.shrines.clear()
+	state.wilds_rules["seed"] = 7.0
+	state.join("a", 11, "a", 0)
+	state.join("b", 12, "b", 0)
+	state.place(11, Vector3(0, 0, 0), 0.0)
+	state.position(11, Vector3(0, 0, 0))
+	state.position(12, Vector3(400, 0, 400))
+	state.take_events()
+	var events := _run(state, 0.5, 12.0)
+	var packs: Array = events.filter(func(e: Dictionary) -> bool: return e["what"] == "wilds_pack")
+	_check("two packs about each player", packs.size() == 4 and state.wilds.size() == 4)
+	var well_placed := true
+	var kinds := {}
+	for pack: Dictionary in packs:
+		var at := Vector2(float(pack["x"]), float(pack["z"]))
+		var from_a := at.length()
+		var from_b := at.distance_to(Vector2(400, 400))
+		var nearest := minf(from_a, from_b)
+		if nearest < 60.0 or nearest > 120.0 or from_a < 90.0:
+			well_placed = false  # (a's core stands at 0: nothing within 90 m of it)
+		if not MatchState.WILDS.has(pack["kind"]) or pack["slots"].is_empty() \
+				or pack["slots"].size() < int(MatchState.WILDS[pack["kind"]]["pack"][0]) \
+				or pack["slots"].size() > int(MatchState.WILDS[pack["kind"]]["pack"][1]):
+			well_placed = false
+		kinds[pack["kind"]] = true
+	_check("60 to 120 m from a player, never within 90 m of a core, a pack's size of its kind", well_placed)
+	_check("they are in the state", state.snapshot(12.0)["wilds"].size() == 4)
+	_check("no more while each has his two", _count(_run(state, 12.5, 30.0), "wilds_pack") == 0)
+	var first: int = packs[0]["id"]
+	state.wilds_gone(first)
+	_check("a pack gone frees its places and is told", not state.wilds.has(first)
+			and _count(state.take_events(), "wilds_gone") == 1)
+	_check("... and another comes", _count(_run(state, 30.5, 40.0), "wilds_pack") == 1)
+	# The same seed gives the same packs on another server.
+	var again: RefCounted = MatchState.new()
+	again.use_veins = false
+	again.use_blueprints = false
+	again.shrines.clear()
+	again.wilds_rules["seed"] = 7.0
+	again.join("a", 11, "a", 0)
+	again.join("b", 12, "b", 0)
+	again.place(11, Vector3(0, 0, 0), 0.0)
+	again.position(11, Vector3(0, 0, 0))
+	again.position(12, Vector3(400, 0, 400))
+	again.take_events()
+	var again_packs: Array = _run(again, 0.5, 12.0).filter(func(e: Dictionary) -> bool: return e["what"] == "wilds_pack")
+	_check("the same seed, the same packs", again_packs == packs)
+	# Nothing in the dungeon, nothing at the festival, nothing when switched off, a cap.
+	var deep: RefCounted = MatchState.new()
+	deep.use_veins = false
+	deep.use_blueprints = false
+	deep.shrines.clear()
+	deep.wilds_rules["seed"] = 3.0
+	deep.join("c", 13, "c", 0)
+	deep.position(13, Vector3(20, -180, 280))
+	deep.take_events()
+	_check("nothing over a player in the dungeon", _count(_run(deep, 0.5, 12.0), "wilds_pack") == 0)
+	deep.position(13, Vector3(-23, 7, 216))  # 100 m east of the festival: packs come only on the far side
+	var at_festival: Array = _run(deep, 12.5, 24.0).filter(func(e: Dictionary) -> bool: return e["what"] == "wilds_pack")
+	var festival_free := true
+	for pack: Dictionary in at_festival:
+		if Vector2(float(pack["x"]), float(pack["z"])).distance_to(MatchState.FESTIVAL) < 140.0:
+			festival_free = false
+	_check("nothing within 140 m of the festival", at_festival.size() > 0 and festival_free)
+	var off: RefCounted = MatchState.new()
+	off.use_veins = false
+	off.use_blueprints = false
+	off.shrines.clear()
+	off.wilds_rules["enabled"] = 0.0
+	off.join("d", 14, "d", 0)
+	off.position(14, Vector3(0, 0, 0))
+	off.take_events()
+	_check("switched off: nothing", _count(_run(off, 0.5, 12.0), "wilds_pack") == 0)
+	var crowd: RefCounted = MatchState.new()
+	crowd.use_veins = false
+	crowd.use_blueprints = false
+	crowd.shrines.clear()
+	crowd.wilds_rules["seed"] = 5.0
+	crowd.wilds_rules["packs_max"] = 3.0
+	crowd.join("e", 15, "e", 0)
+	crowd.join("f", 16, "f", 0)
+	crowd.position(15, Vector3(0, 0, 0))
+	crowd.position(16, Vector3(500, 0, 0))
+	crowd.take_events()
+	_check("packs_max caps them", _count(_run(crowd, 0.5, 30.0), "wilds_pack") == 3)
+	_check("every kind has a pool of eight", MatchState.wild_pool_of("troll") == 8 and MatchState.WILDS.size() == MatchState.UNIT_KINDS.size())
 
 
 func _units() -> void:
