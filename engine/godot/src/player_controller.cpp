@@ -6653,7 +6653,7 @@ void E5PlayerController::update_field(float delta) {
         if (sprung) {
             E5Effect::spawn(effect_scene(static_trap_path), get_parent(), field_.at + godot::Vector3(0.0F, 0.2F, 0.0F));
             const float damage = dealt(gameplay::SkillId::StaticTrap);
-            for_enemies_near(field_.at, gameplay::static_trap_radius * reach_of(field_.skill), [this, damage](E5Enemy* enemy) {
+            for_enemies_near(field_.at, gameplay::static_trap_radius * reach_of(field_.skill), [damage](E5Enemy* enemy) {
                 combat::hit(enemy, enemy->get_aim_point(), damage);
                 enemy->stun(gameplay::static_trap_stun_seconds);
                 E5Effect::spawn(effect_scene(seismic_stun_path), enemy,
