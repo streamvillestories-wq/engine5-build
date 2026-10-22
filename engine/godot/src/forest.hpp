@@ -128,6 +128,10 @@ private:
         godot::Vector3 trunk_offset;
         float foot_radius = 0.4F; // metres: how wide the plant stands on the ground
         godot::String path;       // of its scene: says what kind of plant it is
+        // The world on the server (the game exported as a dedicated server: meshes and materials
+        // are placeholders): the plants stand where they stand everywhere and their trunks are
+        // in the way, but nothing is drawn.
+        bool trunks_only = false;
     };
     // One mesh of one plant and the distances between which it can be seen at all.
     struct Form {

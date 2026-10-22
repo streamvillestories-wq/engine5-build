@@ -218,6 +218,10 @@ bool E5Forest::read_species(const godot::Ref<godot::PackedScene>& scene, Species
     }
     memdelete(root);
 
+    if (species.full.is_valid() && species.full->is_class("PlaceholderMesh")) {
+        species.trunks_only = true;
+        return true;
+    }
     const bool complete =
         species.full.is_valid() && species.mid.is_valid() && species.coarse.is_valid() && species.material.is_valid();
     if (!complete) {
@@ -249,6 +253,10 @@ void E5Forest::add_plant(const Species& species, const godot::Transform3D& trans
     // shader, per plant. The engine's own cross-fade is not used: it draws both forms as
     // transparent geometry while it lasts, and in a forest, where some plant is always in
     // transition, that cost more than all the triangles together.
+    if (species.trunks_only) {
+        drawn_.push_back({.position = transform.origin, .forms = {}});
+        return;
+    }
     const float card_distance = species.card.is_valid() ? species.impostor_distance : 0.0F;
     const auto form = [&](const godot::Ref<godot::Mesh>& mesh, float begin, float end) {
         return Form{.instance = add_instance(mesh, species.material, transform, begin, end),
@@ -327,7 +335,7 @@ void E5Forest::_process(double /*delta*/) {
         const auto distance = static_cast<float>(origin.distance_to(plant.position));
         for (Form& form : plant.forms) {
             const bool visible = !plant.hidden && distance >= form.begin && (form.end <= 0.0F || distance <= form.end);
-            if (visible != form.visible) {
+            if (visible != form.visible && form.instance.is_valid()) {
                 form.visible = visible;
                 server->instance_set_visible(form.instance, visible);
             }
@@ -354,7 +362,7 @@ void E5Forest::build_cells(const std::vector<Planted>& plants) {
     constexpr float block_radius = block_size * half_diagonal;
     std::map<CellKey, Cell> blocks;
     for (const Planted& plant : plants) {
-        if (species_.at(plant.species).card.is_valid()) {
+        if (species_.at(plant.species).card.is_valid() && !species_.at(plant.species).trunks_only) {
             blocks[{static_cast<int>(std::floor(plant.local.origin.x / block_size)),
                     static_cast<int>(std::floor(plant.local.origin.z / block_size)), plant.species}]
                 .plants.push_back(plant.local);
@@ -377,6 +385,9 @@ void E5Forest::build_cells(const std::vector<Planted>& plants) {
         const godot::Vector3 centre((static_cast<float>(column) + 0.5F) * cell_size_, cell.plants.front().origin.y,
                                     (static_cast<float>(row) + 0.5F) * cell_size_);
 
+        if (species.trunks_only) {
+            continue;
+        }
         if (species.card.is_valid()) {
             godot::MultiMeshInstance3D* const cards = make_batch(species.card, cell.plants, centre);
             cards->set_cast_shadows_setting(godot::GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
@@ -537,7 +548,9 @@ void E5Forest::_exit_tree() {
     godot::RenderingServer* const server = godot::RenderingServer::get_singleton();
     for (const Drawn& plant : drawn_) {
         for (const Form& form : plant.forms) {
-            server->free_rid(form.instance);
+            if (form.instance.is_valid()) {
+                server->free_rid(form.instance);
+            }
         }
     }
     drawn_.clear();

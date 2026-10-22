@@ -29,6 +29,12 @@ function(e5_set_warnings target)
             -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Woverloaded-virtual
             -Wnull-dereference -Wdouble-promotion -Wformat=2
         )
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            # A designated initializer that names some members is the C++20 way of leaving the
+            # rest at their defaults; GCC's -Wextra still warns about it (clang and MSVC do not),
+            # and the Linux world is built with GCC (-Werror).
+            target_compile_options(${target} PRIVATE -Wno-missing-field-initializers)
+        endif()
         if(E5_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE -Werror)
         endif()
