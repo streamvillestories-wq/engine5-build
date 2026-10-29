@@ -119,7 +119,47 @@ struct IslandParams {
     // middle, and meets the land around over half the radius again. For whatever is too
     // large to stand on a slope: a fort, a ring of stones, a stronghold to come.
     std::vector<IslandDisc> sites;
+
+    // A plateau (the Sundered Isle, 2026-10-22): the open ground lifted by `plateau_height`,
+    // the lift fading to nothing over `plateau_margin` metres inside the coast, so that the
+    // land stands high and falls to the sea in steep slopes.
+    float plateau_height = 0.0F;
+    float plateau_margin = 120.0F;
+
+    // A rift (the Sundered Isle): a chasm along a line of points, from coast to coast. Within
+    // `rift_floor_half_width` of the line the ground is the floor (`rift_floor_height`, a little
+    // uneven); out to `rift_rim_half_width` the walls rise steeply to the land. Beyond
+    // `rift_mouth` metres from the island's middle (along x) the floor falls to the sea floor,
+    // so both ends open into the sea. An empty line = no rift.
+    std::vector<IslandPoint> rift;
+    float rift_rim_half_width = 75.0F;
+    float rift_floor_half_width = 35.0F;
+    float rift_floor_height = 10.0F;
+    float rift_mouth = 520.0F;
+
+    // Ways down into the rift: each a line of points whose `share` says how far down it is
+    // (1 at its head, where it starts at the land's own height, 0 at its foot on the floor).
+    // Within `descent_half_width` of the line the ground is the way's height: a shelf cut into
+    // the wall, with the drop on one side.
+    struct DescentPoint {
+        float x = 0.0F;
+        float z = 0.0F;
+        float share = 1.0F;
+    };
+    std::vector<std::vector<DescentPoint>> descents;
+    float descent_half_width = 3.0F;
+
+    // Both halves the same: the ground at (x, z) for z < 0 is the ground at (-x, -z), so that
+    // two sides of a match have the same land turned half round. The seam lies along z = 0;
+    // with a rift, the rift's floor must cover it (a line that is its own mirror image).
+    bool point_mirror = false;
 };
+
+// The height of the rift's floor at a place on it (before its walls), for whatever must
+// stand on it; a little uneven, and falling to the sea at both mouths.
+[[nodiscard]] float island_rift_floor(const IslandParams& params, float x, float z) noexcept;
+// Metres from a place to the rift's middle line; very far if there is no rift.
+[[nodiscard]] float island_rift_distance(const IslandParams& params, float x, float z) noexcept;
 
 [[nodiscard]] RegionShares island_regions(const IslandParams& params, float x, float z) noexcept;
 // The kind that has the largest share of a place.

@@ -333,3 +333,95 @@ TEST_CASE("a site near the coast is level too", "[island]") {
         CHECK(e5::gameplay::island_height(params, 70.0F, z + away) == Catch::Approx(middle).margin(0.02));
     }
 }
+
+namespace {
+
+// A small Sundered Isle: a plateau split by a rift from coast to coast, one way down on the south
+// wall (mirrored onto the north one), a level site at the bridge's south head.
+float rift_line(float x) {
+    return 22.0F * std::sin(x / 170.0F);
+}
+
+IslandParams sundered() {
+    IslandParams params;
+    params.radius = 640.0F;
+    params.hill_height = 6.0F;
+    params.rolling = 2.0F;
+    params.clearing_radius = 0.0F;
+    params.plateau_height = 88.0F;
+    params.plateau_margin = 160.0F;
+    for (float x = -900.0F; x <= 900.0F; x += 60.0F) {
+        params.rift.push_back({.x = x, .z = rift_line(x)});
+    }
+    params.rift_mouth = 540.0F;
+    params.point_mirror = true;
+    params.sites.push_back({.x = 0.0F, .z = 95.0F, .radius = 24.0F});
+    const auto at = [](float x, float from_middle, float share) {
+        return IslandParams::DescentPoint{.x = x, .z = rift_line(x) + from_middle, .share = share};
+    };
+    params.descents.push_back({at(-200.0F, 80.0F, 1.0F), at(-320.0F, 58.0F, 0.52F), at(-332.0F, 50.0F, 0.47F),
+                               at(-212.0F, 38.0F, 0.02F), at(-206.0F, 30.0F, 0.0F)});
+    return params;
+}
+
+} // namespace
+
+TEST_CASE("a mirrored island is the same land turned half round", "[island][rift]") {
+    const IslandParams params = sundered();
+    for (float x = -500.0F; x <= 500.0F; x += 37.0F) {
+        for (float z = 20.0F; z <= 500.0F; z += 41.0F) {
+            CHECK(island_height(params, x, z) == Approx(island_height(params, -x, -z)));
+        }
+    }
+    // Across the seam the floor goes on without a step.
+    for (float x = -600.0F; x <= 600.0F; x += 13.0F) {
+        CHECK(std::abs(island_height(params, x, 0.05F) - island_height(params, x, -0.05F)) < 0.2F);
+    }
+}
+
+TEST_CASE("the rift runs from coast to coast, deep, with high land on both sides", "[island][rift]") {
+    const IslandParams params = sundered();
+    for (const float x : {-420.0F, -150.0F, 0.0F, 150.0F, 420.0F}) {
+        const float floor = island_height(params, x, rift_line(x));
+        CHECK(floor > params.rift_floor_height - 3.0F);
+        CHECK(floor < params.rift_floor_height + 3.0F);
+        // The rims stand 70 m and more above it, on both sides.
+        CHECK(island_height(params, x, rift_line(x) + 100.0F) - floor > 70.0F);
+        CHECK(island_height(params, x, rift_line(x) - 100.0F) - floor > 70.0F);
+    }
+    // Both ends open into the sea.
+    CHECK(island_height(params, 820.0F, rift_line(820.0F)) < 0.0F);
+    CHECK(island_height(params, -820.0F, rift_line(-820.0F)) < 0.0F);
+}
+
+TEST_CASE("a way down the rift's wall is walkable from the land to the floor", "[island][rift]") {
+    const IslandParams params = sundered();
+    // Walked metre by metre along both copies of it (the north one is the mirror image).
+    for (const float side : {1.0F, -1.0F}) {
+        const std::vector<IslandParams::DescentPoint>& way = params.descents.front();
+        float before = island_height(params, side * way.front().x, side * way.front().z);
+        const float top = before;
+        float steepest = 0.0F;
+        for (std::size_t index = 1; index < way.size(); ++index) {
+            const float length = std::hypot(way[index].x - way[index - 1].x, way[index].z - way[index - 1].z);
+            for (float walked = 1.0F; walked <= length; walked += 1.0F) {
+                const float t = walked / length;
+                const float x = side * std::lerp(way[index - 1].x, way[index].x, t);
+                const float z = side * std::lerp(way[index - 1].z, way[index].z, t);
+                const float here = island_height(params, x, z);
+                steepest = std::max(steepest, std::abs(here - before));
+                before = here;
+            }
+        }
+        CHECK(steepest < 0.6F);
+        CHECK(top - before > 70.0F);
+        CHECK(before < params.rift_floor_height + 3.0F);
+    }
+}
+
+TEST_CASE("the bridge's heads are level ground at the rim", "[island][rift]") {
+    const IslandParams params = sundered();
+    CHECK(island_slope(params, 0.0F, 95.0F, 3.0F) < 0.05F);
+    CHECK(island_slope(params, 0.0F, -95.0F, 3.0F) < 0.05F);
+    CHECK(island_height(params, 0.0F, 95.0F) == Approx(island_height(params, 0.0F, -95.0F)));
+}

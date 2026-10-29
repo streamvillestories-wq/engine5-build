@@ -327,7 +327,9 @@ OpenGround open_ground(const IslandParams& params, float x, float z) noexcept {
     // Hills: squared noise gives broad lowlands with a few real hills.
     const float hills = layered_noise(params.seed, x / hill_size, z / hill_size);
     // A clearing in the middle, for arriving and for building.
-    const float away_from_centre = smooth_step(params.clearing_radius, params.clearing_radius * 2.5F, distance);
+    // (A clearing of no size is none: without the floor the step's two ends met and gave NaN at the middle.)
+    const float clearing = std::max(params.clearing_radius, 0.01F);
+    const float away_from_centre = smooth_step(clearing, clearing * 2.5F, distance);
     const float mountains = mountain(params, x, z);
     float inland = params.lowland_height + (params.hill_height * hills * hills + mountains) * away_from_centre;
     inland = with_lowland_relief(params, x, z, inland, away_from_centre * smooth_step(10.0F, 0.0F, mountains));
@@ -349,12 +351,74 @@ OpenGround open_ground(const IslandParams& params, float x, float z) noexcept {
     }
     // The land rises towards a cliff's edge, so that it has something to fall from.
     inland += params.cliff_height * cliff * smooth_step(0.55F, 0.9F, from_coast);
+    // A plateau stands high and comes down to the sea over its margin.
+    if (params.plateau_height > 0.0F) {
+        const float margin = std::clamp(params.plateau_margin / std::max(coast, 1.0F), 0.01F, 1.0F);
+        inland += params.plateau_height * smooth_step(1.0F, 1.0F - margin, from_coast);
+    }
     return {.inland = inland, .land = land, .from_coast = from_coast};
 }
 
-} // namespace
+// Where along a line between two points a place is nearest (0 at `a`, 1 at `b`), and how far.
+struct OnSegment {
+    float along = 0.0F;
+    float distance = far_away;
+};
 
-float island_height(const IslandParams& params, float x, float z) noexcept {
+OnSegment on_segment(float x, float z, float ax, float az, float bx, float bz) {
+    const float along_x = bx - ax;
+    const float along_z = bz - az;
+    const float length_squared = along_x * along_x + along_z * along_z;
+    const float t =
+        length_squared > 0.0F ? std::clamp(((x - ax) * along_x + (z - az) * along_z) / length_squared, 0.0F, 1.0F) : 0.0F;
+    return {.along = t, .distance = std::hypot(x - (ax + along_x * t), z - (az + along_z * t))};
+}
+
+// The rift cut into the ground, and the ways down cut into its walls.
+float with_rift(const IslandParams& params, float x, float z, float height) {
+    const float distance = island_rift_distance(params, x, z);
+    const float rim = std::max(params.rift_rim_half_width, params.rift_floor_half_width + 1.0F);
+    constexpr float wall_wander = 9.0F;
+    if (distance < rim + wall_wander) {
+        // The walls wander in and out, but the floor keeps its width (and with it the seam of a
+        // mirrored island, which runs along the floor).
+        const float wander = (2.0F * layered_noise(params.seed + 401U, x / 70.0F, z / 70.0F) - 1.0F) * wall_wander;
+        const float wall = distance + wander * smooth_step(params.rift_floor_half_width,
+                                                           params.rift_floor_half_width + 12.0F, distance);
+        // Steep in the middle, rounded at the lip and at the foot; rough on the face.
+        const float down = smooth(smooth_step(rim, params.rift_floor_half_width, wall));
+        const float rough = (2.0F * value_noise(params.seed + 419U, x / 6.0F, z / 6.0F) - 1.0F) * 2.5F * down *
+                            (1.0F - down) * 4.0F;
+        height = std::lerp(height, island_rift_floor(params, x, z), down) + rough;
+    }
+    for (const std::vector<IslandParams::DescentPoint>& way : params.descents) {
+        const float reach = params.descent_half_width + 1.5F;
+        OnSegment nearest;
+        std::size_t segment = 0;
+        for (std::size_t index = 1; index < way.size(); ++index) {
+            const OnSegment here =
+                on_segment(x, z, way[index - 1].x, way[index - 1].z, way[index].x, way[index].z);
+            if (here.distance < nearest.distance) {
+                nearest = here;
+                segment = index;
+            }
+        }
+        if (nearest.distance >= reach || segment == 0) {
+            continue;
+        }
+        // The head starts at the land's own height there, the foot on the floor.
+        const IslandParams::DescentPoint& head = way.front();
+        const IslandParams::DescentPoint& foot = way.back();
+        const float top = open_ground(params, head.x, head.z).inland;
+        const float bottom = island_rift_floor(params, foot.x, foot.z);
+        const float share = std::lerp(way[segment - 1].share, way[segment].share, nearest.along);
+        const float level = std::lerp(bottom, top, share);
+        height = std::lerp(height, level, smooth_step(reach, params.descent_half_width, nearest.distance));
+    }
+    return height;
+}
+
+float island_height_unmirrored(const IslandParams& params, float x, float z) noexcept {
     const OpenGround open = open_ground(params, x, z);
     float land = open.land;
     const float from_coast = open.from_coast;
@@ -407,7 +471,38 @@ float island_height(const IslandParams& params, float x, float z) noexcept {
             height = std::max(height, std::lerp(params.sea_floor, params.islet_height * rough, rise));
         }
     }
+    if (!params.rift.empty()) {
+        height = with_rift(params, x, z, height);
+    }
     return height;
+}
+
+} // namespace
+
+float island_rift_distance(const IslandParams& params, float x, float z) noexcept {
+    float nearest = far_away;
+    for (std::size_t index = 1; index < params.rift.size(); ++index) {
+        nearest = std::min(nearest, distance_to_segment(x, z, params.rift[index - 1], params.rift[index]));
+    }
+    return nearest;
+}
+
+float island_rift_floor(const IslandParams& params, float x, float z) noexcept {
+    // Made of what a mirrored island's two halves share (the distance east or west, the
+    // distance from the middle line), so that the floor is the same on both sides of the seam.
+    const float east_west = std::abs(x);
+    const float across = std::min(island_rift_distance(params, x, z), 200.0F);
+    const float uneven = 2.0F * layered_noise(params.seed + 409U, east_west / 38.0F, across / 18.0F) - 1.0F;
+    const float floor = params.rift_floor_height + 1.6F * uneven;
+    // At both ends it falls to the sea, so the rift opens into the bays it makes.
+    return std::lerp(floor, params.sea_floor, smooth_step(params.rift_mouth, params.rift_mouth + 130.0F, east_west));
+}
+
+float island_height(const IslandParams& params, float x, float z) noexcept {
+    if (params.point_mirror && z < 0.0F) {
+        return island_height_unmirrored(params, -x, -z);
+    }
+    return island_height_unmirrored(params, x, z);
 }
 
 float island_slope(const IslandParams& params, float x, float z, float step) noexcept {

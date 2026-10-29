@@ -30,6 +30,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <numbers>
 #include <span>
@@ -111,6 +112,28 @@ void E5Terrain::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_ridges"), &E5Terrain::get_ridges);
     ClassDB::bind_method(D_METHOD("set_rolling", "metres"), &E5Terrain::set_rolling);
     ClassDB::bind_method(D_METHOD("get_rolling"), &E5Terrain::get_rolling);
+    ClassDB::bind_method(D_METHOD("set_plateau_height", "metres"), &E5Terrain::set_plateau_height);
+    ClassDB::bind_method(D_METHOD("get_plateau_height"), &E5Terrain::get_plateau_height);
+    ClassDB::bind_method(D_METHOD("set_plateau_margin", "metres"), &E5Terrain::set_plateau_margin);
+    ClassDB::bind_method(D_METHOD("get_plateau_margin"), &E5Terrain::get_plateau_margin);
+    ClassDB::bind_method(D_METHOD("set_rift", "points"), &E5Terrain::set_rift);
+    ClassDB::bind_method(D_METHOD("get_rift"), &E5Terrain::get_rift);
+    ClassDB::bind_method(D_METHOD("set_rift_rim_half_width", "metres"), &E5Terrain::set_rift_rim_half_width);
+    ClassDB::bind_method(D_METHOD("get_rift_rim_half_width"), &E5Terrain::get_rift_rim_half_width);
+    ClassDB::bind_method(D_METHOD("set_rift_floor_half_width", "metres"), &E5Terrain::set_rift_floor_half_width);
+    ClassDB::bind_method(D_METHOD("get_rift_floor_half_width"), &E5Terrain::get_rift_floor_half_width);
+    ClassDB::bind_method(D_METHOD("set_rift_floor_height", "metres"), &E5Terrain::set_rift_floor_height);
+    ClassDB::bind_method(D_METHOD("get_rift_floor_height"), &E5Terrain::get_rift_floor_height);
+    ClassDB::bind_method(D_METHOD("set_rift_mouth", "metres"), &E5Terrain::set_rift_mouth);
+    ClassDB::bind_method(D_METHOD("get_rift_mouth"), &E5Terrain::get_rift_mouth);
+    ClassDB::bind_method(D_METHOD("set_descents", "descents"), &E5Terrain::set_descents);
+    ClassDB::bind_method(D_METHOD("get_descents"), &E5Terrain::get_descents);
+    ClassDB::bind_method(D_METHOD("set_descent_half_width", "metres"), &E5Terrain::set_descent_half_width);
+    ClassDB::bind_method(D_METHOD("get_descent_half_width"), &E5Terrain::get_descent_half_width);
+    ClassDB::bind_method(D_METHOD("set_point_mirror", "mirror"), &E5Terrain::set_point_mirror);
+    ClassDB::bind_method(D_METHOD("get_point_mirror"), &E5Terrain::get_point_mirror);
+    ClassDB::bind_method(D_METHOD("rift_distance_at", "world_x", "world_z"), &E5Terrain::rift_distance_at);
+    ClassDB::bind_method(D_METHOD("rift_floor_at", "world_x", "world_z"), &E5Terrain::rift_floor_at);
     ClassDB::bind_method(D_METHOD("set_sites", "sites"), &E5Terrain::set_sites);
     ClassDB::bind_method(D_METHOD("get_sites"), &E5Terrain::get_sites);
     ClassDB::bind_method(D_METHOD("set_islets", "islets"), &E5Terrain::set_islets);
@@ -136,6 +159,7 @@ void E5Terrain::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_path_count"), &E5Terrain::get_path_count);
     ClassDB::bind_method(D_METHOD("make_map_image"), &E5Terrain::make_map_image);
     ClassDB::bind_method(D_METHOD("get_side"), &E5Terrain::get_side);
+    ClassDB::bind_method(D_METHOD("get_height_texture"), &E5Terrain::get_height_texture);
     ClassDB::bind_method(D_METHOD("set_path_width", "metres"), &E5Terrain::set_path_width);
     ClassDB::bind_method(D_METHOD("get_path_width"), &E5Terrain::get_path_width);
     ClassDB::bind_method(D_METHOD("path_distance_at", "world_x", "world_z"), &E5Terrain::path_distance_at);
@@ -186,6 +210,27 @@ void E5Terrain::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(godot::Variant::ARRAY, "ridges"), "set_ridges", "get_ridges");
     ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "rolling", godot::PROPERTY_HINT_RANGE, "0,6,0.1,suffix:m"),
                  "set_rolling", "get_rolling");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "plateau_height", godot::PROPERTY_HINT_RANGE, "0,300,0.5,suffix:m"),
+                 "set_plateau_height", "get_plateau_height");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "plateau_margin", godot::PROPERTY_HINT_RANGE, "10,600,1,suffix:m"),
+                 "set_plateau_margin", "get_plateau_margin");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_VECTOR2_ARRAY, "rift"), "set_rift", "get_rift");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "rift_rim_half_width", godot::PROPERTY_HINT_RANGE, "5,400,0.5,suffix:m"),
+        "set_rift_rim_half_width", "get_rift_rim_half_width");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "rift_floor_half_width", godot::PROPERTY_HINT_RANGE, "1,300,0.5,suffix:m"),
+        "set_rift_floor_half_width", "get_rift_floor_half_width");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "rift_floor_height", godot::PROPERTY_HINT_RANGE, "-20,200,0.5,suffix:m"),
+        "set_rift_floor_height", "get_rift_floor_height");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::FLOAT, "rift_mouth", godot::PROPERTY_HINT_RANGE, "0,2000,1,suffix:m"),
+                 "set_rift_mouth", "get_rift_mouth");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::ARRAY, "descents"), "set_descents", "get_descents");
+    ADD_PROPERTY(
+        PropertyInfo(godot::Variant::FLOAT, "descent_half_width", godot::PROPERTY_HINT_RANGE, "1,20,0.5,suffix:m"),
+        "set_descent_half_width", "get_descent_half_width");
+    ADD_PROPERTY(PropertyInfo(godot::Variant::BOOL, "point_mirror"), "set_point_mirror", "get_point_mirror");
     ADD_PROPERTY(PropertyInfo(godot::Variant::PACKED_VECTOR3_ARRAY, "bays"), "set_bays", "get_bays");
     ADD_PROPERTY(PropertyInfo(godot::Variant::VECTOR3, "cliffs"), "set_cliffs", "get_cliffs");
     ADD_PROPERTY(PropertyInfo(godot::Variant::ARRAY, "paths"), "set_paths", "get_paths");
@@ -401,6 +446,66 @@ godot::Vector3 E5Terrain::get_cliffs() const {
     return {params_.cliff_from / radians_per_degree, params_.cliff_to / radians_per_degree, params_.cliff_height};
 }
 
+void E5Terrain::set_rift(const godot::PackedVector2Array& points) {
+    params_.rift.clear();
+    for (const godot::Vector2& point : points) {
+        params_.rift.push_back({.x = static_cast<float>(point.x), .z = static_cast<float>(point.y)});
+    }
+}
+
+godot::PackedVector2Array E5Terrain::get_rift() const {
+    godot::PackedVector2Array points;
+    for (const gameplay::IslandPoint& point : params_.rift) {
+        points.push_back(godot::Vector2(point.x, point.z));
+    }
+    return points;
+}
+
+void E5Terrain::set_descents(const godot::Array& descents) {
+    params_.descents.clear();
+    for (const godot::Variant& entry : descents) {
+        const godot::PackedVector3Array points = entry;
+        std::vector<gameplay::IslandParams::DescentPoint> way;
+        for (const godot::Vector3& point : points) {
+            way.push_back({.x = static_cast<float>(point.x),
+                           .z = static_cast<float>(point.y),
+                           .share = static_cast<float>(point.z)});
+        }
+        if (way.size() >= 2) {
+            params_.descents.push_back(std::move(way));
+        }
+    }
+}
+
+godot::Array E5Terrain::get_descents() const {
+    godot::Array descents;
+    for (const std::vector<gameplay::IslandParams::DescentPoint>& way : params_.descents) {
+        godot::PackedVector3Array points;
+        for (const gameplay::IslandParams::DescentPoint& point : way) {
+            points.push_back(godot::Vector3(point.x, point.z, point.share));
+        }
+        descents.push_back(points);
+    }
+    return descents;
+}
+
+float E5Terrain::rift_distance_at(float world_x, float world_z) const {
+    const godot::Vector3 origin = get_global_position();
+    float x = world_x - static_cast<float>(origin.x);
+    float z = world_z - static_cast<float>(origin.z);
+    if (params_.point_mirror && z < 0.0F) {
+        x = -x;
+        z = -z;
+    }
+    return gameplay::island_rift_distance(params_, x, z);
+}
+
+float E5Terrain::rift_floor_at(float world_x, float world_z) const {
+    const godot::Vector3 origin = get_global_position();
+    return gameplay::island_rift_floor(params_, world_x - static_cast<float>(origin.x),
+                                       world_z - static_cast<float>(origin.z));
+}
+
 float E5Terrain::river_distance_at(float world_x, float world_z) const {
     const godot::Vector3 origin = get_global_position();
     return gameplay::island_river_distance(params_, world_x - static_cast<float>(origin.x),
@@ -521,6 +626,20 @@ godot::Ref<godot::Image> E5Terrain::make_map_image() const {
         return {};
     }
     const int size = samples - 1;
+    // The island's own tree and snow lines, as its ground's material has them (the Sundered Isle's
+    // plateau stands at 90 m, where the old island's mountains were: with these fixed it was all snow).
+    float tree_line = map_tree_line;
+    float snow_line = map_snow_line;
+    if (const godot::Ref<godot::ShaderMaterial> ground = material_; ground.is_valid()) {
+        const godot::Variant tree = ground->get_shader_parameter("tree_line");
+        const godot::Variant snow = ground->get_shader_parameter("snow_line");
+        if (tree.get_type() == godot::Variant::FLOAT) {
+            tree_line = static_cast<float>(static_cast<double>(tree));
+        }
+        if (snow.get_type() == godot::Variant::FLOAT) {
+            snow_line = static_cast<float>(static_cast<double>(snow));
+        }
+    }
     godot::PackedByteArray bytes;
     bytes.resize(static_cast<std::int64_t>(size) * size * 3);
     std::uint8_t* const pixels = bytes.ptrw();
@@ -561,10 +680,10 @@ godot::Ref<godot::Image> E5Terrain::make_map_image() const {
                 colour = mix(colour, upland, step(6.0F, 30.0F, height));
                 colour =
                     mix(colour, rock,
-                        std::max(step(0.55F, 0.95F, steep), step(map_tree_line - 6.0F, map_tree_line + 6.0F, height)));
+                        std::max(step(0.55F, 0.95F, steep), step(tree_line - 6.0F, tree_line + 6.0F, height)));
                 colour =
                     mix(colour, snow,
-                        step(map_snow_line - 5.0F, map_snow_line + 6.0F, height) * (1.0F - step(1.3F, 2.2F, steep)));
+                        step(snow_line - 5.0F, snow_line + 6.0F, height) * (1.0F - step(1.3F, 2.2F, steep)));
                 // Lit from the north-west: slopes facing it are lighter, those turned away darker.
                 const float lit = std::clamp((rise_x + rise_z) * 0.42F, -0.45F, 0.4F);
                 colour = Rgb{
@@ -757,6 +876,18 @@ void E5Terrain::build_heights(int cells_across) {
     for (std::thread& thread : threads) {
         thread.join();
     }
+}
+
+godot::Ref<godot::Texture2D> E5Terrain::get_height_texture() {
+    if (height_texture_.is_null() && grid_side_ > 0) {
+        godot::PackedByteArray bytes;
+        bytes.resize(static_cast<std::int64_t>(heights_.size() * sizeof(float)));
+        std::memcpy(bytes.ptrw(), heights_.data(), heights_.size() * sizeof(float));
+        const godot::Ref<godot::Image> image =
+            godot::Image::create_from_data(grid_side_, grid_side_, false, godot::Image::FORMAT_RF, bytes);
+        height_texture_ = godot::ImageTexture::create_from_image(image);
+    }
+    return height_texture_;
 }
 
 float E5Terrain::grid_height(int x, int z) const {

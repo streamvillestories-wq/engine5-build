@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
+#include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
@@ -105,6 +106,32 @@ public:
     // Level building ground, each (x, z, radius).
     void set_sites(const godot::PackedVector3Array& sites);
     [[nodiscard]] godot::PackedVector3Array get_sites() const;
+    // The Sundered Isle's land (e5/gameplay/island.hpp): a plateau, a rift from coast to coast,
+    // ways down into it (each a list of (x, z, share): 1 at its head, 0 at its foot), and both
+    // halves the same turned half round.
+    void set_plateau_height(float metres) { params_.plateau_height = metres; }
+    [[nodiscard]] float get_plateau_height() const { return params_.plateau_height; }
+    void set_plateau_margin(float metres) { params_.plateau_margin = metres; }
+    [[nodiscard]] float get_plateau_margin() const { return params_.plateau_margin; }
+    void set_rift(const godot::PackedVector2Array& points);
+    [[nodiscard]] godot::PackedVector2Array get_rift() const;
+    void set_rift_rim_half_width(float metres) { params_.rift_rim_half_width = metres; }
+    [[nodiscard]] float get_rift_rim_half_width() const { return params_.rift_rim_half_width; }
+    void set_rift_floor_half_width(float metres) { params_.rift_floor_half_width = metres; }
+    [[nodiscard]] float get_rift_floor_half_width() const { return params_.rift_floor_half_width; }
+    void set_rift_floor_height(float metres) { params_.rift_floor_height = metres; }
+    [[nodiscard]] float get_rift_floor_height() const { return params_.rift_floor_height; }
+    void set_rift_mouth(float metres) { params_.rift_mouth = metres; }
+    [[nodiscard]] float get_rift_mouth() const { return params_.rift_mouth; }
+    void set_descents(const godot::Array& descents);
+    [[nodiscard]] godot::Array get_descents() const;
+    void set_descent_half_width(float metres) { params_.descent_half_width = metres; }
+    [[nodiscard]] float get_descent_half_width() const { return params_.descent_half_width; }
+    void set_point_mirror(bool mirror) { params_.point_mirror = mirror; }
+    [[nodiscard]] bool get_point_mirror() const { return params_.point_mirror; }
+    // Metres from a place to the rift's middle line (very far without a rift), and the floor's height there.
+    [[nodiscard]] float rift_distance_at(float world_x, float world_z) const;
+    [[nodiscard]] float rift_floor_at(float world_x, float world_z) const;
     void set_islets(const godot::PackedVector3Array& islets);
     [[nodiscard]] godot::PackedVector3Array get_islets() const;
     // Each (direction, width to either side, depth as a share of the radius).
@@ -151,6 +178,9 @@ public:
     [[nodiscard]] godot::Ref<godot::Image> make_map_image() const;
     // Metres across the square the ground (and the map picture) covers.
     [[nodiscard]] float get_side() const { return static_cast<float>(cells_across()); }
+    // The ground's heights as a texture (one float a metre over get_side(), the node's middle in the
+    // picture's middle), for shaders that stand things on the ground on the GPU: the grass. Made once.
+    [[nodiscard]] godot::Ref<godot::Texture2D> get_height_texture();
     void set_path_width(float metres) { path_width_ = metres; }
     [[nodiscard]] float get_path_width() const { return path_width_; }
     void set_extent(float metres) { extent_ = metres; }
@@ -192,6 +222,7 @@ private:
     gameplay::PathIndex path_index_; // over smoothed_paths_, for the many "how far is the nearest" questions
     int path_count_ = 0;
     std::vector<float> heights_; // the collision grid: one a metre, row by row
+    godot::Ref<godot::Texture2D> height_texture_; // heights_ for shaders, made on first asking
     int triangle_count_ = 0;
     int grid_side_ = 0;       // samples along a side of heights_
     int grid_half_ = 0;       // local metres from the middle to the first sample

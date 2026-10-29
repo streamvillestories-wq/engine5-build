@@ -214,7 +214,12 @@ func _veins() -> void:
 	state.join("b", 12, "Bert", 1)
 	var first: Dictionary = MatchState.VEINS[0]
 	var second: Dictionary = MatchState.VEINS[1]
-	_check("there are twice as many veins as players can be", MatchState.VEINS.size() >= 2 * int(state.rules["max_players"]))
+	# (Eldergrove has twice as many veins as players can be; the Sundered Isle a vein for each, four a
+	# team's half, until its teams build one stronghold each.)
+	_check("there are veins enough for every player", MatchState.VEINS.size() >= int(state.rules["max_players"])
+			* (2 if MatchState.ISLAND == "eldergrove" else 1))
+	_check("both islands keep their tables", MatchState.VEINS_ELDERGROVE.size() == 12 and MatchState.VEINS_SUNDERED.size() == 8
+			and MatchState.SHRINE_SITES_SUNDERED.size() == 10)
 	var apart := 1e9
 	for i in MatchState.VEINS.size():
 		for j in range(i + 1, MatchState.VEINS.size()):

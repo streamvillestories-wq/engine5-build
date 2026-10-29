@@ -341,6 +341,7 @@ void E5Enemy::park() {
     set_visible(false);
     E5Effect::set_active(trail_, false);
     update_health_bar();
+    set_asleep(true);
 }
 
 void E5Enemy::revive(const godot::Vector3& position) {
@@ -348,6 +349,7 @@ void E5Enemy::revive(const godot::Vector3& position) {
         return; // decided elsewhere: it comes back here when word of it arrives
     }
     parked_ = false;
+    set_asleep(false);
     state_ = gameplay::spawn_enemy(params_);
     state_.aggro = true;
     held_ = false;
@@ -615,6 +617,11 @@ constexpr float wake_within = 60.0F;
 constexpr float sleep_check_interval = 0.4F;
 
 bool E5Enemy::should_sleep(float dt) {
+    // One kept in reserve sleeps until it is brought up (2026-10-28: the pools' 300 parked enemies count as
+    // dead, and the dead never slept, so their animations and skeletons ran on unseen: 20 ms of a 27 ms frame).
+    if (parked_) {
+        return true;
+    }
     // Anything that hurts it, holds it or throws it wakes it at once.
     if (team_ != 0 || strolls_ || pending_damage_ > 0.0F || held_ || flung_ || !is_alive() || state_.aggro ||
         state_.phase != gameplay::EnemyPhase::Idle) {

@@ -201,7 +201,9 @@ bool E5Forest::read_species(const godot::Ref<godot::PackedScene>& scene, Species
             species.far_distance = node->get_instance_shader_parameter("lod_begin");
         } else if (!name.ends_with("_shadow")) {
             species.full = node->get_mesh();
-            species.material = node->get_surface_override_material(0);
+            // (A placeholder mesh, in the world on the server, has no surface to ask about.)
+            species.material = node->get_surface_override_material_count() > 0 ? node->get_surface_override_material(0)
+                                                                                : godot::Ref<godot::Material>();
         }
     }
     const godot::TypedArray<godot::Node> shapes = root->find_children("*", "CollisionShape3D", true, false);
