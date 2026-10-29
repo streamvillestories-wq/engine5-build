@@ -123,6 +123,7 @@ void E5Forest::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_scale_max", "scale"), &E5Forest::set_scale_max);
     ClassDB::bind_method(D_METHOD("get_scale_max"), &E5Forest::get_scale_max);
     ClassDB::bind_method(D_METHOD("get_plant_count"), &E5Forest::get_plant_count);
+    ClassDB::bind_method(D_METHOD("get_plant_positions"), &E5Forest::get_plant_positions);
 
     // "an array of PackedScene resources", in the form the editor expects.
     const godot::String scene_array_hint = godot::String::num_int64(godot::Variant::OBJECT) + godot::String("/") +
@@ -290,6 +291,16 @@ E5Forest::Plant E5Forest::plant_near(const godot::Vector3& position, float radiu
                  .material = species_.at(plant.species).material};
     }
     return found;
+}
+
+godot::PackedVector2Array E5Forest::get_plant_positions() const {
+    godot::PackedVector2Array positions;
+    positions.resize(static_cast<std::int64_t>(drawn_.size()));
+    for (std::size_t index = 0; index < drawn_.size(); ++index) {
+        positions.set(static_cast<std::int64_t>(index),
+                      godot::Vector2(static_cast<float>(drawn_[index].position.x), static_cast<float>(drawn_[index].position.z)));
+    }
+    return positions;
 }
 
 void E5Forest::set_plant_hidden(int index, bool hidden) {

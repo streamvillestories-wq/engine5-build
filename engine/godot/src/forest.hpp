@@ -7,6 +7,7 @@
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/shape3d.hpp>
+#include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
@@ -70,6 +71,8 @@ public:
     [[nodiscard]] static Plant plant_of_scene(const godot::Ref<godot::PackedScene>& scene);
 
     [[nodiscard]] int get_plant_count() const { return plant_count_; }
+    // Where every plant stands (x, z), for things a script places among them (game/scenery/decor.gd).
+    [[nodiscard]] godot::PackedVector2Array get_plant_positions() const;
 
     void set_plant_scenes(const godot::TypedArray<godot::PackedScene>& scenes) { plant_scenes_ = scenes; }
     [[nodiscard]] godot::TypedArray<godot::PackedScene> get_plant_scenes() const { return plant_scenes_; }
