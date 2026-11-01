@@ -311,6 +311,18 @@ constexpr const char* caltrops_path = "res://effects/venom_cloud.tscn";
 constexpr const char* flame_wall_path = "res://effects/molten_burst.tscn";
 constexpr const char* static_trap_path = "res://effects/lightning_strike.tscn";
 constexpr const char* sentinel_path = "res://effects/bone_sentinel.tscn";
+constexpr const char* balloon_path = "res://effects/balloon.tscn";
+constexpr float aimed_plant_reach = 3.5F; // metres round where the crosshair strikes: a tree's trunk or crown
+constexpr const char* golem_path = "res://effects/bone_golem.tscn";
+constexpr const char* golem_gather_path = "res://effects/soul_trail.tscn";
+constexpr const char* golem_pound_path = "res://effects/jump_attack_impact.tscn";
+// When its blows land and when it may move again, seconds from the blow's start (bone_golem.gd's
+// paces: its fist is a clip of 1 s played at 0.7, both fists one of 2.27 s at 1).
+constexpr float golem_punch_lands = 0.7F;
+constexpr float golem_punch_seconds = 1.3F;
+constexpr float golem_pound_lands = 1.25F;
+constexpr float golem_pound_seconds = 2.2F;
+constexpr float golem_pound_ring_scale = 1.5F; // of the Jump Attack's ring of 4 m: its reach
 constexpr const char* plague_path = "res://effects/plague.tscn";
 constexpr const char* chill_path = "res://effects/grave_chill.tscn";
 constexpr const char* lich_path = "res://effects/spectral_form.tscn";
@@ -623,6 +635,7 @@ const SpellTiming* timing_of(gameplay::SkillId skill) {
     case gameplay::SkillId::GraveGrasp:
     case gameplay::SkillId::DeathCoil: // the five more: cast as the bolt is
     case gameplay::SkillId::BoneSentinel:
+    case gameplay::SkillId::BoneGolem:
     case gameplay::SkillId::Plague:
     case gameplay::SkillId::GraveChill:
     case gameplay::SkillId::FlameWall:
@@ -973,6 +986,10 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_cursed_count"), &E5PlayerController::get_cursed_count);
     ClassDB::bind_method(D_METHOD("get_wolf_bites"), &E5PlayerController::get_wolf_bites);
     ClassDB::bind_method(D_METHOD("get_owl_shots"), &E5PlayerController::get_owl_shots);
+    ClassDB::bind_method(D_METHOD("get_balloons"), &E5PlayerController::get_balloons);
+    ClassDB::bind_method(D_METHOD("get_golems"), &E5PlayerController::get_golems);
+    ClassDB::bind_method(D_METHOD("get_golem_punches"), &E5PlayerController::get_golem_punches);
+    ClassDB::bind_method(D_METHOD("get_golem_pounds"), &E5PlayerController::get_golem_pounds);
     ClassDB::bind_method(D_METHOD("get_springs"), &E5PlayerController::get_springs);
     ClassDB::bind_method(D_METHOD("get_orb_touches"), &E5PlayerController::get_orb_touches);
     ClassDB::bind_method(D_METHOD("get_well_caught"), &E5PlayerController::get_well_caught);
@@ -1006,6 +1023,7 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_disguises"), &E5PlayerController::get_disguises);
     ClassDB::bind_method(D_METHOD("end_disguise"), &E5PlayerController::end_disguise);
     ClassDB::bind_method(D_METHOD("set_shown_disguised", "disguised"), &E5PlayerController::set_shown_disguised);
+    ClassDB::bind_method(D_METHOD("set_disguise_camera_back", "metres"), &E5PlayerController::set_disguise_camera_back);
     ClassDB::bind_method(D_METHOD("set_shown_manning", "manning"), &E5PlayerController::set_shown_manning);
     ClassDB::bind_method(D_METHOD("find_bush", "radius", "kind"), &E5PlayerController::find_bush,
                          DEFVAL(godot::String()));
@@ -1538,6 +1556,7 @@ void E5PlayerController::_physics_process(double delta) {
     update_chain(static_cast<float>(delta));
     update_hydra(static_cast<float>(delta));
     update_owl(static_cast<float>(delta));
+    update_golem(static_cast<float>(delta));
     update_wolf(static_cast<float>(delta));
     update_spring(static_cast<float>(delta));
     update_orb(static_cast<float>(delta));
@@ -1664,6 +1683,14 @@ void E5PlayerController::_physics_process(double delta) {
             skill_ready(skills_.selected())) {
             start_clone();
         }
+        // A balloon: at once on the key, whatever else he is doing.
+        if (aim_just_pressed && skills_.selected() == gameplay::SkillId::BaloonParty) {
+            const auto hue = static_cast<float>(godot::UtilityFunctions::randf());
+            last_skill_ = gameplay::SkillId::BaloonParty;
+            ++skills_used_;
+            let_go_balloon(hue);
+            note_net_event(0, hue); // the same colour for everyone
+        }
         // Teleportation: at once on the key, if there is ground to stand on where he aims.
         if (aim_just_pressed && skills_.selected() == gameplay::SkillId::Teleport && !mounted_ && !is_busy() &&
             skill_ready(skills_.selected())) {
@@ -1693,7 +1720,9 @@ void E5PlayerController::_physics_process(double delta) {
         update_leap_aim(aim_pressed);
         // The Firebolt is charged for as long as its button is held and thrown when it is let go
         // (update_firebolt_charge says when): its throw begins then, not on the press.
-        const bool firebolt = skills_.selected() == gameplay::SkillId::Firebolt;
+        // (The Bone Golem is called the same way.)
+        const bool firebolt = skills_.selected() == gameplay::SkillId::Firebolt ||
+                              skills_.selected() == gameplay::SkillId::BoneGolem;
         if (aim_just_pressed && firebolt && !is_busy() && !block_.raised &&
             can_start_instant_skill(skills_.selected())) {
             start_firebolt_charge();
@@ -2004,6 +2033,9 @@ void E5PlayerController::apply_net_event(int kind, int skill, float power, int c
         if (*named == gameplay::SkillId::Firebolt) {
             firebolt_power_ = std::clamp(power, 0.0F, 1.0F); // how far it was charged where he is played
         }
+        if (*named == gameplay::SkillId::BaloonParty) {
+            balloon_hue_ = std::clamp(power, 0.0F, 1.0F);
+        }
         // Started in the next frame of hers, as on the machine that plays her.
         pending_start_ = true;
         pending_combo_step_ = combo_step;
@@ -2051,6 +2083,7 @@ void E5PlayerController::update_remote(float delta) {
     update_chain(delta);
     update_hydra(delta);
     update_owl(delta);
+    update_golem(delta);
     update_wolf(delta);
     update_spring(delta);
     update_orb(delta);
@@ -2094,6 +2127,10 @@ void E5PlayerController::update_remote(float delta) {
         }
         remote_pieces_left_ = std::max(remote_pieces_left_ - delta, 0.0F);
         remote_step_left_ = std::max(remote_step_left_ - delta, 0.0F);
+        if (pending_start_ && skills_.selected() == gameplay::SkillId::BaloonParty) {
+            pending_start_ = false;
+            let_go_balloon(balloon_hue_);
+        }
         if (pending_start_ && skills_.selected() == gameplay::SkillId::Teleport) {
             // Where he is now arrives with his place: light where he left, and where he comes to.
             pending_start_ = false;
@@ -2281,7 +2318,9 @@ float E5PlayerController::get_cast_progress() const {
         return std::clamp(tower_charge_ / full, 0.0F, 1.0F);
     }
     if (firebolt_charging_) {
-        return std::clamp(firebolt_charge_ / gameplay::firebolt_full_charge_seconds, 0.0F, 1.0F);
+        const float full = action_skill_ == gameplay::SkillId::BoneGolem ? gameplay::golem_charge_seconds
+                                                                         : gameplay::firebolt_full_charge_seconds;
+        return std::clamp(firebolt_charge_ / full, 0.0F, 1.0F);
     }
     const float seconds = get_cast_seconds();
     if (seconds <= 0.0F) {
@@ -2300,7 +2339,8 @@ float E5PlayerController::get_cast_seconds() const {
                                                             : gameplay::tower_full_charge_seconds;
     }
     if (firebolt_charging_) {
-        return gameplay::firebolt_full_charge_seconds;
+        return action_skill_ == gameplay::SkillId::BoneGolem ? gameplay::golem_charge_seconds
+                                                             : gameplay::firebolt_full_charge_seconds;
     }
     if (bow_.phase == gameplay::BowPhase::Drawing || bow_.phase == gameplay::BowPhase::Aiming) {
         return bow_timings().draw_seconds;
@@ -3192,7 +3232,8 @@ void E5PlayerController::update_aim_camera(float delta) {
     // On the horse the camera stands further back: a horse is long, and its croup filled the picture.
     const float mount_step = mount_camera_rate * delta;
     mount_camera_blend_ += std::clamp((mounted_ ? 1.0F : 0.0F) - mount_camera_blend_, -mount_step, mount_step);
-    const float rest_distance = camera_rest_distance_ + mount_camera_back * mount_camera_blend_;
+    disguise_camera_back_ += (disguise_camera_wanted_ - disguise_camera_back_) * std::min(delta * 3.0F, 1.0F);
+    const float rest_distance = camera_rest_distance_ + mount_camera_back * mount_camera_blend_ + disguise_camera_back_;
     camera_arm_->set_length(std::lerp(rest_distance, aim_camera_distance, aim_camera_blend_));
 }
 
@@ -3519,6 +3560,7 @@ const godot::StringName* E5PlayerController::instant_clip(gameplay::SkillId skil
                skill == gameplay::SkillId::CurseOfFrailty || skill == gameplay::SkillId::Requiem ||
                skill == gameplay::SkillId::BansheeWail || skill == gameplay::SkillId::GraveGrasp ||
                skill == gameplay::SkillId::DeathCoil || skill == gameplay::SkillId::BoneSentinel ||
+               skill == gameplay::SkillId::BoneGolem ||
                skill == gameplay::SkillId::Plague || skill == gameplay::SkillId::GraveChill ||
                skill == gameplay::SkillId::FlameWall || skill == gameplay::SkillId::StaticTrap ||
                skill == gameplay::SkillId::MeteorShower ||
@@ -3718,6 +3760,7 @@ void E5PlayerController::start_instant_skill(gameplay::SkillId skill) {
                                 skill == gameplay::SkillId::CurseOfFrailty || skill == gameplay::SkillId::Requiem ||
                                 skill == gameplay::SkillId::BansheeWail || skill == gameplay::SkillId::GraveGrasp ||
                                 skill == gameplay::SkillId::DeathCoil || skill == gameplay::SkillId::BoneSentinel ||
+                                skill == gameplay::SkillId::BoneGolem ||
                                 skill == gameplay::SkillId::Plague || skill == gameplay::SkillId::GraveChill ||
                                 skill == gameplay::SkillId::FlameWall || skill == gameplay::SkillId::StaticTrap ||
                                 skill == gameplay::SkillId::MeteorShower ||
@@ -3882,6 +3925,10 @@ void E5PlayerController::cast_spell(gameplay::SkillId spell) {
     }
     if (spell == gameplay::SkillId::BoneSentinel) {
         raise_sentinel();
+        return;
+    }
+    if (spell == gameplay::SkillId::BoneGolem) {
+        raise_golem();
         return;
     }
     if (spell == gameplay::SkillId::Plague) {
@@ -5295,8 +5342,9 @@ void E5PlayerController::update_tower_charge(bool held, float delta) {
 }
 
 void E5PlayerController::start_firebolt_charge() {
-    last_skill_ = gameplay::SkillId::Firebolt;
-    action_skill_ = gameplay::SkillId::Firebolt;
+    const bool golem = skills_.selected() == gameplay::SkillId::BoneGolem;
+    last_skill_ = skills_.selected();
+    action_skill_ = skills_.selected();
     emote_left_ = 0.0F;
     firebolt_charging_ = true;
     firebolt_charge_ = 0.0F;
@@ -5308,7 +5356,7 @@ void E5PlayerController::start_firebolt_charge() {
     if (holder == nullptr) {
         holder = right_hand_;
     }
-    if (godot::Node3D* const glow = E5Effect::spawn(effect_scene(firebolt_fire_path), holder, casting_point(false))) {
+    if (godot::Node3D* const glow = E5Effect::spawn(effect_scene(golem ? golem_gather_path : firebolt_fire_path), holder, casting_point(false))) {
         glow->set_scale(godot::Vector3(firebolt_glow_least, firebolt_glow_least, firebolt_glow_least));
         firebolt_glow_ = glow->get_instance_id();
     }
@@ -5318,19 +5366,20 @@ void E5PlayerController::update_firebolt_charge(bool held, float delta) {
     if (!firebolt_charging_) {
         return;
     }
+    const bool golem = action_skill_ == gameplay::SkillId::BoneGolem;
+    const float full = golem ? gameplay::golem_charge_seconds : gameplay::firebolt_full_charge_seconds;
     if (held && is_on_floor() && !vitals_.dead) {
-        firebolt_charge_ = std::min(firebolt_charge_ + delta, gameplay::firebolt_full_charge_seconds);
+        firebolt_charge_ = std::min(firebolt_charge_ + delta, full);
         if (auto* const glow = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(firebolt_glow_))) {
             // It grows with the charge. (Sized in the world: the wand's holder has a scale of its own.)
-            const float size = firebolt_glow_least + (firebolt_glow_full - firebolt_glow_least) * firebolt_charge_ /
-                                                         gameplay::firebolt_full_charge_seconds;
+            const float size = firebolt_glow_least + (firebolt_glow_full - firebolt_glow_least) * firebolt_charge_ / full;
             glow->set_global_transform(
                 godot::Transform3D(godot::Basis().scaled(godot::Vector3(size, size, size)), casting_point(false)));
         }
         return;
     }
     firebolt_charging_ = false;
-    if (firebolt_charge_ < gameplay::firebolt_least_charge_seconds || vitals_.dead) {
+    if (firebolt_charge_ < (golem ? gameplay::golem_charge_seconds : gameplay::firebolt_least_charge_seconds) || vitals_.dead) {
         end_firebolt_glow(); // let go too soon: it goes out, and nothing is spent
         return;
     }
@@ -5384,12 +5433,13 @@ void E5PlayerController::grow_tower(float power) {
     ++towers_grown_;
 }
 
-E5PlayerController::Bush E5PlayerController::nearest_bush(float radius, const godot::String& kind) const {
+E5PlayerController::Bush E5PlayerController::nearest_bush(float radius, const godot::String& kind,
+                                                          const std::optional<godot::Vector3>& around) const {
     // Any plant will do since ticket 41: a bush, a tree. (`kind`: only plants whose scene's name
     // has that in it, for tests.)
     Bush best;
     float nearest = radius;
-    const godot::Vector3 here = get_global_position();
+    const godot::Vector3 here = around.value_or(get_global_position());
     const auto over_ground = [&here](const godot::Vector3& place) {
         return std::hypot(static_cast<float>(place.x - here.x), static_cast<float>(place.z - here.z));
     };
@@ -5470,9 +5520,26 @@ void E5PlayerController::set_shown_disguised(bool disguised) {
 }
 
 void E5PlayerController::start_disguise(float reach) {
-    const Bush bush = nearest_bush(reach);
-    if (bush.mesh.is_null()) {
-        return; // she stands in no bush: nothing happens, and nothing is spent
+    // First what the crosshair covers (disguise.gd): a thing, of which it has made a copy; or a place,
+    // where there may be a plant; which stays where it grows if it is out of her reach.
+    godot::Node* const shower = get_node_or_null("Disguise");
+    const godot::Variant aimed = shower != nullptr ? shower->call("take_thing") : godot::Variant();
+    Bush bush;
+    if (aimed.get_type() != godot::Variant::BOOL) {
+        if (aimed.get_type() == godot::Variant::VECTOR3) {
+            const godot::Vector3 place = aimed;
+            bush = nearest_bush(aimed_plant_reach, godot::String(), place);
+            if (bush.mesh.is_valid() && bush.transform.origin.distance_to(get_global_position()) > reach) {
+                bush.forest = 0;
+                bush.node = 0;
+            }
+        }
+        if (bush.mesh.is_null()) {
+            bush = nearest_bush(reach);
+        }
+        if (bush.mesh.is_null()) {
+            return; // she aims at nothing and stands in no bush: nothing happens, and nothing is spent
+        }
     }
     // The bush is gone from where it grew: she is it now.
     if (auto* const forest = godot::Object::cast_to<E5Forest>(godot::ObjectDB::get_instance(bush.forest))) {
@@ -6841,6 +6908,189 @@ void E5PlayerController::update_sentinel(float delta) {
     bone->set_impact_effect(effect_scene(bone_burst_path));
     bone->set_impact_scale(0.5F);
     bone->launch((target->get_aim_point() - from).normalized() * 24.0F, get_rid());
+}
+
+void E5PlayerController::let_go_balloon(float hue) {
+    const godot::Vector3 ahead(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    if (godot::Node3D* const balloon = E5Effect::spawn(effect_scene(balloon_path), get_parent(), get_global_position() + ahead * 0.6F + godot::Vector3(0.0F, 0.6F, 0.0F))) {
+        balloon->call("set_hue", hue);
+        ++balloons_;
+    }
+}
+
+void E5PlayerController::raise_golem() {
+    end_firebolt_glow(); // the soul he gathered goes into the ground
+    if (auto* const old = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(golem_.look))) {
+        old->call("vanish");
+    }
+    golem_ = {};
+    // Beside him, a little ahead.
+    const godot::Vector3 here = get_global_position();
+    const godot::Vector3 ahead(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_));
+    const godot::Vector3 place = ground_under(here + ahead * 2.5F + godot::Vector3(ahead.z, 0.0F, -ahead.x) * 2.5F);
+    E5Effect::spawn(effect_scene(bone_burst_path), get_parent(), place + godot::Vector3(0.0F, 0.1F, 0.0F));
+    godot::Node3D* const look = E5Effect::spawn(effect_scene(golem_path), get_parent(), place);
+    if (look == nullptr) {
+        return;
+    }
+    look->set_rotation(godot::Vector3(0.0F, model_yaw_, 0.0F));
+    golem_ = {.look = look->get_instance_id(),
+              .at = place,
+              .yaw = model_yaw_,
+              .left = gameplay::golem_seconds,
+              .ground_y = static_cast<float>(place.y),
+              .until_blow = 1.3F, // it has risen by then
+              .until_pound = gameplay::golem_pound_every * 0.5F};
+    ++golems_;
+}
+
+void E5PlayerController::end_golem() {
+    if (auto* const look = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(golem_.look))) {
+        look->call("vanish");
+    }
+    golem_ = {};
+}
+
+void E5PlayerController::note_struck(const E5Enemy* enemy) {
+    if (golem_.look != 0 && enemy != nullptr) {
+        golem_.asked = enemy->get_instance_id();
+    }
+}
+
+void E5PlayerController::golem_strikes(godot::Node3D* look) {
+    if (golem_.pounding) {
+        ++golem_pounds_;
+        E5Effect::spawn(effect_scene(bone_burst_path), get_parent(), golem_.at + godot::Vector3(0.0F, 0.1F, 0.0F));
+        if (godot::Node3D* const ring = E5Effect::spawn(effect_scene(golem_pound_path), get_parent(), golem_.at + godot::Vector3(0.0F, 0.1F, 0.0F))) {
+            ring->set_scale(godot::Vector3(golem_pound_ring_scale, golem_pound_ring_scale, golem_pound_ring_scale));
+        }
+        if (!remote_) {
+            combat::blast(look, golem_.at + godot::Vector3(0.0F, 1.0F, 0.0F), gameplay::golem_pound_radius,
+                          dealt(gameplay::SkillId::BoneGolem) * gameplay::golem_pound_factor);
+        }
+        return;
+    }
+    auto* const target = godot::Object::cast_to<E5Enemy>(godot::ObjectDB::get_instance(golem_.target));
+    if (target == nullptr || !target->is_alive()) {
+        return;
+    }
+    ++golem_punches_;
+    const godot::Vector3 body = target->get_aim_point();
+    E5Effect::spawn(effect_scene(bone_burst_path), get_parent(), body);
+    if (!remote_) {
+        combat::hit(target, body, dealt(gameplay::SkillId::BoneGolem));
+    }
+}
+
+void E5PlayerController::update_golem(float delta) {
+    auto* const look = godot::Object::cast_to<godot::Node3D>(godot::ObjectDB::get_instance(golem_.look));
+    if (look == nullptr) {
+        golem_.look = 0;
+        return;
+    }
+    golem_.left -= delta;
+    if (golem_.left <= 0.0F || vitals_.dead) {
+        end_golem();
+        return;
+    }
+    if (cooldowns_enabled_ && !remote_) {
+        // Ready again only after it has gone.
+        cooldown_left_.at(static_cast<std::size_t>(gameplay::SkillId::BoneGolem)) =
+            gameplay::skill_cooldown_seconds(gameplay::SkillId::BoneGolem);
+    }
+    const godot::Vector3 hero = get_global_position();
+    const auto over_ground = [](const godot::Vector3& from, const godot::Vector3& to) {
+        return std::hypot(static_cast<float>(to.x - from.x), static_cast<float>(to.z - from.z));
+    };
+    // Too far behind him, or he went where it cannot walk: it rises beside him again.
+    if (over_ground(golem_.at, hero) > gameplay::golem_leash + 6.0F || std::abs(static_cast<float>(golem_.at.y - hero.y)) > 12.0F) {
+        golem_.at = ground_under(hero - godot::Vector3(std::sin(model_yaw_), 0.0F, std::cos(model_yaw_)) * gameplay::golem_follow);
+        golem_.ground_y = static_cast<float>(golem_.at.y);
+        golem_.target = 0;
+        E5Effect::spawn(effect_scene(bone_burst_path), get_parent(), golem_.at + godot::Vector3(0.0F, 0.1F, 0.0F));
+    }
+    golem_.until_pound = std::max(golem_.until_pound - delta, 0.0F);
+    golem_.until_blow = std::max(golem_.until_blow - delta, 0.0F);
+    // A blow under way: it stands until it has landed and the arms are back.
+    if (golem_.busy > 0.0F) {
+        golem_.busy -= delta;
+        if (golem_.strike_in > 0.0F) {
+            golem_.strike_in -= delta;
+            if (golem_.strike_in <= 0.0F) {
+                golem_strikes(look);
+            }
+        }
+        look->call("set_walking", false);
+        look->set_global_position(golem_.at);
+        return;
+    }
+    const auto usable = [&](const E5Enemy* enemy) {
+        return enemy != nullptr && enemy->is_alive() && enemy->is_inside_tree() && !enemy->is_friend_of_local() &&
+               over_ground(enemy->get_global_position(), hero) <= gameplay::golem_leash;
+    };
+    auto* target = godot::Object::cast_to<E5Enemy>(godot::ObjectDB::get_instance(golem_.target));
+    if (!usable(target)) {
+        // The nearest that comes near it; or else what he struck last.
+        target = nullptr;
+        float nearest = gameplay::golem_notice;
+        for_enemies_near(golem_.at, nearest, [&](E5Enemy* enemy) {
+            const float distance = over_ground(enemy->get_global_position(), golem_.at);
+            if (distance <= nearest && usable(enemy)) {
+                nearest = distance;
+                target = enemy;
+            }
+        });
+        if (target == nullptr) {
+            auto* const asked = godot::Object::cast_to<E5Enemy>(godot::ObjectDB::get_instance(golem_.asked));
+            target = usable(asked) ? asked : nullptr;
+        }
+        golem_.target = target != nullptr ? target->get_instance_id() : 0;
+    }
+    // Where it wants to be: at its enemy, or behind him.
+    godot::Vector3 goal = hero;
+    float stop_at = gameplay::golem_follow;
+    if (target != nullptr) {
+        goal = target->get_global_position();
+        stop_at = gameplay::golem_reach + target->get_body_radius();
+    }
+    godot::Vector3 way = goal - golem_.at;
+    way.y = 0.0F;
+    const auto distance = static_cast<float>(way.length());
+    const bool walks = distance > stop_at;
+    if (distance > 0.05F) {
+        const float wanted = std::atan2(static_cast<float>(way.x), static_cast<float>(way.z));
+        golem_.yaw += std::remainder(wanted - golem_.yaw, 2.0F * std::numbers::pi_v<float>) * std::min(delta * 6.0F, 1.0F);
+        look->set_rotation(godot::Vector3(0.0F, golem_.yaw, 0.0F));
+    }
+    if (walks) {
+        const float step = std::min(gameplay::golem_speed * delta, distance - stop_at);
+        golem_.at += way / distance * step;
+    }
+    look->call("set_walking", walks);
+    // The ground under it, a few times a second: the ray has every enemy to leave out.
+    golem_.until_ground -= delta;
+    if (golem_.until_ground <= 0.0F && walks) {
+        golem_.until_ground = 0.1F;
+        golem_.ground_y = static_cast<float>(ground_under(golem_.at).y);
+    }
+    golem_.at.y += (golem_.ground_y - static_cast<float>(golem_.at.y)) * std::min(delta * 10.0F, 1.0F);
+    look->set_global_position(golem_.at);
+    // In reach and its arms free.
+    if (target != nullptr && !walks && golem_.until_blow <= 0.0F) {
+        golem_.pounding = golem_.until_pound <= 0.0F;
+        if (golem_.pounding) {
+            golem_.until_pound = gameplay::golem_pound_every;
+            golem_.strike_in = golem_pound_lands;
+            golem_.busy = golem_pound_seconds;
+            golem_.until_blow = golem_pound_seconds;
+            look->call("pound");
+        } else {
+            golem_.strike_in = golem_punch_lands;
+            golem_.busy = golem_punch_seconds;
+            golem_.until_blow = gameplay::golem_punch_every;
+            look->call("punch");
+        }
+    }
 }
 
 void E5PlayerController::cast_plague() {

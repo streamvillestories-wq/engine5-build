@@ -250,6 +250,8 @@ public:
     [[nodiscard]] float get_cast_power() const;
     // What she did to an enemy: fills the charge. Called by whatever does damage for her.
     void credit_damage(float damage, bool killed, float enemy_max_health = 0.0F);
+    // What she hurt last: her Bone Golem goes for it when it has nothing else to do.
+    void note_struck(const E5Enemy* enemy);
     void heal_from_spell(float amount); // a spell of his that heals (the Death Coil)
     [[nodiscard]] int get_skill_level_needed(int slot) const;
     [[nodiscard]] godot::Dictionary get_five_uses() const; // the five more's uses by name (the report)
@@ -316,6 +318,10 @@ public:
     // The Archer's five of 2026-10-16: her spirit wolf's bites, her owl's arrows, her springs (for tests).
     [[nodiscard]] int get_wolf_bites() const { return wolf_bites_; }
     [[nodiscard]] int get_owl_shots() const { return owl_shots_; }
+    [[nodiscard]] int get_balloons() const { return balloons_; }
+    [[nodiscard]] int get_golems() const { return golems_; }
+    [[nodiscard]] int get_golem_punches() const { return golem_punches_; }
+    [[nodiscard]] int get_golem_pounds() const { return golem_pounds_; }
     [[nodiscard]] int get_springs() const { return springs_; }
     // The new Wizard's five of 2026-10-16 (for tests): the enemies his orb passed through, those his
     // gravity well caught as it imploded, his pylon's strikes, the enemies he froze, the missiles sent.
@@ -402,6 +408,8 @@ public:
     void end_disguise();
     /// Another player's hero, shown here: she is a bush or she is not, as her own machine says.
     void set_shown_disguised(bool disguised);
+    // How far the camera stands back from what she has become (disguise.gd).
+    void set_disguise_camera_back(float metres) { disguise_camera_wanted_ = metres; }
     /// ... and stands at her arrow gun or does not.
     void set_shown_manning(bool manning);
     [[nodiscard]] godot::Variant find_bush(float radius, const godot::String& kind = godot::String()) const;
@@ -582,7 +590,8 @@ private:
         godot::Ref<godot::Mesh> mesh; // empty: no bush
         godot::Ref<godot::Material> material;
     };
-    [[nodiscard]] Bush nearest_bush(float radius, const godot::String& kind = godot::String()) const;
+    [[nodiscard]] Bush nearest_bush(float radius, const godot::String& kind = godot::String(),
+                                    const std::optional<godot::Vector3>& around = std::nullopt) const;
     void start_disguise(float reach);
     void update_disguise(float delta);
     // Cut in Pieces: it begins if an enemy is near; while it lasts it is what moves her (from one
@@ -652,6 +661,11 @@ private:
     void update_wolf(float delta);
     void place_owl();
     void update_owl(float delta);
+    void let_go_balloon(float hue);
+    void raise_golem();
+    void update_golem(float delta);
+    void end_golem();
+    void golem_strikes(godot::Node3D* look);
     void spring_back();
     void update_spring(float delta);
     // The new Wizard's five (skills.hpp, "The new Wizard's five"): the orb that flies through, the
@@ -907,6 +921,8 @@ private:
     godot::Ref<godot::Material> disguise_material_;
     godot::Basis disguise_basis_;
     int disguises_ = 0;
+    float disguise_camera_wanted_ = 0.0F;
+    float disguise_camera_back_ = 0.0F;
     gameplay::BleedState stampede_; // her Sprintsz under way: the time it still has and until its next pounding
     int stampede_ticks_ = 0;
     gameplay::BleedState pieces_; // her Cut in Pieces under way: the time it still has and until its next blow
@@ -948,6 +964,29 @@ private:
     float owl_left_ = 0.0F;
     float owl_until_shot_ = 0.0F;
     int owl_shots_ = 0;
+    // The Bonecaller's Bone Golem while it stands: its look (an id: it may be gone), what it is after
+    // and what he struck last (ids too), what it is doing.
+    struct Golem {
+        std::uint64_t look = 0;
+        std::uint64_t target = 0;
+        std::uint64_t asked = 0;
+        godot::Vector3 at;
+        float yaw = 0.0F;
+        float left = 0.0F;
+        float until_ground = 0.0F;
+        float ground_y = 0.0F;
+        float until_blow = 0.0F;
+        float until_pound = 0.0F;
+        float strike_in = 0.0F;
+        float busy = 0.0F;
+        bool pounding = false;
+    };
+    Golem golem_;
+    float balloon_hue_ = 0.0F; // a balloon's colour, as it arrived from the machine that plays him
+    int balloons_ = 0;
+    int golems_ = 0;
+    int golem_punches_ = 0;
+    int golem_pounds_ = 0;
     // Her Evasive Shot: how long she still springs and which way, the arrows loosed and until the
     // next, and the hop off the ground still to be given.
     struct Spring {

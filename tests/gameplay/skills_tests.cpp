@@ -594,6 +594,16 @@ TEST_CASE("the Bonecaller throws souls as his standard attack", "[skills]") {
     CHECK(e5::gameplay::curse_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::CurseOfFrailty));
     CHECK(e5::gameplay::bone_armor_seconds < e5::gameplay::skill_cooldown_seconds(SkillId::BoneArmor));
     CHECK(e5::gameplay::open_slot_count(e5::gameplay::SkillSet::Bone) == e5::gameplay::open_slots);
+    // The new Wizard's Baloon Party (ticket 64): in his book, nothing but a look, no cooldown.
+    CHECK(std::ranges::contains(e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Mage), SkillId::BaloonParty));
+    CHECK(e5::gameplay::skill_damage(SkillId::BaloonParty) == 0.0F);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BaloonParty) == 0.0F);
+    // His Bone Golem (ticket 63): in his book, a minute of it weaker than his other skills' pace.
+    CHECK(std::ranges::contains(e5::gameplay::skill_catalogue(e5::gameplay::SkillSet::Bone), SkillId::BoneGolem));
+    CHECK(e5::gameplay::skill_info(SkillId::BoneGolem).kind == SkillKind::Instant);
+    CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::BoneGolem) == 30.0F);
+    CHECK(e5::gameplay::skill_damage(SkillId::BoneGolem) / e5::gameplay::golem_punch_every < 10.0F);
+    CHECK(e5::gameplay::golem_reach < e5::gameplay::golem_pound_radius);
     CHECK(e5::gameplay::skill_damage(SkillId::SoulBolt) == e5::gameplay::skill_damage(SkillId::ArcaneBolt));
     CHECK(e5::gameplay::skill_cooldown_seconds(SkillId::SoulBolt) == 0.0F);
 }

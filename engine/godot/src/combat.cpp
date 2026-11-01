@@ -29,6 +29,7 @@ void credit(E5Enemy* enemy, float damage) {
             enemy->get_tree()->get_first_node_in_group(E5PlayerController::group_name))) {
         const bool killed = enemy->get_health() <= damage;
         hero->credit_damage(std::min(damage, enemy->get_health()), killed, enemy->get_max_health());
+        hero->note_struck(enemy);
         if (killed && enemy->get_team() == 0) {
             // For what a kill leaves the hero who made it (blueprint fragments in a match: net/match.gd).
             hero->emit_signal("enemy_killed", enemy->get_global_position(), enemy->get_max_health());

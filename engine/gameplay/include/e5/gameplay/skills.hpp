@@ -162,13 +162,16 @@ enum class SkillId : unsigned char {
     TrapLine,       // three bear traps laid in a line before her
     HawkEye,        // a stance: her arrows harder and faster
     PhoenixArrow,   // one burning arrow of great weight that bursts in fire
+    // From players' wishes, after the rest.
+    BoneGolem, // the Bonecaller's (ticket 63): held to call, a skeleton giant fights beside him for a minute
+    BaloonParty, // the new Wizard's (ticket 64): a balloon of a random colour rises from his hand; it does nothing else
 };
 
 // Room for this many skills in anything indexed by SkillId (the player's cooldowns). It was 64 until
 // the Bonecaller's five took the count to 66 and every use of a skill threw: the check below fails
 // the build instead. Name the LAST SkillId in it when adding one.
 inline constexpr std::size_t skill_id_limit = 128;
-static_assert(static_cast<std::size_t>(SkillId::PhoenixArrow) < skill_id_limit, "more skills than skill_id_limit");
+static_assert(static_cast<std::size_t>(SkillId::BaloonParty) < skill_id_limit, "more skills than skill_id_limit");
 
 // Which skills a character has on the bar.
 // `Blade` is the new warrior (2026-10-10): her sword's combo and nothing else yet. Her other
@@ -506,6 +509,26 @@ inline constexpr float assassinate_stun_seconds = 0.5F;
 // The Bonecaller's. Death Coil: a bolt; `coil_heal_share` of its damage heals him.
 inline constexpr float coil_heal_share = 0.5F;
 inline constexpr float coil_speed = 28.0F;
+// The Bone Golem (ticket 63, a player's wish): the button held `golem_charge_seconds` and let go calls it
+// beside him for `golem_seconds`, one at a time, and the skill is ready again `skill_cooldown_seconds`
+// after it has gone. It follows him (`golem_follow` behind), goes for the nearest enemy within
+// `golem_notice` of it, or if it has nothing to do for the one he struck last, never further than
+// `golem_leash` from him (further off it rises beside him again). Its fist is skill_damage every
+// `golem_punch_every`; every `golem_pound_every` both fists on the ground instead: `golem_pound_factor`
+// times that to everything within `golem_pound_radius`. The wish gave no numbers: a minute of it is
+// below his other skills' pace (about 7 a second), since it asks nothing more of him.
+inline constexpr float golem_charge_seconds = 1.0F;
+inline constexpr float golem_seconds = 60.0F;
+inline constexpr float golem_speed = 6.5F;
+inline constexpr float golem_follow = 4.5F;
+inline constexpr float golem_notice = 14.0F;
+inline constexpr float golem_leash = 26.0F;
+inline constexpr float golem_reach = 3.2F;
+inline constexpr float golem_punch_every = 1.6F;
+inline constexpr float golem_pound_every = 8.0F;
+inline constexpr float golem_pound_radius = 6.0F;
+inline constexpr float golem_pound_factor = 2.2F;
+
 // Bone Sentinel: stands `sentinel_seconds` where he aims (no further than curse_reach), throws at the
 // nearest enemy within `sentinel_range` every `sentinel_shot_seconds` (skill_damage).
 inline constexpr float sentinel_seconds = 12.0F;
@@ -972,6 +995,10 @@ struct GatlingStep {
 // with E, when anything hurts her, when she begins another skill, or after `disguise_seconds`
 // (the wish had no end: unseen for ever would outdo everything else she has); the bush is then
 // back where it grew, and the cooldown runs from that moment.
+// Since ticket 65 she can be anything the crosshair covers within 60 m as well, whatever its size: the
+// thing stays where it is and she is a copy of it (game/characters/disguise.gd). A plant at the
+// crosshair further than `disguise_reach` stays too. The plant at her feet is what she takes when the
+// crosshair covers nothing else.
 inline constexpr float disguise_reach =
     2.5F; // metres (1.8 while it was bushes only: a tree's trunk keeps her further off)
 inline constexpr float disguise_seconds = 15.0F;

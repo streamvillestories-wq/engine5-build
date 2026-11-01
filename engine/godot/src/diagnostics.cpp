@@ -522,6 +522,10 @@ bool E5Diagnostics::write_report() {
         player_info["cursed_count"] = player->get_cursed_count();
         player_info["wolf_bites"] = player->get_wolf_bites();
         player_info["owl_shots"] = player->get_owl_shots();
+        player_info["balloons"] = player->get_balloons();
+        player_info["golems"] = player->get_golems();
+        player_info["golem_punches"] = player->get_golem_punches();
+        player_info["golem_pounds"] = player->get_golem_pounds();
         player_info["springs"] = player->get_springs();
         player_info["orb_touches"] = player->get_orb_touches();
         player_info["well_caught"] = player->get_well_caught();

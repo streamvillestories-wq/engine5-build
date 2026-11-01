@@ -249,6 +249,10 @@ SkillInfo skill_info(SkillId skill) noexcept {
         return {.name = "Hawk Eye", .charges = false, .kind = SkillKind::Instant};
     case SkillId::PhoenixArrow:
         return {.name = "Phoenix Arrow", .charges = false, .kind = SkillKind::Bow};
+    case SkillId::BoneGolem:
+        return {.name = "Bone Golem", .charges = false, .kind = SkillKind::Instant};
+    case SkillId::BaloonParty:
+        return {.name = "Baloon Party", .charges = false, .kind = SkillKind::Instant};
     case SkillId::MirrorImage:
         return {.name = "Whose Ur Mommy?", .charges = false, .kind = SkillKind::Instant};
     case SkillId::None:
@@ -386,6 +390,10 @@ float skill_damage(SkillId skill, float power) noexcept {
         return 26.0F; // and half of it heals him
     case SkillId::BoneSentinel:
         return 12.0F; // each throw, every 1.2 s for twelve seconds: up to 120
+    case SkillId::BoneGolem:
+        return 9.0F; // each blow of its fist, for a whole minute
+    case SkillId::BaloonParty:
+        return 0.0F; // it only looks beautiful
     case SkillId::Plague:
         return 6.0F; // every second for six, on each it spreads to
     case SkillId::GraveChill:
@@ -640,6 +648,10 @@ float skill_cooldown_seconds(SkillId skill) noexcept {
         return 8.0F;
     case SkillId::BoneSentinel:
         return 24.0F;
+    case SkillId::BoneGolem:
+        return 30.0F; // from when it has gone
+    case SkillId::BaloonParty:
+        return 0.0F; // none, as wished: it hurts nobody
     case SkillId::Plague:
         return 18.0F;
     case SkillId::GraveChill:
@@ -1055,7 +1067,7 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
                                      SkillId::ProtectionDome, SkillId::ArcaneOrb,   SkillId::GravityWell,
                                      SkillId::LightningPylon, SkillId::IcePrison,   SkillId::ArcaneMissiles,
                                      SkillId::FlameWall,      SkillId::ArcaneSurge, SkillId::StaticTrap,
-                                     SkillId::MeteorShower,   SkillId::TimeWarp};
+                                     SkillId::MeteorShower,   SkillId::TimeWarp,    SkillId::BaloonParty};
     static constexpr std::array shadow{SkillId::DaggerCombo,   SkillId::ShadowStep, SkillId::FanOfKnives,
                                        SkillId::VeilOfShadows, SkillId::VenomEdge,  SkillId::ShadowFlurry,
                                        SkillId::SmokeBomb,     SkillId::DeathMark,  SkillId::BladeDance,
@@ -1065,7 +1077,7 @@ std::span<const SkillId> skill_catalogue(SkillSet set) noexcept {
                                      SkillId::CurseOfFrailty, SkillId::BoneArmor,  SkillId::Requiem,
                                      SkillId::BansheeWail,    SkillId::GraveGrasp, SkillId::SpectralForm,
                                      SkillId::DeathCoil,      SkillId::BoneSentinel, SkillId::Plague,
-                                     SkillId::GraveChill,     SkillId::LichForm};
+                                     SkillId::GraveChill,     SkillId::LichForm,   SkillId::BoneGolem};
     switch (set) {
     case SkillSet::Bone:
         return bone;
@@ -1149,6 +1161,14 @@ std::string_view skill_description(SkillId skill) noexcept {
     case SkillId::DeathCoil:
         return "A coil of souls flies from the skull at what he aims at. It hurts what it strikes, and half "
                "of that heals him.";
+    case SkillId::BaloonParty:
+        return "A balloon of a random colour leaves his hand and rises slowly, drifting on the wind, for everyone "
+               "to see. It does nothing at all but look beautiful. As often as you like.";
+    case SkillId::BoneGolem:
+        return "Hold for a second and let go: a skeleton three times his height rises beside him and fights "
+               "for a minute. It follows him, goes for what comes near or what he strikes, punches, and now "
+               "and then pounds the ground with both fists, hurting all round it. Ready again after it has "
+               "gone. The damage is one punch.";
     case SkillId::BoneSentinel:
         return "A sentinel of bone rises where he aims and for twelve seconds throws bone at the nearest "
                "enemy, every second or so. The damage is one throw.";
@@ -1397,7 +1417,9 @@ std::string_view skill_description(SkillId skill) noexcept {
         return "Hold the button: she kneels and builds a turret. Then she mans it and, with the left button "
                "held, shoots arrows very fast where she aims. E leaves it and mans it again. The damage is one arrow.";
     case SkillId::Disguise:
-        return "Standing at a bush or a tree, she becomes it: enemies do not see her until she is hurt or it ends.";
+        return "She becomes a copy of whatever the crosshair covers, however large: a house, a statue, a villager, "
+               "an enemy, a tree; or else the bush or tree she stands at. Enemies do not see her until she is hurt "
+               "or it ends.";
     case SkillId::Firebolt:
         return "Hold the button: fire gathers at the tip of his wand, and he stands still meanwhile. Let go and "
                "he throws it where he aims; it bursts where it strikes and burns everything near. The longer "
