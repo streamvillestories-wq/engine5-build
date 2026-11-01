@@ -1096,6 +1096,8 @@ void E5PlayerController::_bind_methods() {
     ClassDB::bind_method(D_METHOD("clear_skill_slot", "slot"), &E5PlayerController::clear_skill_slot);
     ClassDB::bind_method(D_METHOD("get_selected_skill_name"), &E5PlayerController::get_selected_skill_name);
     ADD_SIGNAL(godot::MethodInfo("skill_bar_changed"));
+    // For what is heard (game/characters/hero_sounds.gd): "swing" as a blow begins, "struck" when it finds something.
+    ADD_SIGNAL(godot::MethodInfo("heard", godot::PropertyInfo(godot::Variant::STRING, "moment")));
     // The hero played here killed an enemy (through combat::hit / blast): where, and its full health.
     ADD_SIGNAL(godot::MethodInfo("enemy_killed", PropertyInfo(godot::Variant::VECTOR3, "position"),
                                  PropertyInfo(godot::Variant::FLOAT, "max_health")));
@@ -4794,6 +4796,7 @@ void E5PlayerController::update_shake(float delta) {
 }
 
 void E5PlayerController::show_slash_arc() {
+    emit_signal("heard", "swing");
     if (slash_arc_.is_null() || model_ == nullptr) {
         return;
     }
@@ -4847,7 +4850,9 @@ void E5PlayerController::strike_melee(gameplay::SkillId skill) {
         damage += gameplay::hamstring_bleed;
         --hamstring_blows_;
     }
-    combat::blast(this, centre, blow.radius, damage);
+    if (combat::blast(this, centre, blow.radius, damage) > 0) {
+        emit_signal("heard", "struck");
+    }
     if (!remote_ || clone_) {
         if (crippling) {
             for_enemies_near(centre, blow.radius, [](E5Enemy* enemy) { enemy->slow(gameplay::cripple_slow_share, gameplay::cripple_slow_seconds); });
